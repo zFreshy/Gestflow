@@ -1,6 +1,6 @@
 import React from 'react';
 import { DashboardHeader } from '../organisms/DashboardHeader';
-import { MonthFilter } from '../molecules/MonthFilter';
+import { Sidebar } from '../organisms/Sidebar';
 
 export function DashboardTemplate({
     statsSection,
@@ -8,41 +8,35 @@ export function DashboardTemplate({
     listSection,
     formSection,
     selectedMonth,
-    selectedYear,
-    onMonthChange,
-    onYearChange,
     onOpenForm,
 }) {
     return (
-        <div className="min-h-screen bg-background">
-            <div className="w-full max-w-7xl mx-auto px-4 md:px-8 py-6 space-y-6">
-                <DashboardHeader
-                    selectedMonth={selectedMonth}
-                    onOpenForm={onOpenForm}
-                />
+        <div className="flex h-screen bg-gray-50 overflow-hidden font-sans">
+            {/* Sidebar Left */}
+            <Sidebar />
 
-                {/* Month Filter */}
-                <MonthFilter
-                    selectedMonth={selectedMonth}
-                    selectedYear={selectedYear}
-                    onMonthChange={onMonthChange}
-                    onYearChange={onYearChange}
-                />
+            {/* Main Content Right */}
+            <main className="flex-1 flex flex-col min-w-0 overflow-y-auto">
+                <div className="flex-1 w-full max-w-7xl mx-auto px-8 py-8 space-y-8">
+                    <DashboardHeader
+                        selectedMonth={selectedMonth}
+                        onOpenForm={onOpenForm}
+                    />
 
-                {/* Stats Row — 3 cards like reference */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-                    {statsSection}
+                    {/* Stats Row — 3 cards like reference */}
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                        {statsSection}
+                    </div>
+
+                    {/* Transactions Table — full width */}
+                    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+                        {listSection}
+                    </div>
+
+                    {/* Modal Form */}
+                    {formSection}
                 </div>
-
-                {/* Transactions Table — full width */}
-                {listSection}
-
-                {/* Chart below table */}
-                {chartSection}
-
-                {/* Modal Form */}
-                {formSection}
-            </div>
+            </main>
         </div>
     );
 }

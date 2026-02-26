@@ -62,7 +62,7 @@ export function DashboardHeader({ selectedMonth, onOpenForm }) {
                     className="flex items-center gap-2 bg-blue-500 text-white px-6 py-2.5 rounded-xl font-medium text-sm hover:bg-blue-600 transition-all shadow-md active:scale-[0.98]"
                 >
                     <Plus className="h-4 w-4" />
-                    Agendar
+                    Adicionar Transação
                 </button>
             </div>
         </div>

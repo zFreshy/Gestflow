@@ -15,10 +15,10 @@ export function Sidebar({ activeTab, onTabChange }) {
             {/* Logo */}
             <div className="h-24 flex items-center px-8">
                 <span className="text-3xl font-bold tracking-tight text-[#7E1A8B]">
-                    ănıma
+                    Fornalha
                 </span>
             </div>
-
+        
             {/* Navigation */}
             <nav className="flex-1 px-4 py-2 space-y-1.5 overflow-y-auto">
                 {MENU_ITEMS.map((item) => {

@@ -35,12 +35,6 @@ export function DashboardHeader({ selectedMonth, onOpenForm }) {
                         <Bell className="h-5 w-5" />
                         <div className="absolute top-2 right-2.5 h-2 w-2 bg-red-500 rounded-full border-2 border-white"></div>
                     </button>
-                    <div className="h-10 w-10 rounded-full overflow-hidden ml-2 ring-2 ring-gray-100">
-                        {/* Fake avatar image to match reference more closely */}
-                        <div className="w-full h-full bg-slate-200">
-                            <img src="https://i.pravatar.cc/150?u=a042581f4e29026704d" alt="Profile" className="w-full h-full object-cover" />
-                        </div>
-                    </div>
                 </div>
             </header>
 
@@ -48,7 +42,7 @@ export function DashboardHeader({ selectedMonth, onOpenForm }) {
             <div className="flex items-center justify-between pt-2">
                 <div>
                     <h1 className="text-[28px] font-semibold text-gray-900 tracking-tight flex items-center gap-2">
-                        Bom dia, <span className="font-bold">Dr. Fernando!</span> 👋🏼
+                        Bom dia, <span className="font-bold">Nal!</span> 👋🏼
                     </h1>
                     <div className="flex items-center gap-2 mt-1.5">
                         <Calendar className="h-4 w-4 text-[#7E1A8B]" />

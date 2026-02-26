@@ -112,7 +112,7 @@ export function Sidebar({ activeTab, onTabChange }) {
             {/* Footer with avatar and collapse */}
             <div className="p-6 mt-auto">
                 <div className="flex items-center justify-between">
-                    <Avatar name="Dr. Fernando" size="md" className="ring-2 ring-white shadow-sm" />
+                    <Avatar name="Nal" size="md" className="ring-2 ring-white shadow-sm" />
                     <button className="h-8 w-8 rounded-full flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors">
                         <ChevronLeft className="h-4 w-4" />
                     </button>

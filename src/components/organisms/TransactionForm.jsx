@@ -9,6 +9,7 @@ export function TransactionForm({ onAddTransaction, isOpen, onClose }) {
     const [description, setDescription] = useState('');
     const [amount, setAmount] = useState('');
     const [type, setType] = useState('income');
+    const [expenseType, setExpenseType] = useState('fixed');
     const [paymentMethod, setPaymentMethod] = useState('pix');
 
     const handleSubmit = (e) => {
@@ -20,6 +21,7 @@ export function TransactionForm({ onAddTransaction, isOpen, onClose }) {
             description,
             amount: parseFloat(amount),
             type,
+            expenseType: type === 'expense' ? expenseType : undefined,
             paymentMethod,
             date: new Date().toLocaleDateString('pt-BR'),
             timestamp: Date.now()
@@ -80,6 +82,15 @@ export function TransactionForm({ onAddTransaction, isOpen, onClose }) {
                             </Select>
                         </FormField>
                     </div>
+
+                    {type === 'expense' && (
+                        <FormField label="Tipo de Despesa">
+                            <Select value={expenseType} onChange={(e) => setExpenseType(e.target.value)}>
+                                <option value="fixed">Obrigatória</option>
+                                <option value="variable">Variável</option>
+                            </Select>
+                        </FormField>
+                    )}
 
                     <FormField label="Método de Pagamento">
                         <Select value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)}>

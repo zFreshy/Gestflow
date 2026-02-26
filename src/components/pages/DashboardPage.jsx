@@ -9,6 +9,19 @@ export function DashboardPage({ transactions }) {
     const incomeCount = transactions.filter(t => t.type === 'income').length;
     const expenseCount = transactions.filter(t => t.type === 'expense').length;
 
+    const fixedExpenses = transactions.filter(t => t.type === 'expense' && t.expenseType === 'fixed');
+    const variableExpenses = transactions.filter(t => t.type === 'expense' && t.expenseType === 'variable');
+
+    const formatCurrency = (value) => {
+        return new Intl.NumberFormat('pt-BR', {
+            style: 'currency',
+            currency: 'BRL'
+        }).format(value);
+    };
+
+    const fixedTotal = fixedExpenses.reduce((acc, curr) => acc + curr.amount, 0);
+    const variableTotal = variableExpenses.reduce((acc, curr) => acc + curr.amount, 0);
+
     return (
         <div className="space-y-6">
             {/* Stats Row */}
@@ -29,40 +42,29 @@ export function DashboardPage({ transactions }) {
                     </div>
                 </StatCard>
 
-                {/* Card 2 — Exames no mês */}
+                {/* Card 2 — Tipos de Extratos */}
                 <StatCard
-                    title="Exames no mês"
+                    title="Tipos de Extratos"
                     icon={Activity}
                     accent="yellow"
                 >
-                    <div className="flex items-end justify-between mt-4 h-full pb-2">
+                    <div className="flex items-center justify-around mt-4 h-full pb-2">
                         <div className="flex flex-col items-center">
                             <div className="flex items-center gap-2">
                                 <Activity className="h-4 w-4 text-blue-500" />
-                                <span className="text-2xl font-bold text-gray-900">13</span>
+                                <span className="text-2xl font-bold text-gray-900">{fixedExpenses.length}</span>
                             </div>
-                            <p className="text-[11px] text-muted-foreground mt-1 font-medium">Novos</p>
+                            <p className="text-[11px] text-muted-foreground mt-1 font-medium">Obrigatórios</p>
+                            <span className="text-[10px] text-gray-500 font-semibold mt-1">{formatCurrency(fixedTotal)}</span>
                         </div>
+                        <div className="h-10 w-px bg-gray-200"></div>
                         <div className="flex flex-col items-center">
                             <div className="flex items-center gap-2">
                                 <Clock className="h-4 w-4 text-amber-500" />
-                                <span className="text-2xl font-bold text-gray-900">5</span>
+                                <span className="text-2xl font-bold text-gray-900">{variableExpenses.length}</span>
                             </div>
-                            <p className="text-[11px] text-muted-foreground mt-1 font-medium">Em aprovação</p>
-                        </div>
-                        <div className="flex flex-col items-center">
-                            <div className="flex items-center gap-2">
-                                <Activity className="h-4 w-4 text-emerald-500" />
-                                <span className="text-2xl font-bold text-gray-900">42</span>
-                            </div>
-                            <p className="text-[11px] text-muted-foreground mt-1 font-medium">Andamento</p>
-                        </div>
-                        <div className="flex flex-col items-center">
-                            <div className="flex items-center gap-2">
-                                <XCircle className="h-4 w-4 text-red-500" />
-                                <span className="text-2xl font-bold text-gray-900">23</span>
-                            </div>
-                            <p className="text-[11px] text-muted-foreground mt-1 font-medium">Cancelados</p>
+                            <p className="text-[11px] text-muted-foreground mt-1 font-medium">Variáveis</p>
+                            <span className="text-[10px] text-gray-500 font-semibold mt-1">{formatCurrency(variableTotal)}</span>
                         </div>
                     </div>
                 </StatCard>

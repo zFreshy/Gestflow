@@ -1,27 +1,85 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../atoms/Card';
+import { Select } from '../atoms/Select';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 
 export function FinancesChart({ transactions }) {
+    const [viewMode, setViewMode] = useState('week');
+
     const data = useMemo(() => {
+        const parseDate = (dateStr) => {
+            if (!dateStr) return new Date();
+            const [d, m, y] = dateStr.split('/');
+            return new Date(y, m - 1, d);
+        };
+
         const grouped = transactions.reduce((acc, curr) => {
-            if (!acc[curr.date]) {
-                acc[curr.date] = { date: curr.date, ganhos: 0, gastos: 0 };
-            }
-            if (curr.type === 'income') {
-                acc[curr.date].ganhos += curr.amount;
+            const dateObj = parseDate(curr.date);
+            let key;
+            
+            if (viewMode === 'year') {
+                const month = dateObj.getMonth() + 1;
+                const year = dateObj.getFullYear();
+                key = `${year}-${month.toString().padStart(2, '0')}`;
             } else {
-                acc[curr.date].gastos += curr.amount;
+                const d = dateObj.getDate().toString().padStart(2, '0');
+                const m = (dateObj.getMonth() + 1).toString().padStart(2, '0');
+                const y = dateObj.getFullYear();
+                key = `${y}-${m}-${d}`;
+            }
+
+            if (!acc[key]) {
+                acc[key] = {
+                    date: key,
+                    rawDate: dateObj,
+                    ganhos: 0,
+                    gastos: 0
+                };
+            }
+            
+            if (curr.type === 'income') {
+                acc[key].ganhos += curr.amount;
+            } else {
+                acc[key].gastos += curr.amount;
             }
             return acc;
         }, {});
 
-        return Object.values(grouped).sort((a, b) => {
-            const [d1, m1, y1] = a.date.split('/');
-            const [d2, m2, y2] = b.date.split('/');
-            return new Date(`${y1}-${m1}-${d1}`) - new Date(`${y2}-${m2}-${d2}`);
-        }).slice(-7);
-    }, [transactions]);
+        const sortedData = Object.values(grouped).sort((a, b) => {
+            if (viewMode === 'year') {
+                 // Sort by YYYY-MM
+                 return a.date.localeCompare(b.date);
+            }
+            return a.rawDate - b.rawDate;
+        });
+
+        const formattedData = sortedData.map(item => {
+            if (viewMode === 'year') {
+                const [year, month] = item.date.split('-');
+                const monthNames = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
+                return { 
+                    ...item, 
+                    displayDate: `${monthNames[parseInt(month) - 1]}/${year.slice(2)}` 
+                };
+            } else {
+                const date = item.rawDate;
+                const d = date.getDate().toString().padStart(2, '0');
+                const m = (date.getMonth() + 1).toString().padStart(2, '0');
+                return { 
+                    ...item, 
+                    displayDate: `${d}/${m}` 
+                };
+            }
+        });
+
+        if (viewMode === 'week') {
+            return formattedData.slice(-7);
+        } else if (viewMode === 'month') {
+            return formattedData.slice(-30);
+        } else {
+            return formattedData.slice(-12);
+        }
+    }, [transactions, viewMode]);
 
     const CustomTooltip = ({ active, payload, label }) => {
         if (active && payload && payload.length) {
@@ -41,8 +99,18 @@ export function FinancesChart({ transactions }) {
 
     return (
         <Card>
-            <CardHeader>
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
                 <CardTitle className="text-lg">Visão Geral</CardTitle>
+                <div className="w-[120px]">
+                    <Select
+                        value={viewMode}
+                        onChange={(e) => setViewMode(e.target.value)}
+                    >
+                        <option value="week">Semana</option>
+                        <option value="month">Mês</option>
+                        <option value="year">Ano</option>
+                    </Select>
+                </div>
             </CardHeader>
             <CardContent>
                 <div className="h-[280px] w-full">
@@ -55,7 +123,7 @@ export function FinancesChart({ transactions }) {
                             <BarChart data={data} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(214, 32%, 91%)" />
                                 <XAxis
-                                    dataKey="date"
+                                    dataKey="displayDate"
                                     stroke="hsl(215, 16%, 47%)"
                                     fontSize={12}
                                     tickLine={false}

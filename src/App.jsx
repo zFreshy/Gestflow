@@ -4,6 +4,7 @@ import { DashboardPage } from './components/pages/DashboardPage';
 import { TransactionsPage } from './components/pages/TransactionsPage';
 import { CalendarPage } from './components/pages/CalendarPage';
 import { TransactionForm } from './components/organisms/TransactionForm';
+import { FixedExpensesPage } from './components/pages/FixedExpensesPage';
 
 const MOCK_DATA = [
   { id: '1', description: 'Paula Horrana', amount: 1250.00, type: 'income', paymentMethod: 'pix', date: '15/09/2025', timestamp: new Date(2025, 8, 15, 9, 0).getTime(), subtitle: '020.000.000-88', exam: 'Hemograma Completo', healthPlan: 'Unimed Brasil', status: 'Aguardando' },
@@ -29,6 +30,12 @@ export default function App() {
     setIsFormOpen(false);
   };
 
+  const handleUpdateStatus = (transactionId, newStatus) => {
+    setTransactions(prev => prev.map(t => 
+        t.id === transactionId ? { ...t, status: newStatus } : t
+    ));
+  };
+
   return (
     <DashboardTemplate
       activeTab={activeTab}
@@ -43,6 +50,10 @@ export default function App() {
 
       {activeTab === 'transactions' && (
         <TransactionsPage transactions={transactions} />
+      )}
+
+      {activeTab === 'fixed-expenses' && (
+        <FixedExpensesPage transactions={transactions} onUpdateStatus={handleUpdateStatus} />
       )}
 
       {activeTab === 'calendar' && (

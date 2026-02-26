@@ -6,6 +6,7 @@ export function DashboardTemplate({
     children,
     selectedMonth,
     onOpenForm,
+    transactions,
     title,
     hideHeader = false
 }) {
@@ -21,6 +22,7 @@ export function DashboardTemplate({
                         <DashboardHeader
                             selectedMonth={selectedMonth}
                             onOpenForm={onOpenForm}
+                            transactions={transactions}
                         />
                     )}
 

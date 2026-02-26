@@ -43,6 +43,7 @@ export default function App() {
     <DashboardTemplate
       selectedMonth={selectedMonth}
       onOpenForm={() => setIsFormOpen(true)}
+      transactions={transactions}
       hideHeader={hideHeader}
     >
       <Routes>

@@ -4,8 +4,6 @@ import { Sidebar } from '../organisms/Sidebar';
 
 export function DashboardTemplate({
     children,
-    activeTab,
-    onTabChange,
     selectedMonth,
     onOpenForm,
     title,
@@ -14,7 +12,7 @@ export function DashboardTemplate({
     return (
         <div className="flex h-screen bg-gray-50 overflow-hidden font-sans">
             {/* Sidebar Left */}
-            <Sidebar activeTab={activeTab} onTabChange={onTabChange} />
+            <Sidebar />
 
             {/* Main Content Right */}
             <main className="flex-1 flex flex-col min-w-0 overflow-y-auto">

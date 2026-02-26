@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { DashboardTemplate } from './components/templates/DashboardTemplate';
 import { DashboardPage } from './components/pages/DashboardPage';
 import { TransactionsPage } from './components/pages/TransactionsPage';
@@ -18,11 +19,10 @@ const MOCK_DATA = [
 
 export default function App() {
   const [transactions, setTransactions] = useState(MOCK_DATA);
-  const [activeTab, setActiveTab] = useState('dashboard');
   const [isFormOpen, setIsFormOpen] = useState(false);
+  const location = useLocation();
 
-  // Forcing month 8 (September 2025) as baseline for the demo, matching reference data better
-  // The calendar reference says "OCTOBER 2025", but we'll use 8 (September) or 9 (October)
+  // Forcing month 8 (September 2025) as baseline for the demo
   const selectedMonth = 8;
 
   const handleAddTransaction = (newTransaction) => {
@@ -36,29 +36,23 @@ export default function App() {
     ));
   };
 
+  // Determine if header should be hidden based on path
+  const hideHeader = location.pathname === '/calendar';
+
   return (
     <DashboardTemplate
-      activeTab={activeTab}
-      onTabChange={setActiveTab}
       selectedMonth={selectedMonth}
       onOpenForm={() => setIsFormOpen(true)}
-      hideHeader={activeTab === 'calendar'} // The calendar has its own custom header
+      hideHeader={hideHeader}
     >
-      {activeTab === 'dashboard' && (
-        <DashboardPage transactions={transactions} />
-      )}
-
-      {activeTab === 'transactions' && (
-        <TransactionsPage transactions={transactions} />
-      )}
-
-      {activeTab === 'fixed-expenses' && (
-        <FixedExpensesPage transactions={transactions} onUpdateStatus={handleUpdateStatus} />
-      )}
-
-      {activeTab === 'calendar' && (
-        <CalendarPage transactions={transactions} />
-      )}
+      <Routes>
+        <Route path="/" element={<DashboardPage transactions={transactions} />} />
+        <Route path="/transactions" element={<TransactionsPage transactions={transactions} />} />
+        <Route path="/fixed-expenses" element={<FixedExpensesPage transactions={transactions} onUpdateStatus={handleUpdateStatus} />} />
+        <Route path="/calendar" element={<CalendarPage transactions={transactions} />} />
+        {/* Redirect unknown routes to dashboard */}
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
 
       <TransactionForm
         onAddTransaction={handleAddTransaction}

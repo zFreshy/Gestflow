@@ -32,8 +32,8 @@ function AppContent() {
   const { user } = useAuth();
   const location = useLocation();
 
-  // Forcing month 8 (September 2025) as baseline for the demo
-  const selectedMonth = 8;
+  // Use current month
+  const selectedMonth = new Date().getMonth();
 
   useEffect(() => {
     if (user) {

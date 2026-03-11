@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Typography } from '../atoms/Typography';
 import { Search, Bell, Calendar, Plus, X } from 'lucide-react';
 
@@ -7,13 +8,14 @@ const MONTHS = [
     'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
 ];
 
-const gotoCalendar = () => {
-    window.location.href = '/calendar';
-}
-
 export function DashboardHeader({ selectedMonth, onOpenForm, transactions = [] }) {
+    const navigate = useNavigate();
     const monthName = MONTHS[selectedMonth] || MONTHS[new Date().getMonth()];
     const [searchTerm, setSearchTerm] = useState('');
+
+    const gotoCalendar = () => {
+        navigate('/calendar');
+    };
     const [showResults, setShowResults] = useState(false);
     const searchRef = useRef(null);
 
@@ -155,7 +157,7 @@ export function DashboardHeader({ selectedMonth, onOpenForm, transactions = [] }
                     <div className="flex items-center gap-2 mt-1.5">
                         <Calendar className="h-4 w-4 text-[#7E1A8B]" />
                         <p className="text-[15px] font-medium text-gray-500">
-                            Confira sua agenda de <span className="text-[#7E1A8B] cursor-pointer hover:underline">{monthName}</span>.
+                            Confira sua agenda de <span onClick={gotoCalendar} className="text-[#7E1A8B] cursor-pointer hover:underline">{monthName}</span>.
                         </p>
                     </div>
                 </div>

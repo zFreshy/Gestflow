@@ -69,15 +69,94 @@ export function CalendarGrid({ transactions }) {
         return cells;
     }, [year, month, daysInMonth, firstDayOfMonth]);
 
+    // Helper: Parse Date (DD/MM/YYYY)
+    const parseDate = (dateStr) => {
+        if (!dateStr) return new Date(0);
+        const [day, month, year] = dateStr.split('/');
+        return new Date(year, month - 1, day);
+    };
+
+    // Generate virtual transactions for recurring expenses in the current view
+    const virtualTransactions = useMemo(() => {
+        const startOfMonth = new Date(year, month, 1);
+        const endOfMonth = new Date(year, month + 1, 0);
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        // 1. Get base fixed expenses
+        const fixedExpenses = transactions.filter(t => t.type === 'expense' && t.expenseType === 'fixed');
+        
+        // 2. Group to find latest occurrence
+        const recurringGroups = {};
+        fixedExpenses.forEach(t => {
+            if (t.recurrence) {
+                const key = `${t.description}-${t.amount}-${t.recurrence}`;
+                if (!recurringGroups[key] || parseDate(recurringGroups[key].date) < parseDate(t.date)) {
+                    recurringGroups[key] = t;
+                }
+            }
+        });
+
+        const virtuals = [];
+
+        Object.values(recurringGroups).forEach(lastExpense => {
+            let nextDate = parseDate(lastExpense.date);
+            
+            // Helper to advance date
+            const advanceDate = (date, recurrence) => {
+                 const d = new Date(date);
+                 switch (recurrence.toLowerCase()) {
+                    case 'daily': d.setDate(d.getDate() + 1); break;
+                    case 'weekly': d.setDate(d.getDate() + 7); break;
+                    case 'monthly': d.setMonth(d.getMonth() + 1); break;
+                    case 'quarterly': d.setMonth(d.getMonth() + 3); break;
+                    case 'semiannual': d.setMonth(d.getMonth() + 6); break;
+                    case 'annual': d.setFullYear(d.getFullYear() + 1); break;
+                    case 'biennial': d.setFullYear(d.getFullYear() + 2); break;
+                    default: d.setMonth(d.getMonth() + 1);
+                }
+                return d;
+            };
+
+            // Start projecting from the next occurrence after the last known one
+            let currentProjection = advanceDate(nextDate, lastExpense.recurrence);
+
+            // Loop while projection is before or within the end of the viewed month
+            // Safety break: limit to 5 years or something to prevent infinite loops if logic fails
+            let safety = 0;
+            while (currentProjection <= endOfMonth && safety < 1000) {
+                safety++;
+                
+                // If the projection is within the viewed month AND it is in the future (or today)
+                if (currentProjection >= startOfMonth && currentProjection <= endOfMonth && currentProjection >= today) {
+                    virtuals.push({
+                        ...lastExpense,
+                        id: `virtual-${lastExpense.id}-${currentProjection.getTime()}`,
+                        date: currentProjection.toLocaleDateString('pt-BR'),
+                        status: 'Aguardando',
+                        isVirtual: true
+                    });
+                }
+                
+                // Move to next occurrence
+                currentProjection = advanceDate(currentProjection, lastExpense.recurrence);
+            }
+        });
+
+        return virtuals;
+    }, [transactions, year, month]);
+
+    const allTransactions = [...transactions, ...virtualTransactions];
+
     // Group transactions by date
     const transactionsByDate = useMemo(() => {
         const map = {};
-        transactions.forEach(t => {
+        allTransactions.forEach(t => {
             if (!map[t.date]) map[t.date] = [];
             map[t.date].push(t);
         });
         return map;
-    }, [transactions]);
+    }, [allTransactions]);
 
     const handleDateClick = (dateStr) => {
         if (!dateStr) return;
@@ -166,11 +245,13 @@ export function CalendarGrid({ transactions }) {
                                                     key={t.id}
                                                     className={cn(
                                                         "px-1.5 py-0.5 rounded text-[10px] font-medium truncate",
-                                                        t.type === 'income' 
-                                                            ? "bg-emerald-100 text-emerald-700" 
-                                                            : "bg-red-100 text-red-700"
+                                                        t.isVirtual 
+                                                            ? "bg-amber-100 text-amber-700 border border-amber-200 border-dashed"
+                                                            : t.type === 'income' 
+                                                                ? "bg-emerald-100 text-emerald-700" 
+                                                                : "bg-red-100 text-red-700"
                                                     )}
-                                                    title={t.description}
+                                                    title={t.description + (t.isVirtual ? " (Previsto)" : "")}
                                                 >
                                                     {t.description}
                                                 </div>
@@ -208,14 +289,24 @@ export function CalendarGrid({ transactions }) {
                         <div className="p-4 max-h-[60vh] overflow-y-auto space-y-3">
                             {(transactionsByDate[selectedDate] || []).length > 0 ? (
                                 (transactionsByDate[selectedDate] || []).map((t) => (
-                                    <div key={t.id} className="flex items-center justify-between p-3 rounded-lg border border-gray-100 hover:bg-gray-50 transition-colors bg-white shadow-sm">
+                                    <div 
+                                        key={t.id} 
+                                        className={cn(
+                                            "flex items-center justify-between p-3 rounded-lg border transition-colors shadow-sm",
+                                            t.isVirtual 
+                                                ? "bg-amber-50/50 border-amber-200 border-dashed hover:bg-amber-50"
+                                                : "bg-white border-gray-100 hover:bg-gray-50"
+                                        )}
+                                    >
                                         <div className="flex flex-col">
-                                            <span className="font-medium text-sm text-gray-900">{t.description}</span>
-                                            <span className="text-xs text-muted-foreground">{t.exam || t.paymentMethod}</span>
+                                            <span className="font-medium text-sm text-gray-900">
+                                                {t.description} {t.isVirtual && <span className="text-amber-600 text-xs font-normal">(Previsto)</span>}
+                                            </span>
+                                            <span className="text-xs text-muted-foreground">{t.exam || t.paymentMethod || (t.isVirtual ? 'Recorrente' : '')}</span>
                                         </div>
                                         <span className={cn(
                                             "font-semibold text-sm",
-                                            t.type === 'income' ? "text-emerald-600" : "text-red-600"
+                                            t.isVirtual ? "text-amber-600" : (t.type === 'income' ? "text-emerald-600" : "text-red-600")
                                         )}>
                                             {t.type === 'income' ? '+' : '-'} {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(t.amount)}
                                         </span>

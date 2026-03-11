@@ -56,8 +56,11 @@ export function DashboardHeader({ selectedMonth, onOpenForm, transactions = [], 
 
     return (
         <div className="space-y-6">
+            {/* Top Bar Spacer for Mobile */}
+            <div className="h-14 md:hidden"></div>
+
             {/* Top Bar */}
-            <header className="sticky top-0 z-30 flex items-center justify-between gap-3 bg-gray-50 pt-4 pb-2 md:static md:bg-transparent md:p-0">
+            <header className="fixed top-[-24px] left-0 right-0 z-30 flex items-center justify-between gap-3 bg-gray-50 px-4 py-3 shadow-sm md:shadow-none md:static md:bg-transparent md:p-0">
                 {/* Mobile Menu Button */}
                 <button 
                     onClick={onMenuClick}
@@ -67,7 +70,7 @@ export function DashboardHeader({ selectedMonth, onOpenForm, transactions = [], 
                 </button>
 
                 {/* Search Bar - now left aligned since logo is in sidebar */}
-                <div className="flex-1 max-w-lg" ref={searchRef}>
+                <div className="flex-1 max-w-lg relative" ref={searchRef}>
                     <div className="relative">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                         <input

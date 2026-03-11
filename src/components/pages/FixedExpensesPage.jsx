@@ -4,11 +4,13 @@ import { CheckCircle, Circle, Calendar, Search, Filter, ChevronLeft, ChevronRigh
 import { cn } from '../../lib/utils';
 import { Input } from '../atoms/Input';
 import { Select } from '../atoms/Select';
+import { PaymentModal } from '../organisms/PaymentModal';
 
 export function FixedExpensesPage({ transactions, onUpdateStatus, onEdit, onDelete }) {
     const [searchTerm, setSearchTerm] = useState('');
     const [filterStatus, setFilterStatus] = useState('all'); // 'all', 'paid', 'pending'
     const [currentPage, setCurrentPage] = useState(1);
+    const [selectedPayment, setSelectedPayment] = useState(null); // Modal control
     const itemsPerPage = 5;
 
     // Helper: Normalize Status
@@ -72,8 +74,18 @@ export function FixedExpensesPage({ transactions, onUpdateStatus, onEdit, onDele
 
     const handleTogglePaid = (transaction) => {
         const currentlyPaid = isPaid(transaction.status);
-        const newStatus = currentlyPaid ? 'Aguardando' : 'Pago';
-        onUpdateStatus(transaction.id, newStatus);
+        if (currentlyPaid) {
+            // If already paid, just toggle back to pending (simple toggle)
+            onUpdateStatus(transaction.id, 'Aguardando');
+        } else {
+            // If pending, open modal to confirm details
+            setSelectedPayment(transaction);
+        }
+    };
+
+    const confirmPayment = (id, status, date, interest) => {
+        onUpdateStatus(id, status, date, interest);
+        setSelectedPayment(null);
     };
 
     // 1. Base Fixed Expenses
@@ -235,7 +247,7 @@ export function FixedExpensesPage({ transactions, onUpdateStatus, onEdit, onDele
                         </span>
                         <div className="flex items-center gap-2 text-xs text-muted-foreground">
                             <span className={cn(isOverdue && "text-red-600 font-medium")}>
-                                Vence em: {expense.date}
+                                {paid ? `Pago em: ${expense.date}` : `Vence em: ${expense.date}`}
                             </span>
                             <span>•</span>
                             <span>
@@ -304,6 +316,11 @@ export function FixedExpensesPage({ transactions, onUpdateStatus, onEdit, onDele
 
     return (
         <div className="space-y-8">
+            <PaymentModal 
+                transaction={selectedPayment} 
+                onClose={() => setSelectedPayment(null)} 
+                onConfirm={confirmPayment}
+            />
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div className="flex flex-col gap-1">
                     <h1 className="text-2xl font-bold tracking-tight text-gray-900">Despesas Fixas</h1>

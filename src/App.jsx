@@ -199,17 +199,52 @@ function AppContent() {
     }
   };
 
-  const handleUpdateStatus = async (transactionId, newStatus) => {
+  const handleUpdateStatus = async (transactionId, newStatus, paymentDate = null, interestAmount = 0) => {
     try {
-      const { error } = await supabase
+      const updates = { status: newStatus };
+      
+      // If paying, we might update date and amount
+      if (newStatus === 'Pago') {
+          if (paymentDate) {
+            // Convert DD/MM/YYYY to YYYY-MM-DD
+            const [day, month, year] = paymentDate.split('/');
+            updates.date = `${year}-${month}-${day}`; 
+          }
+
+          if (interestAmount > 0) {
+             const transaction = transactions.find(t => t.id === transactionId);
+             if (transaction) {
+                updates.amount = transaction.amount + interestAmount;
+             }
+          }
+      }
+
+      const { data, error } = await supabase
         .from('transactions')
-        .update({ status: newStatus })
-        .eq('id', transactionId);
+        .update(updates)
+        .eq('id', transactionId)
+        .select()
+        .single();
 
       if (error) throw error;
 
+      // Format returned data
+      const [year, month, day] = data.date.split('-');
+      const formattedDate = `${day}/${month}/${year}`;
+
+      const updatedTransaction = {
+          ...data,
+          paymentMethod: data.payment_method,
+          expenseType: data.expense_type,
+          clientName: data.client_name,
+          isBakeryIncome: data.is_bakery_income,
+          healthPlan: data.health_plan,
+          date: formattedDate,
+          timestamp: new Date(year, month - 1, day).getTime()
+      };
+
       setTransactions(prev => prev.map(t => 
-          t.id === transactionId ? { ...t, status: newStatus } : t
+          t.id === transactionId ? updatedTransaction : t
       ));
     } catch (error) {
       console.error('Error updating status:', error);

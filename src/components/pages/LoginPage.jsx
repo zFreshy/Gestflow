@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { Lock, Mail, Loader2, ArrowRight } from 'lucide-react';
 
 export function LoginPage() {
@@ -99,9 +99,9 @@ export function LoginPage() {
                             <div className="space-y-2">
                                 <div className="flex items-center justify-between ml-1">
                                     <label className="text-sm font-medium text-gray-700">Senha</label>
-                                    <a href="#" className="text-xs font-medium text-[#7E1A8B] hover:text-[#6a1675] hover:underline">
+                                    <Link to="/forgot-password" className="text-xs font-medium text-[#7E1A8B] hover:text-[#6a1675] hover:underline transition-colors">
                                         Esqueceu a senha?
-                                    </a>
+                                    </Link>
                                 </div>
                                 <div className="relative group">
                                     <div className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-[#7E1A8B] transition-colors">

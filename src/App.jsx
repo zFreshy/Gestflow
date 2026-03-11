@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { LoginPage } from './components/pages/LoginPage';
+import { ForgotPasswordPage } from './components/pages/ForgotPasswordPage';
+import { UpdatePasswordPage } from './components/pages/UpdatePasswordPage';
 import { DashboardTemplate } from './components/templates/DashboardTemplate';
 import { DashboardPage } from './components/pages/DashboardPage';
 import { TransactionsPage } from './components/pages/TransactionsPage';
@@ -272,6 +274,8 @@ function AppContent() {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+      <Route path="/update-password" element={<UpdatePasswordPage />} />
       <Route
         path="*"
         element={

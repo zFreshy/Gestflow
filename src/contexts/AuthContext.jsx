@@ -20,7 +20,11 @@ export const AuthProvider = ({ children }) => {
         });
 
         // Listen for changes on auth state (sign in, sign out, etc.)
-        const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+        const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+            if (event === 'PASSWORD_RECOVERY') {
+                // User is signed in temporarily via recovery link
+                // Redirect logic is handled by the router or manually here if needed
+            }
             setSession(session);
             setUser(session?.user ?? null);
             setLoading(false);
@@ -43,9 +47,23 @@ export const AuthProvider = ({ children }) => {
         if (error) throw error;
     };
 
+    const resetPassword = async (email) => {
+        const { error } = await supabase.auth.resetPasswordForEmail(email, {
+            redirectTo: window.location.origin + '/update-password',
+        });
+        if (error) throw error;
+    };
+
+    const updatePassword = async (newPassword) => {
+        const { error } = await supabase.auth.updateUser({ password: newPassword });
+        if (error) throw error;
+    };
+
     const value = {
         signIn,
         signOut,
+        resetPassword,
+        updatePassword,
         user,
         session,
         loading

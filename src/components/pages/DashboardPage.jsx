@@ -8,19 +8,51 @@ import { FinancesChart } from '../organisms/FinancesChart';
 export function DashboardPage({ transactions }) {
     const totalCount = transactions.length;
     
+    // Helper to normalize status
+    const isPaid = (status) => ['Pago', 'Liberado'].includes(status);
+    const isPending = (status) => ['Aguardando', 'Pendente'].includes(status);
+
+    // Helper for date comparison (ignoring time)
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const getTransactionDate = (dateStr) => {
+        const [day, month, year] = dateStr.split('/');
+        return new Date(year, month - 1, day);
+    };
+
     // Calculate financial totals
     const totalIncome = transactions
         .filter(t => t.type === 'income')
         .reduce((acc, curr) => acc + curr.amount, 0);
         
+    // Total expense now considers:
+    // 1. Variable expenses: ALL of them
+    // 2. Fixed expenses: ONLY if status is Paid
     const totalExpense = transactions
-        .filter(t => t.type === 'expense')
+        .filter(t => {
+            if (t.type !== 'expense') return false;
+            if (t.expenseType === 'fixed') {
+                return isPaid(t.status);
+            }
+            return true; // Variable expenses always count
+        })
         .reduce((acc, curr) => acc + curr.amount, 0);
         
     const netProfit = totalIncome - totalExpense;
 
+    // Filter for cards
     const fixedExpenses = transactions.filter(t => t.type === 'expense' && t.expenseType === 'fixed');
     const variableExpenses = transactions.filter(t => t.type === 'expense' && t.expenseType === 'variable');
+    
+    // New metrics
+    const upcomingExpenses = fixedExpenses.filter(t => isPending(t.status) && getTransactionDate(t.date) >= today);
+    const overdueExpenses = fixedExpenses.filter(t => isPending(t.status) && getTransactionDate(t.date) < today);
+    const paidFixedExpenses = fixedExpenses.filter(t => isPaid(t.status));
+
+    const upcomingTotal = upcomingExpenses.reduce((acc, curr) => acc + curr.amount, 0);
+    const overdueTotal = overdueExpenses.reduce((acc, curr) => acc + curr.amount, 0);
+    const paidFixedTotal = paidFixedExpenses.reduce((acc, curr) => acc + curr.amount, 0);
 
     const formatCurrency = (value) => {
         return new Intl.NumberFormat('pt-BR', {
@@ -107,6 +139,57 @@ export function DashboardPage({ transactions }) {
                             {formatCurrency(netProfit)}
                         </span>
                         <p className="text-xs text-muted-foreground mt-1">Saldo Atual</p>
+                    </div>
+                </StatCard>
+            </div>
+
+            {/* Expenses Status Row */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                {/* Despesas por vir */}
+                <StatCard
+                    title="Despesas por Vir"
+                    icon={Clock}
+                    accent="yellow"
+                >
+                    <div className="flex flex-col items-center justify-center py-2 h-full">
+                        <span className="text-2xl font-bold tracking-tight text-amber-600">
+                            {formatCurrency(upcomingTotal)}
+                        </span>
+                        <div className="flex items-center gap-1 text-xs text-amber-600 font-medium mt-1 bg-amber-50 px-2 py-0.5 rounded-full">
+                            <span>{upcomingExpenses.length} pendentes</span>
+                        </div>
+                    </div>
+                </StatCard>
+
+                {/* Despesas Atrasadas */}
+                <StatCard
+                    title="Despesas Atrasadas"
+                    icon={XCircle}
+                    accent="red"
+                >
+                    <div className="flex flex-col items-center justify-center py-2 h-full">
+                        <span className="text-2xl font-bold tracking-tight text-red-600">
+                            {formatCurrency(overdueTotal)}
+                        </span>
+                        <div className="flex items-center gap-1 text-xs text-red-600 font-medium mt-1 bg-red-50 px-2 py-0.5 rounded-full">
+                            <span>{overdueExpenses.length} vencidas</span>
+                        </div>
+                    </div>
+                </StatCard>
+
+                {/* Despesas Fixas Pagas */}
+                <StatCard
+                    title="Despesas Fixas Pagas"
+                    icon={CheckCircle}
+                    accent="green"
+                >
+                    <div className="flex flex-col items-center justify-center py-2 h-full">
+                        <span className="text-2xl font-bold tracking-tight text-emerald-600">
+                            {formatCurrency(paidFixedTotal)}
+                        </span>
+                        <div className="flex items-center gap-1 text-xs text-emerald-600 font-medium mt-1 bg-emerald-50 px-2 py-0.5 rounded-full">
+                            <span>{paidFixedExpenses.length} pagas</span>
+                        </div>
                     </div>
                 </StatCard>
             </div>

@@ -15,6 +15,7 @@ create table public.transactions (
   health_plan text,
   status text default 'Aguardando',
   expense_type text check (expense_type in ('fixed', 'variable')),
+  interest_rate numeric, -- New field for interest rate (optional)
   created_at timestamptz default now()
 );
 

@@ -2,8 +2,8 @@ import React, { useState, useMemo } from 'react';
 import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, Clock, X } from 'lucide-react';
 import { cn } from '../../lib/utils';
 
-const DAYS_OF_WEEK = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-const MONTHS = ['JANUARY', 'FEBRUARY', 'MARCH', 'APRIL', 'MAY', 'JUNE', 'JULY', 'AUGUST', 'SEPTEMBER', 'OCTOBER', 'NOVEMBER', 'DECEMBER'];
+const DAYS_OF_WEEK = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+const MONTHS = ['JANEIRO', 'FEVEREIRO', 'MARÇO', 'ABRIL', 'MAIO', 'JUNHO', 'JULHO', 'AGOSTO', 'SETEMBRO', 'OUTUBRO', 'NOVEMBRO', 'DEZEMBRO'];
 
 // Deterministic gradient selection
 const GRADIENTS = [
@@ -23,8 +23,8 @@ function getGradientForId(id) {
 }
 
 export function CalendarGrid({ transactions }) {
-    // Start with September 2025 since our mock data has dates there
-    const [currentDate, setCurrentDate] = useState(new Date(2025, 8, 1)); // September is 8
+    // Initialize with current date instead of hardcoded 2025
+    const [currentDate, setCurrentDate] = useState(new Date()); 
     const [view, setView] = useState('month'); // 'month', 'week', 'day'
     const [selectedDate, setSelectedDate] = useState(null);
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -81,6 +81,7 @@ export function CalendarGrid({ transactions }) {
 
     const handleDateClick = (dateStr) => {
         if (!dateStr) return;
+        // Allow opening modal even if no transactions, to see detail or add (future feature)
         const dayTransactions = transactionsByDate[dateStr] || [];
         if (dayTransactions.length > 0) {
             setSelectedDate(dateStr);
@@ -102,23 +103,23 @@ export function CalendarGrid({ transactions }) {
                         </button>
                     </div>
                     <button onClick={goToToday} className="px-4 py-2 border border-gray-200 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors">
-                        Today
+                        Hoje
                     </button>
                 </div>
 
-                <div className="text-lg font-medium tracking-wide">
-                    {title}
+                <div className="text-lg font-medium tracking-wide capitalize">
+                    {title.toLowerCase()}
                 </div>
 
                 <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden">
-                    <button className="px-4 py-2 bg-blue-500 text-white text-sm font-medium hover:bg-blue-600 transition-colors">
-                        Month
+                    <button className="px-4 py-2 bg-[#7E1A8B] text-white text-sm font-medium hover:bg-[#6a1675] transition-colors">
+                        Mês
                     </button>
                     <button className="px-4 py-2 bg-white text-gray-500 text-sm font-medium hover:bg-gray-50 transition-colors border-l border-gray-200">
-                        Week
+                        Semana
                     </button>
                     <button className="px-4 py-2 bg-white text-gray-500 text-sm font-medium hover:bg-gray-50 transition-colors border-l border-gray-200">
-                        Day
+                        Dia
                     </button>
                 </div>
             </div>
@@ -136,40 +137,46 @@ export function CalendarGrid({ transactions }) {
                     {calendarCells.map((cell, idx) => {
                         const dateKey = cell.dateStr;
                         const dayTransactions = transactionsByDate[dateKey] || [];
-                        const displayTransactions = dayTransactions.slice(0, 2);
-                        const remainingCount = dayTransactions.length - 2;
+                        const displayTransactions = dayTransactions.slice(0, 3); // Show up to 3
+                        const remainingCount = dayTransactions.length - 3;
+                        const isToday = cell.day === new Date().getDate() && month === new Date().getMonth() && year === new Date().getFullYear();
 
                         return (
                             <div 
                                 key={idx} 
                                 className={cn(
-                                    "min-h-[120px] p-2 border-b border-r border-gray-100 transition-colors relative group",
+                                    "min-h-[120px] p-2 border-b border-r border-gray-100 transition-colors relative group flex flex-col",
                                     !cell.day && "bg-gray-50/30",
-                                    cell.day && "hover:bg-gray-50 cursor-pointer"
+                                    cell.day && "hover:bg-gray-50 cursor-pointer",
+                                    isToday && cell.day && "bg-purple-50/30"
                                 )}
                                 onClick={() => handleDateClick(dateKey)}
                             >
                                 {cell.day && (
                                     <>
-                                        <div className="text-xs font-medium text-gray-400 mb-2 text-right">
+                                        <div className={cn(
+                                            "text-xs font-medium mb-2 text-right w-6 h-6 flex items-center justify-center rounded-full ml-auto",
+                                            isToday ? "bg-[#7E1A8B] text-white" : "text-gray-400"
+                                        )}>
                                             {cell.day}
                                         </div>
-                                        <div className="space-y-1">
+                                        <div className="space-y-1 flex-1">
                                             {displayTransactions.map((t) => (
                                                 <div 
                                                     key={t.id}
                                                     className={cn(
-                                                        "px-2 py-1 rounded-md border text-[10px] font-medium truncate shadow-sm",
+                                                        "px-1.5 py-0.5 rounded text-[10px] font-medium truncate",
                                                         t.type === 'income' 
-                                                            ? "bg-emerald-50 text-emerald-700 border-emerald-100" 
-                                                            : "bg-amber-50 text-amber-700 border-amber-100"
+                                                            ? "bg-emerald-100 text-emerald-700" 
+                                                            : "bg-red-100 text-red-700"
                                                     )}
+                                                    title={t.description}
                                                 >
                                                     {t.description}
                                                 </div>
                                             ))}
                                             {remainingCount > 0 && (
-                                                <div className="text-[10px] text-gray-500 font-medium pl-1">
+                                                <div className="text-[10px] text-gray-400 font-medium pl-1">
                                                     +{remainingCount} mais...
                                                 </div>
                                             )}
@@ -189,30 +196,34 @@ export function CalendarGrid({ transactions }) {
                         className="bg-white rounded-xl shadow-xl w-full max-w-md m-4 overflow-hidden border border-gray-200 animate-in fade-in zoom-in duration-200"
                         onClick={(e) => e.stopPropagation()}
                     >
-                        <div className="flex items-center justify-between p-4 border-b border-gray-100">
+                        <div className="flex items-center justify-between p-4 border-b border-gray-100 bg-gray-50">
                             <h3 className="font-semibold text-gray-900">Transações em {selectedDate}</h3>
                             <button 
                                 onClick={() => setIsModalOpen(false)}
-                                className="h-8 w-8 rounded-lg flex items-center justify-center text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors"
+                                className="h-8 w-8 rounded-lg flex items-center justify-center text-gray-400 hover:bg-gray-200 hover:text-gray-600 transition-colors"
                             >
                                 <X className="h-4 w-4" />
                             </button>
                         </div>
                         <div className="p-4 max-h-[60vh] overflow-y-auto space-y-3">
-                            {(transactionsByDate[selectedDate] || []).map((t) => (
-                                <div key={t.id} className="flex items-center justify-between p-3 rounded-lg border border-gray-100 hover:bg-gray-50 transition-colors">
-                                    <div className="flex flex-col">
-                                        <span className="font-medium text-sm text-gray-900">{t.description}</span>
-                                        <span className="text-xs text-muted-foreground">{t.exam || t.paymentMethod}</span>
+                            {(transactionsByDate[selectedDate] || []).length > 0 ? (
+                                (transactionsByDate[selectedDate] || []).map((t) => (
+                                    <div key={t.id} className="flex items-center justify-between p-3 rounded-lg border border-gray-100 hover:bg-gray-50 transition-colors bg-white shadow-sm">
+                                        <div className="flex flex-col">
+                                            <span className="font-medium text-sm text-gray-900">{t.description}</span>
+                                            <span className="text-xs text-muted-foreground">{t.exam || t.paymentMethod}</span>
+                                        </div>
+                                        <span className={cn(
+                                            "font-semibold text-sm",
+                                            t.type === 'income' ? "text-emerald-600" : "text-red-600"
+                                        )}>
+                                            {t.type === 'income' ? '+' : '-'} {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(t.amount)}
+                                        </span>
                                     </div>
-                                    <span className={cn(
-                                        "font-semibold text-sm",
-                                        t.type === 'income' ? "text-emerald-600" : "text-red-600"
-                                    )}>
-                                        {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(t.amount)}
-                                    </span>
-                                </div>
-                            ))}
+                                ))
+                            ) : (
+                                <p className="text-center text-gray-500 text-sm py-4">Nenhuma transação neste dia.</p>
+                            )}
                         </div>
                     </div>
                 </div>

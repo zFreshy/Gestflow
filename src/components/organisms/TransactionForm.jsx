@@ -19,6 +19,7 @@ export function TransactionForm({ onAddTransaction, isOpen, onClose }) {
     // Expense specific states
     const [expenseType, setExpenseType] = useState('fixed');
     const [recurrence, setRecurrence] = useState('monthly');
+    const [interestRate, setInterestRate] = useState('');
 
     const handleSubmit = (e) => {
         e.preventDefault();
@@ -48,6 +49,9 @@ export function TransactionForm({ onAddTransaction, isOpen, onClose }) {
             transaction.expenseType = expenseType;
             if (expenseType === 'fixed') {
                 transaction.recurrence = recurrence;
+                if (interestRate) {
+                    transaction.interestRate = parseFloat(interestRate);
+                }
             }
         }
 
@@ -61,6 +65,7 @@ export function TransactionForm({ onAddTransaction, isOpen, onClose }) {
         setClientName('');
         setExpenseType('fixed');
         setRecurrence('monthly');
+        setInterestRate('');
         
         onClose();
     };
@@ -211,17 +216,30 @@ export function TransactionForm({ onAddTransaction, isOpen, onClose }) {
                             </FormField>
 
                             {expenseType === 'fixed' && (
-                                <FormField label="Recorrência">
-                                    <Select value={recurrence} onChange={(e) => setRecurrence(e.target.value)}>
-                                        <option value="daily">Diária</option>
-                                        <option value="weekly">Semanal</option>
-                                        <option value="monthly">Mensal</option>
-                                        <option value="quarterly">Trimestral</option>
-                                        <option value="semiannual">Semestral</option>
-                                        <option value="annual">Anual</option>
-                                        <option value="biennial">Bienal</option>
-                                    </Select>
-                                </FormField>
+                                <>
+                                    <FormField label="Recorrência">
+                                        <Select value={recurrence} onChange={(e) => setRecurrence(e.target.value)}>
+                                            <option value="daily">Diária</option>
+                                            <option value="weekly">Semanal</option>
+                                            <option value="monthly">Mensal</option>
+                                            <option value="quarterly">Trimestral</option>
+                                            <option value="semiannual">Semestral</option>
+                                            <option value="annual">Anual</option>
+                                            <option value="biennial">Bienal</option>
+                                        </Select>
+                                    </FormField>
+
+                                    <FormField label="Taxa de Juros (%) - Opcional">
+                                        <Input
+                                            type="number"
+                                            step="0.01"
+                                            min="0"
+                                            placeholder="0.00"
+                                            value={interestRate}
+                                            onChange={(e) => setInterestRate(e.target.value)}
+                                        />
+                                    </FormField>
+                                </>
                             )}
                         </div>
                     )}

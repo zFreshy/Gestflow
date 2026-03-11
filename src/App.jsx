@@ -1,65 +1,198 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { LoginPage } from './components/pages/LoginPage';
 import { DashboardTemplate } from './components/templates/DashboardTemplate';
 import { DashboardPage } from './components/pages/DashboardPage';
 import { TransactionsPage } from './components/pages/TransactionsPage';
 import { CalendarPage } from './components/pages/CalendarPage';
 import { TransactionForm } from './components/organisms/TransactionForm';
 import { FixedExpensesPage } from './components/pages/FixedExpensesPage';
+import { supabase } from './lib/supabase';
 
-const MOCK_DATA = [
-  { id: '1', description: 'Paula Horrana', amount: 1250.00, type: 'income', paymentMethod: 'pix', date: '15/09/2025', timestamp: new Date(2025, 8, 15, 9, 0).getTime(), subtitle: '020.000.000-88', exam: 'Hemograma Completo', healthPlan: 'Unimed Brasil', status: 'Aguardando' },
-  { id: '2', description: 'Willy Leal', amount: 350.00, type: 'expense', paymentMethod: 'cartao', date: '15/09/2025', timestamp: new Date(2025, 8, 15, 10, 0).getTime(), subtitle: '020.000.000-88', exam: 'Exame de Colesterol', healthPlan: 'Amil Saúde', status: 'Aguardando', expenseType: 'fixed' },
-  { id: '3', description: 'Jasmine Adams', amount: 2800.00, type: 'income', paymentMethod: 'pix', date: '15/09/2025', timestamp: new Date(2025, 8, 15, 11, 0).getTime(), subtitle: '020.000.000-88', exam: 'Teste de Glicemia', healthPlan: 'Bradesco Saúde', status: 'Liberado' },
-  { id: '4', description: 'Michael Brown', amount: 480.00, type: 'expense', paymentMethod: 'dinheiro', date: '15/09/2025', timestamp: new Date(2025, 8, 15, 11, 30).getTime(), subtitle: '020.000.000-88', exam: 'Ultrassonografia', healthPlan: 'SulAmérica Saúde', status: 'Aguardando', expenseType: 'variable' },
-  { id: '5', description: 'Sara Davis', amount: 890.00, type: 'income', paymentMethod: 'cartao', date: '21/09/2025', timestamp: new Date(2025, 8, 21, 12, 0).getTime(), subtitle: '020.000.000-88', exam: 'Ressonância Magnética', healthPlan: 'Grupo NotreDame', status: 'Liberado' },
-  { id: '6', description: 'Carlos Thomas', amount: 1500.00, type: 'expense', paymentMethod: 'pix', date: '23/09/2025', timestamp: new Date(2025, 8, 23, 12, 30).getTime(), subtitle: '020.000.000-88', exam: 'Tomografia', healthPlan: 'Porto Seguro Saúde', status: 'Cancelado', expenseType: 'fixed' },
-  { id: '7', description: 'Emily Lee', amount: 1750.00, type: 'income', paymentMethod: 'pix', date: '25/09/2025', timestamp: new Date(2025, 8, 25, 13, 0).getTime(), subtitle: '020.000.000-88', exam: 'Exame de Sangue Oculto', healthPlan: 'Unimed Paulistana', status: 'Liberado' },
-];
+function PrivateRoute({ children }) {
+  const { user, loading } = useAuth();
+  
+  if (loading) {
+    return <div className="min-h-screen flex items-center justify-center">Carregando...</div>;
+  }
+  
+  if (!user) {
+    return <Navigate to="/login" replace />;
+  }
+  
+  return children;
+}
 
-export default function App() {
-  const [transactions, setTransactions] = useState(MOCK_DATA);
+function AppContent() {
+  const [transactions, setTransactions] = useState([]);
   const [isFormOpen, setIsFormOpen] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const { user } = useAuth();
   const location = useLocation();
 
   // Forcing month 8 (September 2025) as baseline for the demo
   const selectedMonth = 8;
 
-  const handleAddTransaction = (newTransaction) => {
-    setTransactions((prev) => [...prev, newTransaction]);
-    setIsFormOpen(false);
+  useEffect(() => {
+    if (user) {
+      fetchTransactions();
+    } else {
+      setTransactions([]);
+      setLoading(false);
+    }
+  }, [user]);
+
+  const fetchTransactions = async () => {
+    try {
+      setLoading(true);
+      const { data, error } = await supabase
+        .from('transactions')
+        .select('*')
+        .order('date', { ascending: false });
+
+      if (error) throw error;
+
+      const formattedTransactions = data.map(t => {
+        // Convert YYYY-MM-DD to DD/MM/YYYY
+        const [year, month, day] = t.date.split('-');
+        const formattedDate = `${day}/${month}/${year}`;
+        
+        return {
+          ...t,
+          paymentMethod: t.payment_method,
+          expenseType: t.expense_type,
+          clientName: t.client_name,
+          isBakeryIncome: t.is_bakery_income,
+          healthPlan: t.health_plan,
+          date: formattedDate,
+          timestamp: new Date(year, month - 1, day).getTime()
+        };
+      });
+
+      setTransactions(formattedTransactions);
+    } catch (error) {
+      console.error('Error fetching transactions:', error);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleUpdateStatus = (transactionId, newStatus) => {
-    setTransactions(prev => prev.map(t => 
-        t.id === transactionId ? { ...t, status: newStatus } : t
-    ));
+  const handleAddTransaction = async (newTransaction) => {
+    try {
+      // Convert DD/MM/YYYY to YYYY-MM-DD
+      const [day, month, year] = newTransaction.date.split('/');
+      const formattedDate = `${year}-${month}-${day}`;
+
+      const transactionToSave = {
+        description: newTransaction.description,
+        amount: newTransaction.amount,
+        type: newTransaction.type,
+        payment_method: newTransaction.paymentMethod,
+        date: formattedDate,
+        subtitle: newTransaction.subtitle || newTransaction.clientName || '', // Use clientName if subtitle is empty (fallback)
+        client_name: newTransaction.clientName,
+        is_bakery_income: newTransaction.isBakeryIncome,
+        recurrence: newTransaction.recurrence,
+        exam: newTransaction.exam,
+        health_plan: newTransaction.healthPlan,
+        status: newTransaction.status || 'Aguardando',
+        expense_type: newTransaction.expenseType,
+        user_id: user.id
+      };
+
+      const { data, error } = await supabase
+        .from('transactions')
+        .insert([transactionToSave])
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      // Update local state with the returned data formatted
+      const savedTransaction = {
+        ...data,
+        paymentMethod: data.payment_method,
+        expenseType: data.expense_type,
+        clientName: data.client_name,
+        isBakeryIncome: data.is_bakery_income,
+        healthPlan: data.health_plan,
+        date: newTransaction.date, // Use original date string
+        timestamp: newTransaction.timestamp
+      };
+
+      setTransactions((prev) => [savedTransaction, ...prev]);
+      setIsFormOpen(false);
+    } catch (error) {
+      console.error('Error adding transaction:', error);
+      alert('Erro ao adicionar transação');
+    }
+  };
+
+  const handleUpdateStatus = async (transactionId, newStatus) => {
+    try {
+      const { error } = await supabase
+        .from('transactions')
+        .update({ status: newStatus })
+        .eq('id', transactionId);
+
+      if (error) throw error;
+
+      setTransactions(prev => prev.map(t => 
+          t.id === transactionId ? { ...t, status: newStatus } : t
+      ));
+    } catch (error) {
+      console.error('Error updating status:', error);
+      alert('Erro ao atualizar status');
+    }
   };
 
   // Determine if header should be hidden based on path
   const hideHeader = location.pathname === '/calendar';
 
-  return (
-    <DashboardTemplate
-      selectedMonth={selectedMonth}
-      onOpenForm={() => setIsFormOpen(true)}
-      transactions={transactions}
-      hideHeader={hideHeader}
-    >
-      <Routes>
-        <Route path="/" element={<DashboardPage transactions={transactions} />} />
-        <Route path="/transactions" element={<TransactionsPage transactions={transactions} />} />
-        <Route path="/fixed-expenses" element={<FixedExpensesPage transactions={transactions} onUpdateStatus={handleUpdateStatus} />} />
-        <Route path="/calendar" element={<CalendarPage transactions={transactions} />} />
-        {/* Redirect unknown routes to dashboard */}
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
+  if (loading && user) {
+      return <div className="min-h-screen flex items-center justify-center">Carregando dados...</div>;
+  }
 
-      <TransactionForm
-        onAddTransaction={handleAddTransaction}
-        isOpen={isFormOpen}
-        onClose={() => setIsFormOpen(false)}
+  return (
+    <Routes>
+      <Route path="/login" element={<LoginPage />} />
+      <Route
+        path="*"
+        element={
+          <PrivateRoute>
+            <DashboardTemplate
+              selectedMonth={selectedMonth}
+              onOpenForm={() => setIsFormOpen(true)}
+              transactions={transactions}
+              hideHeader={hideHeader}
+            >
+              <Routes>
+                <Route path="/" element={<DashboardPage transactions={transactions} />} />
+                <Route path="/transactions" element={<TransactionsPage transactions={transactions} />} />
+                <Route path="/fixed-expenses" element={<FixedExpensesPage transactions={transactions} onUpdateStatus={handleUpdateStatus} />} />
+                <Route path="/calendar" element={<CalendarPage transactions={transactions} />} />
+                {/* Redirect unknown routes to dashboard */}
+                <Route path="*" element={<Navigate to="/" replace />} />
+              </Routes>
+
+              <TransactionForm
+                onAddTransaction={handleAddTransaction}
+                isOpen={isFormOpen}
+                onClose={() => setIsFormOpen(false)}
+              />
+            </DashboardTemplate>
+          </PrivateRoute>
+        }
       />
-    </DashboardTemplate>
+    </Routes>
+  );
+}
+
+export default function App() {
+  return (
+    <AuthProvider>
+      <AppContent />
+    </AuthProvider>
   );
 }

@@ -171,8 +171,8 @@ export function CalendarGrid({ transactions, onEdit, onDelete }) {
     return (
         <div className="flex flex-col h-full bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden relative">
             {/* Header Toolbar */}
-            <div className="flex items-center justify-between px-6 py-5 border-b border-gray-100">
-                <div className="flex items-center gap-3">
+            <div className="flex flex-col md:flex-row items-center justify-between px-4 md:px-6 py-4 md:py-5 border-b border-gray-100 gap-4">
+                <div className="flex items-center gap-3 w-full md:w-auto justify-between md:justify-start">
                     <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden">
                         <button onClick={goToPreviousMonth} className="px-3 py-2 hover:bg-gray-50 text-gray-500 transition-colors border-r border-gray-200">
                             <ChevronLeft className="h-4 w-4" />
@@ -181,23 +181,26 @@ export function CalendarGrid({ transactions, onEdit, onDelete }) {
                             <ChevronRight className="h-4 w-4" />
                         </button>
                     </div>
+                    <div className="text-lg font-medium tracking-wide capitalize md:hidden">
+                        {title.toLowerCase()}
+                    </div>
                     <button onClick={goToToday} className="px-4 py-2 border border-gray-200 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors">
                         Hoje
                     </button>
                 </div>
 
-                <div className="text-lg font-medium tracking-wide capitalize">
+                <div className="text-lg font-medium tracking-wide capitalize hidden md:block">
                     {title.toLowerCase()}
                 </div>
 
-                <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden">
-                    <button className="px-4 py-2 bg-[#7E1A8B] text-white text-sm font-medium hover:bg-[#6a1675] transition-colors">
+                <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden w-full md:w-auto">
+                    <button className="flex-1 md:flex-none px-4 py-2 bg-[#7E1A8B] text-white text-sm font-medium hover:bg-[#6a1675] transition-colors">
                         Mês
                     </button>
-                    <button className="px-4 py-2 bg-white text-gray-500 text-sm font-medium hover:bg-gray-50 transition-colors border-l border-gray-200">
+                    <button className="flex-1 md:flex-none px-4 py-2 bg-white text-gray-500 text-sm font-medium hover:bg-gray-50 transition-colors border-l border-gray-200">
                         Semana
                     </button>
-                    <button className="px-4 py-2 bg-white text-gray-500 text-sm font-medium hover:bg-gray-50 transition-colors border-l border-gray-200">
+                    <button className="flex-1 md:flex-none px-4 py-2 bg-white text-gray-500 text-sm font-medium hover:bg-gray-50 transition-colors border-l border-gray-200">
                         Dia
                     </button>
                 </div>
@@ -205,14 +208,14 @@ export function CalendarGrid({ transactions, onEdit, onDelete }) {
 
             {/* Calendar Grid */}
             <div className="flex-1 overflow-auto">
-                <div className="grid grid-cols-7 border-b border-gray-100">
+                <div className="grid grid-cols-7 border-b border-gray-100 min-w-[350px]">
                     {DAYS_OF_WEEK.map((day) => (
-                        <div key={day} className="py-3 text-center text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                        <div key={day} className="py-3 text-center text-[10px] md:text-xs font-semibold text-gray-500 uppercase tracking-wider">
                             {day}
                         </div>
                     ))}
                 </div>
-                <div className="grid grid-cols-7 h-full auto-rows-fr">
+                <div className="grid grid-cols-7 h-full auto-rows-fr min-w-[350px]">
                     {calendarCells.map((cell, idx) => {
                         const dateKey = cell.dateStr;
                         const dayTransactions = transactionsByDate[dateKey] || [];
@@ -224,7 +227,7 @@ export function CalendarGrid({ transactions, onEdit, onDelete }) {
                             <div 
                                 key={idx} 
                                 className={cn(
-                                    "min-h-[120px] p-2 border-b border-r border-gray-100 transition-colors relative group flex flex-col",
+                                    "min-h-[80px] md:min-h-[120px] p-1 md:p-2 border-b border-r border-gray-100 transition-colors relative group flex flex-col",
                                     !cell.day && "bg-gray-50/30",
                                     cell.day && "hover:bg-gray-50 cursor-pointer",
                                     isToday && cell.day && "bg-purple-50/30"
@@ -313,7 +316,7 @@ export function CalendarGrid({ transactions, onEdit, onDelete }) {
                                             </span>
                                             
                                             {!t.isVirtual && (onEdit || onDelete) && (
-                                                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                <div className="flex items-center gap-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
                                                     {onEdit && (
                                                         <button 
                                                             onClick={(e) => { e.stopPropagation(); onEdit(t); }}

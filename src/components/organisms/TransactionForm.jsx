@@ -116,11 +116,11 @@ export function TransactionForm({ onAddTransaction, onEditTransaction, isOpen, o
     return (
         <div className="modal-overlay" onClick={onClose}>
             <div
-                className="modal-content bg-card rounded-2xl shadow-2xl border w-full max-w-md mx-4 overflow-hidden"
+                className="modal-content bg-card rounded-2xl shadow-2xl border w-full max-w-md mx-4 flex flex-col max-h-[90vh]"
                 onClick={(e) => e.stopPropagation()}
             >
                 {/* Modal Header */}
-                <div className="flex items-center justify-between p-6 pb-2">
+                <div className="flex items-center justify-between p-6 pb-2 shrink-0">
                     <h2 className="text-lg font-semibold">Nova Transação</h2>
                     <button
                         onClick={onClose}
@@ -131,7 +131,7 @@ export function TransactionForm({ onAddTransaction, onEditTransaction, isOpen, o
                 </div>
 
                 {/* Tabs */}
-                <div className="flex border-b px-6">
+                <div className="flex border-b px-6 shrink-0">
                     <button
                         className={`pb-2 px-4 text-sm font-medium border-b-2 transition-colors ${
                             activeTab === 'income' 
@@ -155,7 +155,7 @@ export function TransactionForm({ onAddTransaction, onEditTransaction, isOpen, o
                 </div>
 
                 {/* Modal Body */}
-                <form onSubmit={handleSubmit} className="p-6 space-y-4">
+                <form onSubmit={handleSubmit} className="p-6 space-y-4 overflow-y-auto">
                     
                     {/* Common Fields */}
                     <FormField label="Descrição">

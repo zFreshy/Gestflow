@@ -263,7 +263,7 @@ function AppContent() {
   };
 
   // Determine if header should be hidden based on path
-  const hideHeader = location.pathname === '/calendar';
+  const hideHeader = false;
 
   if (loading && user) {
       return <div className="min-h-screen flex items-center justify-center">Carregando dados...</div>;

@@ -1,14 +1,14 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Typography } from '../atoms/Typography';
-import { Search, Bell, Calendar, Plus, X } from 'lucide-react';
+import { Search, Bell, Calendar, Plus, X, Menu } from 'lucide-react';
 
 const MONTHS = [
     'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
     'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
 ];
 
-export function DashboardHeader({ selectedMonth, onOpenForm, transactions = [] }) {
+export function DashboardHeader({ selectedMonth, onOpenForm, transactions = [], onMenuClick }) {
     const navigate = useNavigate();
     const monthName = MONTHS[selectedMonth] || MONTHS[new Date().getMonth()];
     const [searchTerm, setSearchTerm] = useState('');
@@ -57,14 +57,22 @@ export function DashboardHeader({ selectedMonth, onOpenForm, transactions = [] }
     return (
         <div className="space-y-6">
             {/* Top Bar */}
-            <header className="flex items-center justify-between relative z-50">
+            <header className="sticky top-0 z-30 flex items-center justify-between gap-3 bg-gray-50 pt-4 pb-2 md:static md:bg-transparent md:p-0">
+                {/* Mobile Menu Button */}
+                <button 
+                    onClick={onMenuClick}
+                    className="md:hidden p-2 -ml-2 text-gray-500 hover:bg-gray-100 rounded-lg shrink-0"
+                >
+                    <Menu className="h-6 w-6" />
+                </button>
+
                 {/* Search Bar - now left aligned since logo is in sidebar */}
                 <div className="flex-1 max-w-lg" ref={searchRef}>
                     <div className="relative">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                         <input
                             type="text"
-                            placeholder="Buscar por CPF, Nome ou Telefone"
+                            placeholder="Buscar..."
                             value={searchTerm}
                             onChange={handleSearchChange}
                             onFocus={() => setShowResults(true)}
@@ -137,7 +145,7 @@ export function DashboardHeader({ selectedMonth, onOpenForm, transactions = [] }
                 </div>
 
                 {/* Right Icons */}
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2 md:gap-3 shrink-0">
                     <button onClick={() => gotoCalendar()} className="h-10 w-10 flex items-center justify-center text-gray-400 hover:text-gray-600 transition-colors">
                         <Calendar className="h-5 w-5" />
                     </button>
@@ -149,21 +157,21 @@ export function DashboardHeader({ selectedMonth, onOpenForm, transactions = [] }
             </header>
 
             {/* Welcome Banner */}
-            <div className="flex items-center justify-between pt-2">
+            <div className="flex flex-col md:flex-row md:items-center justify-between pt-2 gap-4">
                 <div>
-                    <h1 className="text-[28px] font-semibold text-gray-900 tracking-tight flex items-center gap-2">
+                    <h1 className="text-2xl md:text-[28px] font-semibold text-gray-900 tracking-tight flex items-center gap-2">
                         Bom dia, <span className="font-bold">Nal!</span> 👋🏼
                     </h1>
                     <div className="flex items-center gap-2 mt-1.5">
                         <Calendar className="h-4 w-4 text-[#7E1A8B]" />
-                        <p className="text-[15px] font-medium text-gray-500">
+                        <p className="text-sm md:text-[15px] font-medium text-gray-500">
                             Confira sua agenda de <span onClick={gotoCalendar} className="text-[#7E1A8B] cursor-pointer hover:underline">{monthName}</span>.
                         </p>
                     </div>
                 </div>
                 <button
                     onClick={onOpenForm}
-                    className="flex items-center gap-2 bg-blue-500 text-white px-6 py-2.5 rounded-xl font-medium text-sm hover:bg-blue-600 transition-all shadow-md active:scale-[0.98]"
+                    className="w-full md:w-auto flex items-center justify-center gap-2 bg-blue-500 text-white px-6 py-2.5 rounded-xl font-medium text-sm hover:bg-blue-600 transition-all shadow-md active:scale-[0.98]"
                 >
                     <Plus className="h-4 w-4" />
                     Adicionar Transação

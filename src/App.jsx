@@ -27,6 +27,7 @@ function PrivateRoute({ children }) {
 function AppContent() {
   const [transactions, setTransactions] = useState([]);
   const [isFormOpen, setIsFormOpen] = useState(false);
+  const [editingTransaction, setEditingTransaction] = useState(null);
   const [loading, setLoading] = useState(true);
   const { user } = useAuth();
   const location = useLocation();
@@ -129,6 +130,75 @@ function AppContent() {
     }
   };
 
+  const handleEditTransaction = async (updatedTransaction) => {
+    try {
+      // Convert DD/MM/YYYY to YYYY-MM-DD
+      const [day, month, year] = updatedTransaction.date.split('/');
+      const formattedDate = `${year}-${month}-${day}`;
+
+      const transactionToUpdate = {
+        description: updatedTransaction.description,
+        amount: updatedTransaction.amount,
+        type: updatedTransaction.type,
+        payment_method: updatedTransaction.paymentMethod,
+        date: formattedDate,
+        subtitle: updatedTransaction.subtitle || updatedTransaction.clientName || '',
+        client_name: updatedTransaction.clientName,
+        is_bakery_income: updatedTransaction.isBakeryIncome,
+        recurrence: updatedTransaction.recurrence,
+        exam: updatedTransaction.exam,
+        health_plan: updatedTransaction.healthPlan,
+        status: updatedTransaction.status || 'Aguardando',
+        expense_type: updatedTransaction.expenseType,
+      };
+
+      const { data, error } = await supabase
+        .from('transactions')
+        .update(transactionToUpdate)
+        .eq('id', updatedTransaction.id)
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      const savedTransaction = {
+        ...data,
+        paymentMethod: data.payment_method,
+        expenseType: data.expense_type,
+        clientName: data.client_name,
+        isBakeryIncome: data.is_bakery_income,
+        healthPlan: data.health_plan,
+        date: updatedTransaction.date,
+        timestamp: updatedTransaction.timestamp
+      };
+
+      setTransactions(prev => prev.map(t => t.id === savedTransaction.id ? savedTransaction : t));
+      setIsFormOpen(false);
+      setEditingTransaction(null);
+    } catch (error) {
+      console.error('Error updating transaction:', error);
+      alert('Erro ao atualizar transação');
+    }
+  };
+
+  const handleDeleteTransaction = async (transactionId) => {
+    if (!window.confirm('Tem certeza que deseja excluir esta transação?')) return;
+
+    try {
+      const { error } = await supabase
+        .from('transactions')
+        .delete()
+        .eq('id', transactionId);
+
+      if (error) throw error;
+
+      setTransactions(prev => prev.filter(t => t.id !== transactionId));
+    } catch (error) {
+      console.error('Error deleting transaction:', error);
+      alert('Erro ao excluir transação');
+    }
+  };
+
   const handleUpdateStatus = async (transactionId, newStatus) => {
     try {
       const { error } = await supabase
@@ -147,6 +217,16 @@ function AppContent() {
     }
   };
 
+  const openAddForm = () => {
+    setEditingTransaction(null);
+    setIsFormOpen(true);
+  };
+
+  const openEditForm = (transaction) => {
+    setEditingTransaction(transaction);
+    setIsFormOpen(true);
+  };
+
   // Determine if header should be hidden based on path
   const hideHeader = location.pathname === '/calendar';
 
@@ -163,23 +243,56 @@ function AppContent() {
           <PrivateRoute>
             <DashboardTemplate
               selectedMonth={selectedMonth}
-              onOpenForm={() => setIsFormOpen(true)}
+              onOpenForm={openAddForm}
               transactions={transactions}
               hideHeader={hideHeader}
             >
               <Routes>
                 <Route path="/" element={<DashboardPage transactions={transactions} />} />
-                <Route path="/transactions" element={<TransactionsPage transactions={transactions} />} />
-                <Route path="/fixed-expenses" element={<FixedExpensesPage transactions={transactions} onUpdateStatus={handleUpdateStatus} />} />
-                <Route path="/calendar" element={<CalendarPage transactions={transactions} />} />
+                <Route 
+                  path="/transactions" 
+                  element={
+                    <TransactionsPage 
+                      transactions={transactions} 
+                      onEdit={openEditForm} 
+                      onDelete={handleDeleteTransaction} 
+                    />
+                  } 
+                />
+                <Route 
+                  path="/fixed-expenses" 
+                  element={
+                    <FixedExpensesPage 
+                      transactions={transactions} 
+                      onUpdateStatus={handleUpdateStatus} 
+                      onEdit={openEditForm} 
+                      onDelete={handleDeleteTransaction} 
+                    />
+                  } 
+                />
+                <Route 
+                  path="/calendar" 
+                  element={
+                    <CalendarPage 
+                      transactions={transactions} 
+                      onEdit={openEditForm} 
+                      onDelete={handleDeleteTransaction}
+                    />
+                  } 
+                />
                 {/* Redirect unknown routes to dashboard */}
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>
 
               <TransactionForm
                 onAddTransaction={handleAddTransaction}
+                onEditTransaction={handleEditTransaction}
+                initialData={editingTransaction}
                 isOpen={isFormOpen}
-                onClose={() => setIsFormOpen(false)}
+                onClose={() => {
+                  setIsFormOpen(false);
+                  setTimeout(() => setEditingTransaction(null), 300); // Clear after animation
+                }}
               />
             </DashboardTemplate>
           </PrivateRoute>

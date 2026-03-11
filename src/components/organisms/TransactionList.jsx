@@ -1,7 +1,7 @@
 import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../atoms/Card';
 import { Avatar } from '../atoms/Avatar';
-import { Search, ArrowUpDown, ChevronDown } from 'lucide-react';
+import { Search, ArrowUpDown, ChevronDown, Pencil, Trash2 } from 'lucide-react';
 
 const METHOD_LABELS = {
     pix: 'Pix',
@@ -14,7 +14,7 @@ const STATUS_MAP = {
     expense: { label: 'Processado', color: 'text-amber-500' },
 };
 
-export function TransactionList({ transactions }) {
+export function TransactionList({ transactions, onEdit, onDelete }) {
     const sorted = [...transactions].sort((a, b) => b.timestamp - a.timestamp);
 
     return (
@@ -83,6 +83,13 @@ export function TransactionList({ transactions }) {
                                         Status <ArrowUpDown className="h-3 w-3" />
                                     </div>
                                 </th>
+                                {(onEdit || onDelete) && (
+                                    <th className="px-6 py-3 text-right">
+                                        <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                                            Ações
+                                        </div>
+                                    </th>
+                                )}
                             </tr>
                         </thead>
                         <tbody>
@@ -96,7 +103,7 @@ export function TransactionList({ transactions }) {
                                 return (
                                     <tr
                                         key={t.id}
-                                        className="border-t hover:bg-gray-50/80 transition-colors"
+                                        className="border-t hover:bg-gray-50/80 transition-colors group"
                                     >
                                         <td className="px-6 py-4">
                                             <div className="flex items-center gap-3">
@@ -132,6 +139,30 @@ export function TransactionList({ transactions }) {
                                                 {status.label}
                                             </span>
                                         </td>
+                                        {(onEdit || onDelete) && (
+                                            <td className="px-6 py-4 text-right">
+                                                <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                    {onEdit && (
+                                                        <button 
+                                                            onClick={() => onEdit(t)}
+                                                            className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-500 hover:text-blue-600 transition-colors"
+                                                            title="Editar"
+                                                        >
+                                                            <Pencil className="h-4 w-4" />
+                                                        </button>
+                                                    )}
+                                                    {onDelete && (
+                                                        <button 
+                                                            onClick={() => onDelete(t.id)}
+                                                            className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-500 hover:text-red-600 transition-colors"
+                                                            title="Excluir"
+                                                        >
+                                                            <Trash2 className="h-4 w-4" />
+                                                        </button>
+                                                    )}
+                                                </div>
+                                            </td>
+                                        )}
                                     </tr>
                                 );
                             })}

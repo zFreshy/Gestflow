@@ -1,7 +1,7 @@
 import React from 'react';
 import { TransactionList } from '../organisms/TransactionList';
 
-export function TransactionsPage({ transactions }) {
+export function TransactionsPage({ transactions, onEdit, onDelete }) {
     return (
         <div className="space-y-6">
             <div className="flex items-center justify-between">
@@ -13,7 +13,7 @@ export function TransactionsPage({ transactions }) {
 
             {/* Transactions Table */}
             <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-                <TransactionList transactions={transactions} />
+                <TransactionList transactions={transactions} onEdit={onEdit} onDelete={onDelete} />
             </div>
         </div>
     );

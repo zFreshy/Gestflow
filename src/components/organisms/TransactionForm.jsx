@@ -1,11 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Button } from '../atoms/Button';
 import { Input } from '../atoms/Input';
 import { Select } from '../atoms/Select';
 import { FormField } from '../molecules/FormField';
 import { X } from 'lucide-react';
 
-export function TransactionForm({ onAddTransaction, isOpen, onClose }) {
+export function TransactionForm({ onAddTransaction, onEditTransaction, isOpen, onClose, initialData }) {
     const [activeTab, setActiveTab] = useState('income');
     const [description, setDescription] = useState('');
     const [amount, setAmount] = useState('');
@@ -21,6 +21,45 @@ export function TransactionForm({ onAddTransaction, isOpen, onClose }) {
     const [recurrence, setRecurrence] = useState('monthly');
     const [interestRate, setInterestRate] = useState('');
 
+    useEffect(() => {
+        if (isOpen) {
+            if (initialData) {
+                // Edit mode: Populate form with initialData
+                setActiveTab(initialData.type);
+                setDescription(initialData.description);
+                setAmount(initialData.amount.toString());
+                setPaymentMethod(initialData.paymentMethod || initialData.payment_method);
+                
+                // Convert DD/MM/YYYY back to YYYY-MM-DD for input[type="date"]
+                const [day, month, year] = initialData.date.split('/');
+                setDate(`${year}-${month}-${day}`);
+
+                if (initialData.type === 'income') {
+                    setIsBakeryIncome(initialData.isBakeryIncome || initialData.is_bakery_income || false);
+                    setClientName(initialData.clientName || initialData.client_name || '');
+                } else {
+                    setExpenseType(initialData.expenseType || initialData.expense_type || 'fixed');
+                    if ((initialData.expenseType || initialData.expense_type) === 'fixed') {
+                        setRecurrence(initialData.recurrence || 'monthly');
+                        setInterestRate(initialData.interestRate || initialData.interest_rate || '');
+                    }
+                }
+            } else {
+                // Add mode: Reset form
+                setActiveTab('income');
+                setDescription('');
+                setAmount('');
+                setPaymentMethod('pix');
+                setDate(new Date().toISOString().split('T')[0]);
+                setIsBakeryIncome(false);
+                setClientName('');
+                setExpenseType('fixed');
+                setRecurrence('monthly');
+                setInterestRate('');
+            }
+        }
+    }, [isOpen, initialData]);
+
     const handleSubmit = (e) => {
         e.preventDefault();
         if (!description || !amount || !date) return;
@@ -31,7 +70,7 @@ export function TransactionForm({ onAddTransaction, isOpen, onClose }) {
         const timestamp = new Date(year, month - 1, day).getTime();
 
         const transaction = {
-            id: crypto.randomUUID(),
+            id: initialData ? initialData.id : crypto.randomUUID(),
             description,
             amount: parseFloat(amount),
             type: activeTab, // 'income' or 'expense'
@@ -44,6 +83,9 @@ export function TransactionForm({ onAddTransaction, isOpen, onClose }) {
             if (isBakeryIncome) {
                 transaction.isBakeryIncome = true;
                 transaction.clientName = clientName;
+            } else {
+                transaction.isBakeryIncome = false;
+                transaction.clientName = null;
             }
         } else {
             transaction.expenseType = expenseType;
@@ -51,21 +93,20 @@ export function TransactionForm({ onAddTransaction, isOpen, onClose }) {
                 transaction.recurrence = recurrence;
                 if (interestRate) {
                     transaction.interestRate = parseFloat(interestRate);
+                } else {
+                    transaction.interestRate = null;
                 }
+            } else {
+                transaction.recurrence = null;
+                transaction.interestRate = null;
             }
         }
 
-        onAddTransaction(transaction);
-
-        // Reset form
-        setDescription('');
-        setAmount('');
-        setDate(new Date().toISOString().split('T')[0]);
-        setIsBakeryIncome(false);
-        setClientName('');
-        setExpenseType('fixed');
-        setRecurrence('monthly');
-        setInterestRate('');
+        if (initialData && onEditTransaction) {
+            onEditTransaction(transaction);
+        } else {
+            onAddTransaction(transaction);
+        }
         
         onClose();
     };
@@ -260,7 +301,7 @@ export function TransactionForm({ onAddTransaction, isOpen, onClose }) {
                                     : 'bg-red-600 hover:bg-red-700'
                             }`}
                         >
-                            Adicionar {activeTab === 'income' ? 'Lucro' : 'Despesa'}
+                            {initialData ? 'Salvar Alterações' : (activeTab === 'income' ? 'Adicionar Lucro' : 'Adicionar Despesa')}
                         </button>
                     </div>
                 </form>

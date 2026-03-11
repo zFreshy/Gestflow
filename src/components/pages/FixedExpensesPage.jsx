@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../atoms/Card';
-import { CheckCircle, Circle, Calendar, Search, Filter, ChevronLeft, ChevronRight, History } from 'lucide-react';
+import { CheckCircle, Circle, Calendar, Search, Filter, ChevronLeft, ChevronRight, History, Pencil, Trash2 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { Input } from '../atoms/Input';
 import { Select } from '../atoms/Select';
 
-export function FixedExpensesPage({ transactions, onUpdateStatus }) {
+export function FixedExpensesPage({ transactions, onUpdateStatus, onEdit, onDelete }) {
     const [searchTerm, setSearchTerm] = useState('');
     const [filterStatus, setFilterStatus] = useState('all'); // 'all', 'paid', 'pending'
     const [currentPage, setCurrentPage] = useState(1);
@@ -202,7 +202,7 @@ export function FixedExpensesPage({ transactions, onUpdateStatus }) {
         return (
             <div
                 className={cn(
-                    "flex items-center justify-between p-4 rounded-xl border transition-all hover:bg-gray-50",
+                    "flex items-center justify-between p-4 rounded-xl border transition-all hover:bg-gray-50 group",
                     paid ? "bg-gray-50/50 border-gray-100" : "bg-white border-gray-200",
                     isOverdue && "border-red-100 bg-red-50/30",
                     isVirtual && "border-amber-100 bg-amber-50/20 border-dashed"
@@ -274,6 +274,29 @@ export function FixedExpensesPage({ transactions, onUpdateStatus }) {
                             {paid ? 'Pago' : isOverdue ? 'Atrasada' : isVirtual ? 'Previsto' : 'Pendente'}
                         </span>
                     </div>
+
+                    {!isVirtual && (onEdit || onDelete) && (
+                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            {onEdit && (
+                                <button 
+                                    onClick={() => onEdit(expense)}
+                                    className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-500 hover:text-blue-600 transition-colors"
+                                    title="Editar"
+                                >
+                                    <Pencil className="h-4 w-4" />
+                                </button>
+                            )}
+                            {onDelete && (
+                                <button 
+                                    onClick={() => onDelete(expense.id)}
+                                    className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-500 hover:text-red-600 transition-colors"
+                                    title="Excluir"
+                                >
+                                    <Trash2 className="h-4 w-4" />
+                                </button>
+                            )}
+                        </div>
+                    )}
                 </div>
             </div>
         );

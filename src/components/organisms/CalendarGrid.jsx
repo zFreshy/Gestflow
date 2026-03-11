@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, Clock, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, Clock, X, Pencil, Trash2 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 
 const DAYS_OF_WEEK = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
@@ -22,7 +22,7 @@ function getGradientForId(id) {
     return GRADIENTS[Math.abs(hash) % GRADIENTS.length];
 }
 
-export function CalendarGrid({ transactions }) {
+export function CalendarGrid({ transactions, onEdit, onDelete }) {
     // Initialize with current date instead of hardcoded 2025
     const [currentDate, setCurrentDate] = useState(new Date()); 
     const [view, setView] = useState('month'); // 'month', 'week', 'day'
@@ -292,7 +292,7 @@ export function CalendarGrid({ transactions }) {
                                     <div 
                                         key={t.id} 
                                         className={cn(
-                                            "flex items-center justify-between p-3 rounded-lg border transition-colors shadow-sm",
+                                            "flex items-center justify-between p-3 rounded-lg border transition-colors shadow-sm group",
                                             t.isVirtual 
                                                 ? "bg-amber-50/50 border-amber-200 border-dashed hover:bg-amber-50"
                                                 : "bg-white border-gray-100 hover:bg-gray-50"
@@ -304,12 +304,37 @@ export function CalendarGrid({ transactions }) {
                                             </span>
                                             <span className="text-xs text-muted-foreground">{t.exam || t.paymentMethod || (t.isVirtual ? 'Recorrente' : '')}</span>
                                         </div>
-                                        <span className={cn(
-                                            "font-semibold text-sm",
-                                            t.isVirtual ? "text-amber-600" : (t.type === 'income' ? "text-emerald-600" : "text-red-600")
-                                        )}>
-                                            {t.type === 'income' ? '+' : '-'} {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(t.amount)}
-                                        </span>
+                                        <div className="flex items-center gap-3">
+                                            <span className={cn(
+                                                "font-semibold text-sm",
+                                                t.isVirtual ? "text-amber-600" : (t.type === 'income' ? "text-emerald-600" : "text-red-600")
+                                            )}>
+                                                {t.type === 'income' ? '+' : '-'} {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(t.amount)}
+                                            </span>
+                                            
+                                            {!t.isVirtual && (onEdit || onDelete) && (
+                                                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                    {onEdit && (
+                                                        <button 
+                                                            onClick={(e) => { e.stopPropagation(); onEdit(t); }}
+                                                            className="p-1 hover:bg-gray-100 rounded text-gray-400 hover:text-blue-600 transition-colors"
+                                                            title="Editar"
+                                                        >
+                                                            <Pencil className="h-3.5 w-3.5" />
+                                                        </button>
+                                                    )}
+                                                    {onDelete && (
+                                                        <button 
+                                                            onClick={(e) => { e.stopPropagation(); onDelete(t.id); }}
+                                                            className="p-1 hover:bg-gray-100 rounded text-gray-400 hover:text-red-600 transition-colors"
+                                                            title="Excluir"
+                                                        >
+                                                            <Trash2 className="h-3.5 w-3.5" />
+                                                        </button>
+                                                    )}
+                                                </div>
+                                            )}
+                                        </div>
                                     </div>
                                 ))
                             ) : (

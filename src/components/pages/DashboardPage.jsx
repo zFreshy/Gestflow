@@ -17,8 +17,33 @@ export function DashboardPage({ transactions }) {
     today.setHours(0, 0, 0, 0);
 
     const getTransactionDate = (dateStr) => {
+        if (!dateStr) return new Date(0);
         const [day, month, year] = dateStr.split('/');
         return new Date(year, month - 1, day);
+    };
+
+    // Helper: Calculate next occurrence for recurring expenses
+    const calculateNextOccurrence = (expense) => {
+        const expenseDate = getTransactionDate(expense.date);
+        
+        // If expense is in the future, that's the next occurrence
+        if (expenseDate >= today) return expenseDate;
+
+        // If in the past, calculate next based on recurrence
+        let nextDate = new Date(expenseDate);
+        while (nextDate < today) {
+            switch (expense.recurrence?.toLowerCase()) {
+                case 'daily': nextDate.setDate(nextDate.getDate() + 1); break;
+                case 'weekly': nextDate.setDate(nextDate.getDate() + 7); break;
+                case 'monthly': nextDate.setMonth(nextDate.getMonth() + 1); break;
+                case 'quarterly': nextDate.setMonth(nextDate.getMonth() + 3); break;
+                case 'semiannual': nextDate.setMonth(nextDate.getMonth() + 6); break;
+                case 'annual': nextDate.setFullYear(nextDate.getFullYear() + 1); break;
+                case 'biennial': nextDate.setFullYear(nextDate.getFullYear() + 2); break;
+                default: nextDate.setMonth(nextDate.getMonth() + 1);
+            }
+        }
+        return nextDate;
     };
 
     // Calculate financial totals
@@ -45,8 +70,56 @@ export function DashboardPage({ transactions }) {
     const fixedExpenses = transactions.filter(t => t.type === 'expense' && t.expenseType === 'fixed');
     const variableExpenses = transactions.filter(t => t.type === 'expense' && t.expenseType === 'variable');
     
+    // Generate Virtual Expenses for Projections
+    const recurringGroups = {};
+    fixedExpenses.forEach(t => {
+        if (t.recurrence) {
+            const key = `${t.description}-${t.amount}-${t.recurrence}`;
+            if (!recurringGroups[key] || getTransactionDate(recurringGroups[key].date) < getTransactionDate(t.date)) {
+                recurringGroups[key] = t;
+            }
+        }
+    });
+
+    const virtualExpenses = [];
+    Object.values(recurringGroups).forEach(lastExpense => {
+        const lastDate = getTransactionDate(lastExpense.date);
+        
+        // If the last expense is in the future/today and unpaid, it's already in the list.
+        if (lastDate >= today && !isPaid(lastExpense.status)) return;
+
+        let nextDate = calculateNextOccurrence(lastExpense);
+
+        // If nextDate is the same as lastDate (meaning lastDate >= today and was Paid),
+        // we must project the NEXT occurrence after that.
+        if (nextDate.getTime() === lastDate.getTime()) {
+            const d = new Date(nextDate);
+            switch (lastExpense.recurrence?.toLowerCase()) {
+                case 'daily': d.setDate(d.getDate() + 1); break;
+                case 'weekly': d.setDate(d.getDate() + 7); break;
+                case 'monthly': d.setMonth(d.getMonth() + 1); break;
+                case 'quarterly': d.setMonth(d.getMonth() + 3); break;
+                case 'semiannual': d.setMonth(d.getMonth() + 6); break;
+                case 'annual': d.setFullYear(d.getFullYear() + 1); break;
+                case 'biennial': d.setFullYear(d.getFullYear() + 2); break;
+                default: d.setMonth(d.getMonth() + 1);
+            }
+            nextDate = d;
+        }
+        
+        virtualExpenses.push({
+            ...lastExpense,
+            id: `virtual-${lastExpense.id}-${nextDate.getTime()}`,
+            date: nextDate.toLocaleDateString('pt-BR'),
+            status: 'Aguardando',
+            isVirtual: true
+        });
+    });
+
     // New metrics
-    const upcomingExpenses = fixedExpenses.filter(t => isPending(t.status) && getTransactionDate(t.date) >= today);
+    const realUpcoming = fixedExpenses.filter(t => isPending(t.status) && getTransactionDate(t.date) >= today);
+    const upcomingExpenses = [...realUpcoming, ...virtualExpenses];
+    
     const overdueExpenses = fixedExpenses.filter(t => isPending(t.status) && getTransactionDate(t.date) < today);
     const paidFixedExpenses = fixedExpenses.filter(t => isPaid(t.status));
 

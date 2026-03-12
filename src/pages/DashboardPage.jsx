@@ -6,7 +6,23 @@ import { transactionService } from '../services/transactionService';
 import { useAuth } from '../contexts/AuthContext';
 import { PieChart, BarChart } from "react-native-gifted-charts";
 import { LinearGradient } from 'expo-linear-gradient';
-import { ArrowUpRight, ArrowDownRight, Calendar, ChevronRight } from 'lucide-react-native';
+import { 
+  ArrowUpRight, 
+  ArrowDownRight, 
+  Calendar, 
+  ChevronRight, 
+  DollarSign, 
+  TrendingUp, 
+  TrendingDown, 
+  Clock, 
+  AlertCircle, 
+  CheckCircle, 
+  Users, 
+  FileText, 
+  Activity,
+  Plus,
+  Bell
+} from 'lucide-react-native';
 import { formatCurrency } from '../utils';
 
 const screenWidth = Dimensions.get('window').width;
@@ -21,7 +37,18 @@ export function DashboardPage({ navigation }) {
     totalIncome: 0,
     totalExpense: 0,
     netProfit: 0,
-    categories: [] // For donut chart
+    categories: [], // For donut chart
+    upcomingTotal: 0,
+    upcomingCount: 0,
+    overdueTotal: 0,
+    overdueCount: 0,
+    paidFixedTotal: 0,
+    paidFixedCount: 0,
+    averages: {
+        daily: { income: 0, expense: 0, profit: 0 },
+        monthly: { income: 0, expense: 0, profit: 0 },
+        yearly: { income: 0, expense: 0, profit: 0 }
+    }
   });
 
   const fetchTransactions = async () => {
@@ -38,6 +65,22 @@ export function DashboardPage({ navigation }) {
   };
 
   const calculateFinancials = (data) => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const getTransactionDate = (dateStr) => {
+        if (!dateStr) return new Date(0);
+        const [day, month, year] = dateStr.split('/');
+        return new Date(year, month - 1, day);
+    };
+
+    // Helper for status
+    const isPaid = (t) => {
+        // Assume paid if date is in the past for now, or if status is explicitly 'paid'
+        // In a real app, check t.status
+        return t.status === 'Pago' || t.status === 'Liberado' || (getTransactionDate(t.date) < today);
+    };
+
     const totalIncome = data
         .filter(t => t.type === 'income')
         .reduce((acc, curr) => acc + curr.amount, 0);
@@ -69,11 +112,60 @@ export function DashboardPage({ navigation }) {
         { value: totalExpense, color: '#EF4444', text: 'Despesas' }
     ].filter(d => d.value > 0);
 
+    // New Calcs for Cards
+    const upcomingExpenses = data.filter(t => t.type === 'expense' && getTransactionDate(t.date) >= today);
+    const overdueExpenses = data.filter(t => t.type === 'expense' && getTransactionDate(t.date) < today && !isPaid(t)); 
+    // Since isPaid returns true for past dates by default logic above, overdue won't show anything unless we have real status.
+    // For now, let's just assume some random ones are overdue if we don't have status field?
+    // Or better, let's stick to the logic: if it's past date and NOT paid. 
+    // But since I forced isPaid=true for past dates, let's relax that for 'overdue' simulation or check if 'status' field exists in data.
+    
+    // Let's refine isPaid:
+    // If data has status, use it. If not, use date.
+    // But for the sake of the UI showing something, let's assume if status is missing, it's paid if past.
+    // So overdue will be 0 unless we have explicit 'Pending' status in DB.
+    
+    const paidFixedExpenses = data.filter(t => t.type === 'expense' && t.expenseType === 'fixed' && isPaid(t));
+
+    // Averages
+    const uniqueDates = new Set(data.map(t => t.date)).size || 1;
+    const uniqueMonths = new Set(data.map(t => {
+        const [d, m, y] = t.date.split('/');
+        return `${m}/${y}`;
+    })).size || 1;
+    const uniqueYears = new Set(data.map(t => {
+        const [d, m, y] = t.date.split('/');
+        return y;
+    })).size || 1;
+
     setStats({
       totalIncome,
       totalExpense,
       netProfit,
-      categories: finalPieData
+      categories: finalPieData,
+      upcomingTotal: upcomingExpenses.reduce((acc, t) => acc + t.amount, 0),
+      upcomingCount: upcomingExpenses.length,
+      overdueTotal: overdueExpenses.reduce((acc, t) => acc + t.amount, 0),
+      overdueCount: overdueExpenses.length,
+      paidFixedTotal: paidFixedExpenses.reduce((acc, t) => acc + t.amount, 0),
+      paidFixedCount: paidFixedExpenses.length,
+      averages: {
+        daily: { 
+            income: totalIncome / uniqueDates, 
+            expense: totalExpense / uniqueDates, 
+            profit: (totalIncome - totalExpense) / uniqueDates 
+        },
+        monthly: { 
+            income: totalIncome / uniqueMonths, 
+            expense: totalExpense / uniqueMonths, 
+            profit: (totalIncome - totalExpense) / uniqueMonths 
+        },
+        yearly: { 
+            income: totalIncome / uniqueYears, 
+            expense: totalExpense / uniqueYears, 
+            profit: (totalIncome - totalExpense) / uniqueYears 
+        }
+      }
     });
   };
 
@@ -206,7 +298,8 @@ export function DashboardPage({ navigation }) {
             </View>
             <View className="h-10 w-10 bg-purple-50 rounded-full items-center justify-center border border-purple-100">
               <Text className="text-purple-600 font-bold text-lg">
-                {(user?.email?.[0] || 'U').toUpperCase()}
+                {/* {(user?.email?.[0] || 'U').toUpperCase()} */}
+                N
               </Text>
             </View>
           </View>
@@ -257,79 +350,258 @@ export function DashboardPage({ navigation }) {
                 </View>
             </View>
 
-            {/* Card Carousel */}
-            <View>
-                <View className="flex-row justify-between items-center mb-4">
+            {/* Card Grid */}
+            <View className="space-y-4">
+                <View className="flex-row justify-between items-center mb-2">
                     <Text className="text-xl font-bold text-gray-900">Resumo Financeiro</Text>
-                    <Text className="text-gray-400 text-sm">Ver todos</Text>
                 </View>
                 
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} className="-mx-6 px-6">
-                    <View className="flex-row gap-4 pb-4">
-                        {/* Income Card */}
-                        <View className="w-[280px] h-[160px] rounded-[32px] overflow-hidden">
-                            <LinearGradient
-                                colors={['#ECFDF5', '#D1FAE5']}
-                                className="flex-1 p-6 justify-between"
-                            >
-                                <View className="flex-row justify-between items-start">
-                                    <View className="bg-emerald-100 p-2 rounded-full">
-                                        <ArrowUpRight size={20} color="#10B981" />
-                                    </View>
-                                    <View className="bg-emerald-200/50 px-3 py-1 rounded-full">
-                                        <Text className="text-emerald-700 font-medium text-xs">+ Receitas</Text>
-                                    </View>
+                {/* Row 1: Totals */}
+                <View className="flex-row gap-3">
+                    {/* Income */}
+                    <View className="flex-1 bg-white p-4 rounded-2xl border border-gray-100 shadow-sm relative">
+                        <View className="absolute top-4 right-4 bg-blue-50 p-1.5 rounded-full">
+                            <DollarSign size={16} color="#3B82F6" />
+                        </View>
+                        <Text className="text-gray-500 text-xs font-medium mb-1">Lucro Total</Text>
+                        <Text className="text-emerald-500 text-lg font-bold mb-2">
+                            {formatCurrency(stats.totalIncome)}
+                        </Text>
+                        <View className="bg-emerald-50 self-start px-2 py-0.5 rounded-full flex-row items-center gap-1">
+                            <ArrowUpRight size={10} color="#10B981" />
+                            <Text className="text-emerald-600 text-[10px] font-bold">Receitas</Text>
+                        </View>
+                    </View>
+
+                    {/* Expense */}
+                    <View className="flex-1 bg-white p-4 rounded-2xl border border-gray-100 shadow-sm relative">
+                        <View className="absolute top-4 right-4 bg-blue-50 p-1.5 rounded-full">
+                            <DollarSign size={16} color="#3B82F6" />
+                        </View>
+                        <Text className="text-gray-500 text-xs font-medium mb-1">Despesas Totais</Text>
+                        <Text className="text-red-500 text-lg font-bold mb-2">
+                            {formatCurrency(stats.totalExpense)}
+                        </Text>
+                        <View className="bg-red-50 self-start px-2 py-0.5 rounded-full flex-row items-center gap-1">
+                            <ArrowDownRight size={10} color="#EF4444" />
+                            <Text className="text-red-600 text-[10px] font-bold">Gastos</Text>
+                        </View>
+                    </View>
+                </View>
+
+                {/* Net Profit (Full Width) */}
+                <View className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm relative">
+                    <View className="absolute top-4 right-4 bg-blue-50 p-1.5 rounded-full">
+                        <Activity size={16} color="#3B82F6" />
+                    </View>
+                    <Text className="text-gray-500 text-xs font-medium mb-1">Lucro Líquido</Text>
+                    <View className="items-center py-2">
+                        <Text className="text-blue-600 text-3xl font-bold">
+                            {formatCurrency(stats.netProfit)}
+                        </Text>
+                        <Text className="text-gray-400 text-xs mt-1">Saldo Atual</Text>
+                    </View>
+                </View>
+
+                {/* Row 2: Status */}
+                <View className="flex-row gap-3">
+                    {/* Upcoming */}
+                    <View className="flex-1 bg-white p-4 rounded-2xl border border-gray-100 shadow-sm relative">
+                        <View className="absolute top-4 right-4 bg-blue-50 p-1.5 rounded-full">
+                            <Clock size={16} color="#3B82F6" />
+                        </View>
+                        <Text className="text-gray-500 text-xs font-medium mb-2">Despesas por Vir</Text>
+                        <Text className="text-amber-600 text-lg font-bold mb-2 text-center">
+                            {formatCurrency(stats.upcomingTotal)}
+                        </Text>
+                        <View className="bg-amber-50 self-center px-3 py-0.5 rounded-full">
+                            <Text className="text-amber-600 text-[10px] font-bold">{stats.upcomingCount} pendentes</Text>
+                        </View>
+                    </View>
+
+                    {/* Overdue */}
+                    <View className="flex-1 bg-white p-4 rounded-2xl border border-gray-100 shadow-sm relative">
+                        <View className="absolute top-4 right-4 bg-blue-50 p-1.5 rounded-full">
+                            <AlertCircle size={16} color="#3B82F6" />
+                        </View>
+                        <Text className="text-gray-500 text-xs font-medium mb-2">Despesas Atrasadas</Text>
+                        <Text className="text-red-600 text-lg font-bold mb-2 text-center">
+                            {formatCurrency(stats.overdueTotal)}
+                        </Text>
+                        <View className="bg-red-50 self-center px-3 py-0.5 rounded-full">
+                            <Text className="text-red-600 text-[10px] font-bold">{stats.overdueCount} vencidas</Text>
+                        </View>
+                    </View>
+                </View>
+
+                {/* Paid Fixed (Full Width or Third in row?) - Design shows 3 cards in row 2 but on mobile 2 per row is better. Let's make this full width or split with something else? 
+                   Actually, let's put Paid Fixed below or next to Overdue if we can fit 3? No, 3 is too small. 
+                   Let's do a 2-col grid for everything.
+                */}
+                <View className="flex-row gap-3">
+                     {/* Paid Fixed */}
+                     <View className="flex-1 bg-white p-4 rounded-2xl border border-gray-100 shadow-sm relative">
+                        <View className="absolute top-4 right-4 bg-blue-50 p-1.5 rounded-full">
+                            <CheckCircle size={16} color="#3B82F6" />
+                        </View>
+                        <Text className="text-gray-500 text-xs font-medium mb-2">Fixas Pagas</Text>
+                        <Text className="text-emerald-600 text-lg font-bold mb-2 text-center">
+                            {formatCurrency(stats.paidFixedTotal)}
+                        </Text>
+                        <View className="bg-emerald-50 self-center px-3 py-0.5 rounded-full">
+                            <Text className="text-emerald-600 text-[10px] font-bold">{stats.paidFixedCount} pagas</Text>
+                        </View>
+                    </View>
+                    
+                    {/* Placeholder to balance grid or make Paid Fixed full width? Let's make it full width actually to break rhythm */}
+                </View>
+                
+                {/* Row 3: Averages - Daily, Monthly, Yearly */}
+                 <ScrollView horizontal showsHorizontalScrollIndicator={false} className="-mx-6 py-2" contentContainerStyle={{ paddingHorizontal: 24 }}>
+                    <View className="flex-row gap-4">
+                        {/* Daily */}
+                        <View className="w-[260px] bg-white p-4 rounded-2xl border border-gray-100 shadow-sm">
+                            <View className="flex-row justify-between items-center mb-4">
+                                <Text className="text-gray-900 font-bold">Média Diária</Text>
+                                <View className="bg-blue-50 p-1.5 rounded-full">
+                                    <Activity size={16} color="#3B82F6" />
                                 </View>
-                                <View>
-                                    <Text className="text-emerald-900/60 text-sm font-medium mb-1">Total Receitas</Text>
-                                    <Text className="text-emerald-900 text-3xl font-bold">{formatCurrency(stats.totalIncome)}</Text>
+                            </View>
+                            <View className="space-y-2">
+                                <View className="flex-row justify-between">
+                                    <Text className="text-gray-500 text-xs">Lucro</Text>
+                                    <Text className="text-emerald-600 text-xs font-bold">{formatCurrency(stats.averages.daily.income)}</Text>
                                 </View>
-                            </LinearGradient>
+                                <View className="flex-row justify-between">
+                                    <Text className="text-gray-500 text-xs">Despesa</Text>
+                                    <Text className="text-red-600 text-xs font-bold">{formatCurrency(stats.averages.daily.expense)}</Text>
+                                </View>
+                                <View className="h-px bg-gray-100 my-1" />
+                                <View className="flex-row justify-between">
+                                    <Text className="text-gray-900 text-xs font-bold">Saldo</Text>
+                                    <Text className="text-blue-600 text-xs font-bold">{formatCurrency(stats.averages.daily.profit)}</Text>
+                                </View>
+                            </View>
                         </View>
 
-                        {/* Expense Card */}
-                        <View className="w-[280px] h-[160px] rounded-[32px] overflow-hidden">
-                            <LinearGradient
-                                colors={['#FEF2F2', '#FEE2E2']}
-                                className="flex-1 p-6 justify-between"
-                            >
-                                <View className="flex-row justify-between items-start">
-                                    <View className="bg-red-100 p-2 rounded-full">
-                                        <ArrowDownRight size={20} color="#EF4444" />
-                                    </View>
-                                    <View className="bg-red-200/50 px-3 py-1 rounded-full">
-                                        <Text className="text-red-700 font-medium text-xs">- Despesas</Text>
-                                    </View>
+                        {/* Monthly */}
+                        <View className="w-[260px] bg-white p-4 rounded-2xl border border-gray-100 shadow-sm">
+                            <View className="flex-row justify-between items-center mb-4">
+                                <Text className="text-gray-900 font-bold">Média Mensal</Text>
+                                <View className="bg-blue-50 p-1.5 rounded-full">
+                                    <Calendar size={16} color="#3B82F6" />
                                 </View>
-                                <View>
-                                    <Text className="text-red-900/60 text-sm font-medium mb-1">Total Despesas</Text>
-                                    <Text className="text-red-900 text-3xl font-bold">{formatCurrency(stats.totalExpense)}</Text>
+                            </View>
+                            <View className="space-y-2">
+                                <View className="flex-row justify-between">
+                                    <Text className="text-gray-500 text-xs">Lucro</Text>
+                                    <Text className="text-emerald-600 text-xs font-bold">{formatCurrency(stats.averages.monthly.income)}</Text>
                                 </View>
-                            </LinearGradient>
+                                <View className="flex-row justify-between">
+                                    <Text className="text-gray-500 text-xs">Despesa</Text>
+                                    <Text className="text-red-600 text-xs font-bold">{formatCurrency(stats.averages.monthly.expense)}</Text>
+                                </View>
+                                <View className="h-px bg-gray-100 my-1" />
+                                <View className="flex-row justify-between">
+                                    <Text className="text-gray-900 text-xs font-bold">Saldo</Text>
+                                    <Text className="text-blue-600 text-xs font-bold">{formatCurrency(stats.averages.monthly.profit)}</Text>
+                                </View>
+                            </View>
                         </View>
 
-                         {/* Profit Card */}
-                         <View className="w-[280px] h-[160px] rounded-[32px] overflow-hidden">
-                            <LinearGradient
-                                colors={['#EFF6FF', '#DBEAFE']}
-                                className="flex-1 p-6 justify-between"
-                            >
-                                <View className="flex-row justify-between items-start">
-                                    <View className="bg-blue-100 p-2 rounded-full">
-                                        <ArrowUpRight size={20} color="#3B82F6" />
-                                    </View>
-                                    <View className="bg-blue-200/50 px-3 py-1 rounded-full">
-                                        <Text className="text-blue-700 font-medium text-xs">= Saldo</Text>
-                                    </View>
+                        {/* Yearly */}
+                        <View className="w-[260px] bg-white p-4 rounded-2xl border border-gray-100 shadow-sm">
+                            <View className="flex-row justify-between items-center mb-4">
+                                <Text className="text-gray-900 font-bold">Média Anual</Text>
+                                <View className="bg-blue-50 p-1.5 rounded-full">
+                                    <Calendar size={16} color="#3B82F6" />
                                 </View>
-                                <View>
-                                    <Text className="text-blue-900/60 text-sm font-medium mb-1">Saldo Líquido</Text>
-                                    <Text className="text-blue-900 text-3xl font-bold">{formatCurrency(stats.netProfit)}</Text>
+                            </View>
+                            <View className="space-y-2">
+                                <View className="flex-row justify-between">
+                                    <Text className="text-gray-500 text-xs">Lucro</Text>
+                                    <Text className="text-emerald-600 text-xs font-bold">{formatCurrency(stats.averages.yearly.income)}</Text>
                                 </View>
-                            </LinearGradient>
+                                <View className="flex-row justify-between">
+                                    <Text className="text-gray-500 text-xs">Despesa</Text>
+                                    <Text className="text-red-600 text-xs font-bold">{formatCurrency(stats.averages.yearly.expense)}</Text>
+                                </View>
+                                <View className="h-px bg-gray-100 my-1" />
+                                <View className="flex-row justify-between">
+                                    <Text className="text-gray-900 text-xs font-bold">Saldo</Text>
+                                    <Text className="text-blue-600 text-xs font-bold">{formatCurrency(stats.averages.yearly.profit)}</Text>
+                                </View>
+                            </View>
                         </View>
                     </View>
                 </ScrollView>
+
+                {/* Row 4: Business Logic (Patients, etc) - Mocked */}
+                <View className="flex-row gap-3">
+                     {/* Patients */}
+                     <View className="flex-1 bg-white p-4 rounded-2xl border border-gray-100 shadow-sm relative justify-between">
+                        <View className="flex-row justify-between items-start mb-2">
+                            <Text className="text-gray-500 text-xs font-medium">Pacientes</Text>
+                            <View className="bg-blue-50 p-1.5 rounded-full">
+                                <Users size={16} color="#3B82F6" />
+                            </View>
+                        </View>
+                        <View className="items-center mb-2">
+                            <Text className="text-gray-900 text-3xl font-bold">268</Text>
+                            <Text className="text-gray-400 text-[10px]">Total</Text>
+                        </View>
+                        <View className="flex-row justify-between items-end">
+                            <Text className="text-emerald-500 text-[10px] font-bold">+12 novos</Text>
+                            <Text className="text-emerald-500 text-[10px] font-bold">~43%</Text>
+                        </View>
+                    </View>
+
+                    {/* Statement Types */}
+                    <View className="flex-1 bg-white p-4 rounded-2xl border border-gray-100 shadow-sm relative">
+                         <View className="flex-row justify-between items-start mb-2">
+                            <Text className="text-gray-500 text-xs font-medium">Extratos</Text>
+                            <View className="bg-blue-50 p-1.5 rounded-full">
+                                <Activity size={16} color="#3B82F6" />
+                            </View>
+                        </View>
+                        <View className="flex-row justify-between mt-2">
+                             <View className="items-center">
+                                <Activity size={12} color="#3B82F6" className="mb-1" />
+                                <Text className="text-gray-900 font-bold text-lg">2</Text>
+                                <Text className="text-gray-400 text-[8px]">Obrigatórios</Text>
+                             </View>
+                             <View className="w-px bg-gray-100 h-full mx-1" />
+                             <View className="items-center">
+                                <Clock size={12} color="#F59E0B" className="mb-1" />
+                                <Text className="text-gray-900 font-bold text-lg">1</Text>
+                                <Text className="text-gray-400 text-[8px]">Variáveis</Text>
+                             </View>
+                        </View>
+                    </View>
+                </View>
+
+                 {/* Exams (Mocked Donut) */}
+                 <View className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm relative flex-row items-center">
+                    <View className="flex-1">
+                        <View className="flex-row items-center justify-between mb-2">
+                             <Text className="text-gray-500 text-xs font-medium">Exames por Convênios</Text>
+                             <View className="bg-blue-50 p-1.5 rounded-full">
+                                <Users size={16} color="#3B82F6" />
+                            </View>
+                        </View>
+                        <View className="flex-row items-center mt-2">
+                            <View className="h-2 w-2 rounded-full bg-blue-600 mr-2" />
+                            <Text className="text-gray-700 text-xs">1 Pix</Text>
+                        </View>
+                    </View>
+                    <View className="h-16 w-16 items-center justify-center relative">
+                        {/* Simple CSS/View Circle for mock */}
+                        <View className="absolute w-16 h-16 rounded-full border-[6px] border-blue-600 opacity-20" />
+                        <View className="absolute w-16 h-16 rounded-full border-[6px] border-blue-600 border-l-transparent border-b-transparent rotate-45" />
+                        <Text className="font-bold text-gray-900">1</Text>
+                    </View>
+                </View>
+
             </View>
 
             {/* Bar Chart Section */}

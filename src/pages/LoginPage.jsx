@@ -35,7 +35,6 @@ export function LoginPage() {
             >
                 <ScrollView contentContainerStyle={{ flexGrow: 1 }}>
                     <View className="flex-1 justify-center px-8">
-                        {/* Header / Logo Section */}
                         <View className="items-center mb-12">
                             <View className="h-20 w-20 bg-[#7E1A8B] rounded-2xl items-center justify-center mb-4 transform rotate-3">
                                 <Text className="text-white text-4xl font-bold">F</Text>
@@ -46,7 +45,6 @@ export function LoginPage() {
                             </Text>
                         </View>
 
-                        {/* Form Section */}
                         <View className="w-full space-y-4">
                             <Input
                                 label="Email"

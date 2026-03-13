@@ -542,19 +542,21 @@ export function DashboardPage({ navigation }) {
                 </View>
 
                 {/* Legend */}
-                <View className="flex-row flex-wrap justify-between gap-4 mt-8 w-full px-2">
+                <View className="flex-row justify-between w-full px-2 mt-8">
                     {stats.categories.map((cat, idx) => {
                         const total = stats.categories.reduce((sum, c) => sum + c.value, 0);
-                        const percentage = Math.round((cat.value / total) * 100);
+                        const percentage = total > 0 ? Math.round((cat.value / total) * 100) : 0;
                         
                         return (
-                            <View key={idx} className="flex-col min-w-[28%]">
-                                <Text className="text-gray-500 text-xs mb-1">{cat.text}</Text>
-                                <Text className="text-gray-900 font-bold text-2xl mb-2">
+                            <View key={idx} className="flex-col items-center flex-1">
+                                <Text className="text-gray-500 text-[10px] mb-1 text-center" numberOfLines={1}>
+                                    {cat.text}
+                                </Text>
+                                <Text className="text-gray-900 font-bold text-lg mb-1">
                                     {percentage}%
                                 </Text>
                                 {/* Progress bar */}
-                                <View className="w-full h-1 bg-gray-200 rounded-full overflow-hidden">
+                                <View className="w-12 h-1 bg-gray-200 rounded-full overflow-hidden">
                                     <View 
                                         style={{ 
                                             backgroundColor: cat.color, 

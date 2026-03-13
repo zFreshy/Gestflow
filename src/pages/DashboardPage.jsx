@@ -27,6 +27,51 @@ import { formatCurrency } from '../utils';
 
 const screenWidth = Dimensions.get('window').width;
 
+// Helpers
+const isPaid = (status) => ['pago', 'liberado'].includes(status?.toLowerCase());
+const isPending = (status) => ['aguardando', 'pendente'].includes(status?.toLowerCase());
+
+const getTransactionDate = (dateStr) => {
+    if (!dateStr) return new Date(0);
+    
+    // Check if date is in ISO format YYYY-MM-DD
+    if (dateStr.includes('-')) {
+        const [year, month, day] = dateStr.split('-');
+        return new Date(year, month - 1, day);
+    }
+    
+    // Check if date is in DD/MM/YYYY format
+    if (dateStr.includes('/')) {
+        const [day, month, year] = dateStr.split('/');
+        return new Date(year, month - 1, day);
+    }
+
+    return new Date(dateStr); // Fallback
+};
+
+const calculateNextOccurrence = (expense, today) => {
+    const expenseDate = getTransactionDate(expense.date);
+    
+    // If expense is in the future, that's the next occurrence
+    if (expenseDate >= today) return expenseDate;
+
+    // If in the past, calculate next based on recurrence
+    let nextDate = new Date(expenseDate);
+    while (nextDate < today) {
+        switch (expense.recurrence?.toLowerCase()) {
+            case 'daily': nextDate.setDate(nextDate.getDate() + 1); break;
+            case 'weekly': nextDate.setDate(nextDate.getDate() + 7); break;
+            case 'monthly': nextDate.setMonth(nextDate.getMonth() + 1); break;
+            case 'quarterly': nextDate.setMonth(nextDate.getMonth() + 3); break;
+            case 'semiannual': nextDate.setMonth(nextDate.getMonth() + 6); break;
+            case 'annual': nextDate.setFullYear(nextDate.getFullYear() + 1); break;
+            case 'biennial': nextDate.setFullYear(nextDate.getFullYear() + 2); break;
+            default: nextDate.setMonth(nextDate.getMonth() + 1);
+        }
+    }
+    return nextDate;
+};
+
 export function DashboardPage({ navigation }) {
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
@@ -54,8 +99,21 @@ export function DashboardPage({ navigation }) {
   const fetchTransactions = async () => {
     try {
       const data = await transactionService.getAll(user.id);
-      setTransactions(data || []);
-      calculateFinancials(data || []);
+      
+      // Map Supabase snake_case to camelCase
+      const mappedData = (data || []).map(t => {
+          return {
+              ...t,
+              // Map common snake_case fields to camelCase if they exist
+              expenseType: t.expense_type || t.expenseType,
+              paymentMethod: t.payment_method || t.paymentMethod,
+              userId: t.user_id || t.userId,
+              createdAt: t.created_at || t.createdAt
+          };
+      });
+
+      setTransactions(mappedData);
+      calculateFinancials(mappedData);
     } catch (error) {
       console.error('Error fetching transactions:', error);
     } finally {
@@ -68,84 +126,127 @@ export function DashboardPage({ navigation }) {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    const getTransactionDate = (dateStr) => {
-        if (!dateStr) return new Date(0);
-        const [day, month, year] = dateStr.split('/');
-        return new Date(year, month - 1, day);
-    };
-
-    // Helper for status
-    const isPaid = (t) => {
-        // Assume paid if date is in the past for now, or if status is explicitly 'paid'
-        // In a real app, check t.status
-        return t.status === 'Pago' || t.status === 'Liberado' || (getTransactionDate(t.date) < today);
-    };
-
+    // 1. Financial Totals
     const totalIncome = data
         .filter(t => t.type === 'income')
         .reduce((acc, curr) => acc + curr.amount, 0);
 
+    // Total expense logic:
+    // 1. Variable expenses: ALL of them
+    // 2. Fixed expenses: ONLY if status is Paid
     const totalExpense = data
-        .filter(t => t.type === 'expense')
+        .filter(t => {
+            if (t.type !== 'expense') return false;
+            if (t.expenseType === 'fixed') {
+                return isPaid(t.status);
+            }
+            return true; // Variable expenses always count
+        })
         .reduce((acc, curr) => acc + curr.amount, 0);
 
     const netProfit = totalIncome - totalExpense;
 
-    // Categories for Donut Chart (Expenses by Category)
-    const expensesByCategory = data
-        .filter(t => t.type === 'expense')
-        .reduce((acc, curr) => {
-            const category = curr.category || 'Outros';
-            acc[category] = (acc[category] || 0) + curr.amount;
-            return acc;
-        }, {});
+    // 2. Filter for cards
+    const fixedExpenses = data.filter(t => t.type === 'expense' && t.expenseType === 'fixed');
+    const variableExpenses = data.filter(t => t.type === 'expense' && t.expenseType === 'variable');
 
-    const pieData = Object.keys(expensesByCategory).map((cat, index) => ({
-        value: expensesByCategory[cat],
-        text: cat,
-        color: ['#10B981', '#3B82F6', '#F59E0B', '#EF4444', '#8B5CF6'][index % 5],
-    }));
+    // 3. Virtual Expenses for Projections
+    const recurringGroups = {};
+    fixedExpenses.forEach(t => {
+        if (t.recurrence) {
+            const key = `${t.description}-${t.amount}-${t.recurrence}`;
+            if (!recurringGroups[key] || getTransactionDate(recurringGroups[key].date) < getTransactionDate(t.date)) {
+                recurringGroups[key] = t;
+            }
+        }
+    });
+
+    const virtualExpenses = [];
+    Object.values(recurringGroups).forEach(lastExpense => {
+        const lastDate = getTransactionDate(lastExpense.date);
+        
+        // If the last expense is in the future/today and unpaid, it's already in the list.
+        if (lastDate >= today && !isPaid(lastExpense.status)) return;
+
+        let nextDate = calculateNextOccurrence(lastExpense, today);
+
+        // If nextDate is the same as lastDate (meaning lastDate >= today and was Paid),
+        // we must project the NEXT occurrence after that.
+        if (nextDate.getTime() === lastDate.getTime()) {
+            const d = new Date(nextDate);
+            switch (lastExpense.recurrence?.toLowerCase()) {
+                case 'daily': d.setDate(d.getDate() + 1); break;
+                case 'weekly': d.setDate(d.getDate() + 7); break;
+                case 'monthly': d.setMonth(d.getMonth() + 1); break;
+                case 'quarterly': d.setMonth(d.getMonth() + 3); break;
+                case 'semiannual': d.setMonth(d.getMonth() + 6); break;
+                case 'annual': d.setFullYear(d.getFullYear() + 1); break;
+                case 'biennial': d.setFullYear(d.getFullYear() + 2); break;
+                default: d.setMonth(d.getMonth() + 1);
+            }
+            nextDate = d;
+        }
+        
+        virtualExpenses.push({
+            ...lastExpense,
+            id: `virtual-${lastExpense.id}-${nextDate.getTime()}`,
+            date: nextDate.toLocaleDateString('pt-BR'),
+            status: 'Aguardando',
+            isVirtual: true
+        });
+    });
+
+    // 4. Metrics
+    const realUpcoming = fixedExpenses.filter(t => isPending(t.status) && getTransactionDate(t.date) >= today);
+    const upcomingExpenses = [...realUpcoming, ...virtualExpenses];
     
-    // If no expenses, show a placeholder or income vs expense
-    const finalPieData = pieData.length > 0 ? pieData : [
+    // Filter upcoming expenses up to the end of the next month
+    const nextMonth = new Date(today);
+    nextMonth.setMonth(nextMonth.getMonth() + 2);
+    nextMonth.setDate(0); // Last day of next month
+    
+    const filteredUpcoming = upcomingExpenses.filter(t => getTransactionDate(t.date) <= nextMonth);
+    const filteredUpcomingTotal = filteredUpcoming.reduce((acc, t) => acc + t.amount, 0);
+
+    const overdueExpenses = fixedExpenses.filter(t => isPending(t.status) && getTransactionDate(t.date) < today);
+    const paidFixedExpenses = fixedExpenses.filter(t => isPaid(t.status));
+
+    const overdueTotal = overdueExpenses.reduce((acc, t) => acc + t.amount, 0);
+    const upcomingTotal = upcomingExpenses.reduce((acc, t) => acc + t.amount, 0); // Keep original for cards? User said "até mesmo as por vir ( entre a data atual e o final do mês que está por vir ) das faturas" for the CENTER TOTAL logic.
+    // The user said: "o total tirando todos os tipos de despesas, até mesmo as por vir ( entre a data atual e o final do mês que está por vir ) das faturas"
+    // So the Projected Balance should subtract filteredUpcomingTotal.
+    
+    const projectedBalance = totalIncome - totalExpense - filteredUpcomingTotal - overdueTotal;
+
+    // 5. Chart Data (Replacing Categories with Income/Expense types)
+    // "quero que ele mostre os lucros, as despesas, as despesas por vir e as despesass atrasadas"
+    const finalPieData = [
         { value: totalIncome, color: '#10B981', text: 'Receitas' },
-        { value: totalExpense, color: '#EF4444', text: 'Despesas' }
+        { value: totalExpense, color: '#EF4444', text: 'Pagas' },
+        { value: filteredUpcomingTotal, color: '#F59E0B', text: 'A Vencer' },
+        { value: overdueTotal, color: '#B91C1C', text: 'Atrasadas' }
     ].filter(d => d.value > 0);
 
-    // New Calcs for Cards
-    const upcomingExpenses = data.filter(t => t.type === 'expense' && getTransactionDate(t.date) >= today);
-    const overdueExpenses = data.filter(t => t.type === 'expense' && getTransactionDate(t.date) < today && !isPaid(t)); 
-    // Since isPaid returns true for past dates by default logic above, overdue won't show anything unless we have real status.
-    // For now, let's just assume some random ones are overdue if we don't have status field?
-    // Or better, let's stick to the logic: if it's past date and NOT paid. 
-    // But since I forced isPaid=true for past dates, let's relax that for 'overdue' simulation or check if 'status' field exists in data.
-    
-    // Let's refine isPaid:
-    // If data has status, use it. If not, use date.
-    // But for the sake of the UI showing something, let's assume if status is missing, it's paid if past.
-    // So overdue will be 0 unless we have explicit 'Pending' status in DB.
-    
-    const paidFixedExpenses = data.filter(t => t.type === 'expense' && t.expenseType === 'fixed' && isPaid(t));
-
-    // Averages
+    // 6. Averages
     const uniqueDates = new Set(data.map(t => t.date)).size || 1;
     const uniqueMonths = new Set(data.map(t => {
-        const [d, m, y] = t.date.split('/');
-        return `${m}/${y}`;
+        const d = getTransactionDate(t.date);
+        return `${d.getMonth() + 1}/${d.getFullYear()}`;
     })).size || 1;
     const uniqueYears = new Set(data.map(t => {
-        const [d, m, y] = t.date.split('/');
-        return y;
+        const d = getTransactionDate(t.date);
+        return d.getFullYear();
     })).size || 1;
 
     setStats({
       totalIncome,
       totalExpense,
       netProfit,
+      projectedBalance,
       categories: finalPieData,
-      upcomingTotal: upcomingExpenses.reduce((acc, t) => acc + t.amount, 0),
+      upcomingTotal,
       upcomingCount: upcomingExpenses.length,
-      overdueTotal: overdueExpenses.reduce((acc, t) => acc + t.amount, 0),
+      overdueTotal,
       overdueCount: overdueExpenses.length,
       paidFixedTotal: paidFixedExpenses.reduce((acc, t) => acc + t.amount, 0),
       paidFixedCount: paidFixedExpenses.length,
@@ -175,9 +276,17 @@ export function DashboardPage({ navigation }) {
     const today = new Date();
     const data = [];
     
-    const parseDate = (dateStr) => {
-        const [d, m, y] = dateStr.split('/');
-        return new Date(y, m - 1, d);
+    // Helper within useMemo to filter expenses consistent with total logic
+    const getExpenseAmount = (txs) => {
+        return txs
+            .filter(t => {
+                if (t.type !== 'expense') return false;
+                if (t.expenseType === 'fixed') {
+                    return isPaid(t.status);
+                }
+                return true;
+            })
+            .reduce((sum, t) => sum + t.amount, 0);
     };
 
     if (viewMode === 'weekly') {
@@ -185,17 +294,16 @@ export function DashboardPage({ navigation }) {
         for (let i = 6; i >= 0; i--) {
             const d = new Date(today);
             d.setDate(d.getDate() - i);
-            const dateStr = d.toLocaleDateString('pt-BR').slice(0, 5); // DD/MM
             
             const dayTransactions = transactions.filter(t => {
-                const tDate = parseDate(t.date);
+                const tDate = getTransactionDate(t.date);
                 return tDate.getDate() === d.getDate() && 
                        tDate.getMonth() === d.getMonth() &&
                        tDate.getFullYear() === d.getFullYear();
             });
 
             const income = dayTransactions.filter(t => t.type === 'income').reduce((sum, t) => sum + t.amount, 0);
-            const expense = dayTransactions.filter(t => t.type === 'expense').reduce((sum, t) => sum + t.amount, 0);
+            const expense = getExpenseAmount(dayTransactions);
             
             data.push({
                 value: income - expense, // Profit/Loss
@@ -209,8 +317,7 @@ export function DashboardPage({ navigation }) {
             });
         }
     } else if (viewMode === 'monthly') {
-        // Last 30 days grouped by 5 days or weeks? Or just last 4 weeks?
-        // Let's do last 4 weeks
+        // Last 4 weeks
         for (let i = 3; i >= 0; i--) {
             const end = new Date(today);
             end.setDate(end.getDate() - (i * 7));
@@ -220,12 +327,12 @@ export function DashboardPage({ navigation }) {
             const label = `${start.getDate()}/${start.getMonth()+1}`;
 
             const weekTransactions = transactions.filter(t => {
-                const tDate = parseDate(t.date);
+                const tDate = getTransactionDate(t.date);
                 return tDate >= start && tDate <= end;
             });
 
             const income = weekTransactions.filter(t => t.type === 'income').reduce((sum, t) => sum + t.amount, 0);
-            const expense = weekTransactions.filter(t => t.type === 'expense').reduce((sum, t) => sum + t.amount, 0);
+            const expense = getExpenseAmount(weekTransactions);
 
             data.push({
                 value: income - expense,
@@ -241,12 +348,12 @@ export function DashboardPage({ navigation }) {
             const monthName = d.toLocaleDateString('pt-BR', { month: 'short' });
             
             const monthTransactions = transactions.filter(t => {
-                const tDate = parseDate(t.date);
+                const tDate = getTransactionDate(t.date);
                 return tDate.getMonth() === d.getMonth() && tDate.getFullYear() === d.getFullYear();
             });
 
             const income = monthTransactions.filter(t => t.type === 'income').reduce((sum, t) => sum + t.amount, 0);
-            const expense = monthTransactions.filter(t => t.type === 'expense').reduce((sum, t) => sum + t.amount, 0);
+            const expense = getExpenseAmount(monthTransactions);
 
             data.push({
                 value: income - expense,
@@ -324,9 +431,9 @@ export function DashboardPage({ navigation }) {
                         centerLabelComponent={() => {
                             return (
                                 <View className="items-center justify-center">
-                                    <Text className="text-gray-500 text-sm font-medium">Total</Text>
+                                    <Text className="text-gray-500 text-sm font-medium">Saldo Previsto</Text>
                                     <Text className="text-gray-900 text-2xl font-bold">
-                                        {formatCurrency(stats.totalExpense)}
+                                        {formatCurrency(stats.projectedBalance || 0)}
                                     </Text>
                                 </View>
                             );
@@ -337,10 +444,10 @@ export function DashboardPage({ navigation }) {
                 {/* Legend */}
                 <View className="flex-row flex-wrap justify-center gap-4 mt-6 w-full">
                     {stats.categories.map((cat, idx) => (
-                        <View key={idx} className="flex-col items-center min-w-[30%]">
+                        <View key={idx} className="flex-col items-center min-w-[20%]">
                             <Text className="text-gray-500 text-xs mb-1">{cat.text}</Text>
-                            <Text className="text-gray-900 font-bold text-lg">
-                                {((cat.value / (stats.totalExpense || 1)) * 100).toFixed(0)}%
+                            <Text className="text-gray-900 font-bold text-sm">
+                                {formatCurrency(cat.value)}
                             </Text>
                             <View 
                                 style={{ backgroundColor: cat.color, height: 4, width: 40, borderRadius: 2 }} 

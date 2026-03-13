@@ -44,6 +44,7 @@ export function TransactionForm({ navigation, route }) {
   const [recurrence, setRecurrence] = useState(transaction?.recurrence || 'monthly');
   const [interestRate, setInterestRate] = useState(transaction?.interestRate ? transaction.interestRate.toString() : '');
   const [isActive, setIsActive] = useState(transaction?.active !== false); // Default true
+  const [endDate, setEndDate] = useState(transaction?.end_date || ''); // New state for end date
 
   const handleSubmit = async () => {
     if (!description || !amount || !date) {
@@ -60,29 +61,37 @@ export function TransactionForm({ navigation, route }) {
         description,
         amount: parseFloat(amount.replace(',', '.')),
         type,
-        paymentMethod,
-        date: `${day}/${month}/${year}`, // Save as DD/MM/YYYY for consistency with existing data? Or YYYY-MM-DD? 
-        // Existing code used `${day}/${month}/${year}`. Let's stick to it if that's what the backend expects or consistent with app.
-        // Wait, Web used YYYY-MM-DD for insert?
-        // Web: `date: formattedDate` where formattedDate is YYYY-MM-DD (line 95 of Web TransactionForm).
-        // Mobile (previous code): `date: ${day}/${month}/${year}`.
-        // This inconsistency is bad. But I should stick to local file convention unless fixing everything.
-        // Mobile previous code: `date: ${day}/${month}/${year}`.
-        // Let's keep it.
-        date: date.includes('-') ? `${day}/${month}/${year}` : date, // Convert to DD/MM/YYYY if currently ISO
-        timestamp,
+        payment_method: paymentMethod,
+        date: date, // Keep YYYY-MM-DD format for database
         user_id: user.id,
-        isBakeryIncome: type === 'income' ? isBakeryIncome : false,
-        clientName: type === 'income' && isBakeryIncome ? clientName : null,
-        expenseType: type === 'expense' ? expenseType : null,
+        is_bakery_income: type === 'income' ? isBakeryIncome : false,
+        client_name: type === 'income' && isBakeryIncome ? clientName : null,
+        expense_type: type === 'expense' ? expenseType : null,
         recurrence: type === 'expense' && expenseType === 'fixed' ? recurrence : null,
-        interestRate: type === 'expense' && expenseType === 'fixed' && interestRate ? parseFloat(interestRate.replace(',', '.')) : null,
-        active: type === 'expense' && expenseType === 'fixed' ? isActive : null
+        interest_rate: type === 'expense' && expenseType === 'fixed' && interestRate ? parseFloat(interestRate.replace(',', '.')) : null,
+        active: type === 'expense' && expenseType === 'fixed' ? isActive : null,
+        end_date: type === 'expense' && expenseType === 'fixed' && !isActive ? endDate : null
       };
 
       if (isEditing) {
-          await transactionService.update(transaction.id, transactionData);
-          Alert.alert('Sucesso', 'Transação atualizada com sucesso!');
+          // Check if it's a virtual transaction (ID starts with 'virtual-')
+          const isVirtual = transaction.id && transaction.id.toString().startsWith('virtual-');
+
+          if (isVirtual) {
+               // If virtual, we CREATE a new transaction instead of updating
+               // Remove ID so database generates a new UUID
+               // Ensure user_id is set
+               const { id, ...newTransactionData } = {
+                   ...transactionData,
+                   user_id: user.id
+               };
+               
+               await transactionService.create(newTransactionData);
+               Alert.alert('Sucesso', 'Transação criada com sucesso!');
+          } else {
+              await transactionService.update(transaction.id, transactionData);
+              Alert.alert('Sucesso', 'Transação atualizada com sucesso!');
+          }
       } else {
           await transactionService.create(transactionData);
           Alert.alert('Sucesso', 'Transação criada com sucesso!');
@@ -273,10 +282,31 @@ export function TransactionForm({ navigation, route }) {
                     <Text className="text-gray-700 font-medium">Despesa Finalizada</Text>
                     <Switch 
                       value={!isActive} 
-                      onValueChange={(val) => setIsActive(!val)}
+                      onValueChange={(val) => {
+                          setIsActive(!val);
+                          if (val) {
+                              setEndDate(new Date().toISOString().split('T')[0]);
+                          } else {
+                              setEndDate('');
+                          }
+                      }}
                       trackColor={{ false: "#D1D5DB", true: "#EF4444" }}
                     />
                   </View>
+
+                  {!isActive && (
+                    <View className="bg-red-50 p-3 rounded-lg border border-red-100 mb-4">
+                        <Input
+                            label="Data de Finalização (AAAA-MM-DD)"
+                            placeholder="2023-10-25"
+                            value={endDate}
+                            onChangeText={setEndDate}
+                        />
+                        <Text className="text-xs text-red-600 mt-1">
+                            A partir desta data, não serão geradas novas cobranças.
+                        </Text>
+                    </View>
+                  )}
                 </>
               )}
             </View>

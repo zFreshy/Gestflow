@@ -59,9 +59,9 @@ export function TransactionItem({ transaction, onEdit, onDelete }) {
   const isOverdue = transaction.isOverdue;
 
   return (
-    <>
+    <View className="mb-3">
         <Card className={cn(
-            "mb-3 flex-row items-center p-3 border relative",
+            "flex-row items-center p-3 border relative",
             isVirtual ? "border-dashed border-amber-300 bg-amber-50/30" : "border-gray-100",
             isOverdue && !isPaid && !isVirtual ? "border-red-200 bg-red-50/30" : "",
             isPaid ? "opacity-70" : ""
@@ -92,10 +92,26 @@ export function TransactionItem({ transaction, onEdit, onDelete }) {
                 </Text>
                 
                 {transaction.expenseType === 'fixed' && (
-                    <View className="bg-gray-100 px-1.5 py-0.5 rounded mr-1">
-                        <Text className="text-[10px] text-gray-500">
-                            Fixa {transaction.recurrence ? `• ${RECURRENCE_MAP[transaction.recurrence.toLowerCase()] || transaction.recurrence}` : ''}
-                        </Text>
+                    <View className="flex-row flex-wrap gap-1">
+                        <View className="bg-gray-100 px-1.5 py-0.5 rounded mr-1">
+                            <Text className="text-[10px] text-gray-500">
+                                Fixa {transaction.recurrence ? `• ${RECURRENCE_MAP[transaction.recurrence.toLowerCase()] || transaction.recurrence}` : ''}
+                            </Text>
+                        </View>
+                        {transaction.active === false && transaction.end_date && (
+                            <View className="flex-row gap-1">
+                                <View className="bg-orange-50 px-1.5 py-0.5 rounded mr-1 border border-orange-100">
+                                    <Text className="text-[10px] text-orange-600 font-medium">
+                                        Fim: {formatDate(transaction.end_date)}
+                                    </Text>
+                                </View>
+                                <View className="bg-green-50 px-1.5 py-0.5 rounded mr-1 border border-green-100">
+                                    <Text className="text-[10px] text-green-600 font-medium">
+                                        Sem cobrança
+                                    </Text>
+                                </View>
+                            </View>
+                        )}
                     </View>
                 )}
             </View>
@@ -114,6 +130,14 @@ export function TransactionItem({ transaction, onEdit, onDelete }) {
                 </View>
 
                 {!isVirtual && (onEdit || onDelete) && (
+                    <TouchableOpacity 
+                        onPress={() => setIsMenuVisible(true)}
+                        className="p-1 rounded-full active:bg-gray-100"
+                    >
+                        <MoreVertical size={16} color="#9CA3AF" />
+                    </TouchableOpacity>
+                )}
+                {isVirtual && onEdit && (
                     <TouchableOpacity 
                         onPress={() => setIsMenuVisible(true)}
                         className="p-1 rounded-full active:bg-gray-100"
@@ -158,7 +182,7 @@ export function TransactionItem({ transaction, onEdit, onDelete }) {
                                 </TouchableOpacity>
                             )}
 
-                            {onDelete && (
+                            {onDelete && !isVirtual && (
                                 <TouchableOpacity 
                                     onPress={() => {
                                         setIsMenuVisible(false);
@@ -177,6 +201,6 @@ export function TransactionItem({ transaction, onEdit, onDelete }) {
                 </View>
             </TouchableWithoutFeedback>
         </Modal>
-    </>
+    </View>
   );
 }

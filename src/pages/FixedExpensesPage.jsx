@@ -29,32 +29,6 @@ const formatDateISO = (date) => {
     return `${year}-${month}-${day}`;
 };
 
-const calculateNextOccurrence = (expense) => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const expenseDate = parseDate(expense.date);
-    
-    if (expenseDate >= today) return expenseDate;
-
-    let nextDate = new Date(expenseDate);
-    // Safety break to prevent infinite loops if dates are weird
-    let loops = 0;
-    while (nextDate < today && loops < 1000) {
-        loops++;
-        switch (expense.recurrence?.toLowerCase()) {
-            case 'daily': nextDate.setDate(nextDate.getDate() + 1); break;
-            case 'weekly': nextDate.setDate(nextDate.getDate() + 7); break;
-            case 'monthly': nextDate.setMonth(nextDate.getMonth() + 1); break;
-            case 'quarterly': nextDate.setMonth(nextDate.getMonth() + 3); break;
-            case 'semiannual': nextDate.setMonth(nextDate.getMonth() + 6); break;
-            case 'annual': nextDate.setFullYear(nextDate.getFullYear() + 1); break;
-            case 'biennial': nextDate.setFullYear(nextDate.getFullYear() + 2); break;
-            default: nextDate.setMonth(nextDate.getMonth() + 1);
-        }
-    }
-    return nextDate;
-};
-
 import { PaymentModal } from '../components/organisms/PaymentModal';
 
 export function FixedExpensesPage({ navigation }) {
@@ -83,7 +57,7 @@ export function FixedExpensesPage({ navigation }) {
               setLoading(true);
               await transactionService.update(transaction.id, {
                   status: 'Aguardando', // or 'Pendente' depending on backend enum, usually 'Aguardando' based on context
-                  interestRate: 0 // Use camelCase if DB column is camelCase
+                  interest_rate: 0 // Use snake_case
               });
               await fetchTransactions();
           } catch (error) {
@@ -132,11 +106,11 @@ export function FixedExpensesPage({ navigation }) {
                   expense_type: 'fixed', // Use snake_case
                   payment_method: selectedTransaction.paymentMethod, // Use snake_case
                   date: selectedTransaction.date, // Use ORIGINAL DUE DATE to maintain recurrence logic
-                  timestamp: new Date(selectedTransaction.date).getTime(),
                   user_id: user.id,
                   recurrence: selectedTransaction.recurrence,
                   status: 'Pago',
-                  interestRate: interest ? ((interest / selectedTransaction.amount) * 100) : 0 // Use camelCase
+                  active: true, // Explicitly set active
+                  interest_rate: interest ? ((interest / selectedTransaction.amount) * 100) : 0 // Use snake_case
               };
               
               await transactionService.create(newTransaction);
@@ -151,7 +125,7 @@ export function FixedExpensesPage({ navigation }) {
               
               if (interest > 0) {
                   updates.amount = selectedTransaction.amount + interest;
-                  updates.interestRate = (interest / selectedTransaction.amount) * 100; // Use camelCase
+                  updates.interest_rate = (interest / selectedTransaction.amount) * 100; // Use snake_case
               }
               
               await transactionService.update(selectedTransaction.id, updates);
@@ -231,29 +205,70 @@ export function FixedExpensesPage({ navigation }) {
       const today = new Date();
       today.setHours(0, 0, 0, 0);
 
+      const addRecurrence = (date, recurrence) => {
+          const newDate = new Date(date);
+          switch (recurrence?.toLowerCase()) {
+              case 'daily': newDate.setDate(newDate.getDate() + 1); break;
+              case 'weekly': newDate.setDate(newDate.getDate() + 7); break;
+              case 'monthly': newDate.setMonth(newDate.getMonth() + 1); break;
+              case 'quarterly': newDate.setMonth(newDate.getMonth() + 3); break;
+              case 'semiannual': newDate.setMonth(newDate.getMonth() + 6); break;
+              case 'annual': newDate.setFullYear(newDate.getFullYear() + 1); break;
+              case 'biennial': newDate.setFullYear(newDate.getFullYear() + 2); break;
+              default: newDate.setMonth(newDate.getMonth() + 1);
+          }
+          return newDate;
+      };
+
       Object.values(recurringGroups).forEach(lastExpense => {
-          // If the expense is marked as inactive/finished, do not project future occurrences
-          if (lastExpense.active === false) return;
-
-          const lastDate = parseDate(lastExpense.date);
+          let currentDate = parseDate(lastExpense.date);
           
-          // If the last expense is in the future/today and unpaid, it's already in the list.
-          if (lastDate >= today && !isPaid(lastExpense.status)) return;
-
-          // Calculate next due date
-          const nextDate = calculateNextOccurrence(lastExpense);
-          
-          // Create virtual expense
-          const virtualExpense = {
-              ...lastExpense,
-              id: `virtual-${lastExpense.id}-${nextDate.getTime()}`,
-              date: formatDateISO(nextDate), // Use ISO format (YYYY-MM-DD) to be compatible with formatDate util
-              status: 'Aguardando',
-              isVirtual: true,
-              isOverdue: false // Virtual is strictly future/prediction here? Wait, calculateNextOccurrence returns >= today.
-          };
-          
-          virtualExpenses.push(virtualExpense);
+          // Loop to generate ALL missing occurrences up to the first future one
+          let safetyCounter = 0;
+          const maxIterations = 100; // Prevent infinite loops
+  
+          while (safetyCounter < maxIterations) {
+              safetyCounter++;
+              
+              // Calculate next candidate date based on recurrence
+              const nextDate = addRecurrence(currentDate, lastExpense.recurrence);
+              
+              // Update currentDate for next iteration
+              currentDate = nextDate;
+  
+              // Check if this date is valid regarding end_date (if inactive)
+               if (lastExpense.active === false) {
+                  if (!lastExpense.end_date) break; // Inactive with no end date -> stop generating
+                  
+                  let endDateObj;
+                  // Parse end_date safely (YYYY-MM-DD from DB)
+                  if (lastExpense.end_date.includes('/')) {
+                      endDateObj = parseDate(lastExpense.end_date);
+                  } else {
+                       const [y, m, d] = lastExpense.end_date.split('-');
+                       endDateObj = new Date(y, m - 1, d);
+                  }
+                  
+                  // If the next occurrence is AFTER the end date, stop generating.
+                  if (nextDate > endDateObj) break;
+              }
+  
+              // Construct virtual expense
+              const virtualExpense = {
+                  ...lastExpense,
+                  id: `virtual-${lastExpense.id}-${nextDate.getTime()}`, // Unique ID
+                  date: formatDateISO(nextDate), // ISO format (YYYY-MM-DD)
+                  status: 'Aguardando', // Always pending
+                  isVirtual: true, // Flag
+                  isOverdue: nextDate < today // Can be overdue if filling gaps
+              };
+              
+              virtualExpenses.push(virtualExpense);
+  
+              // If we have generated a future expense (>= today), we stop for this group.
+              // This ensures we fill all past gaps + 1 future occurrence.
+              if (nextDate >= today) break;
+          }
       });
 
       // 3. Combine Real + Virtual

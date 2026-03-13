@@ -4,9 +4,47 @@ import { Card } from '../atoms/Card';
 import { cn, formatCurrency, formatDate } from '../../utils';
 import { ArrowUpCircle, ArrowDownCircle } from 'lucide-react-native';
 
+const STATUS_MAP = {
+    income: { label: 'Aprovado', color: 'text-emerald-500', bgColor: 'bg-emerald-50' },
+    expense: { label: 'Processado', color: 'text-amber-500', bgColor: 'bg-amber-50' },
+};
+
+const RECURRENCE_MAP = {
+    'daily': 'Diária',
+    'weekly': 'Semanal',
+    'monthly': 'Mensal',
+    'quarterly': 'Trimestral',
+    'semiannual': 'Semestral',
+    'annual': 'Anual',
+    'biennial': 'Bienal'
+};
+
+const METHOD_LABELS = {
+    pix: 'Pix',
+    cartao: 'Cartão',
+    dinheiro: 'Dinheiro',
+};
+
 export function TransactionItem({ transaction }) {
   const isIncome = transaction.type === 'income';
   
+  // Status Logic
+  let statusLabel = STATUS_MAP[transaction.type]?.label || 'Processado';
+  let statusColor = STATUS_MAP[transaction.type]?.color || 'text-gray-500';
+  let statusBg = STATUS_MAP[transaction.type]?.bgColor || 'bg-gray-50';
+
+  if (transaction.type === 'expense' && transaction.expenseType === 'fixed') {
+      if (['Pago', 'Liberado', 'pago', 'liberado'].includes(transaction.status)) {
+          statusLabel = 'Pago';
+          statusColor = 'text-emerald-600';
+          statusBg = 'bg-emerald-50';
+      } else {
+          statusLabel = 'Pendente';
+          statusColor = 'text-amber-600';
+          statusBg = 'bg-amber-50';
+      }
+  }
+
   return (
     <Card className="mb-3 flex-row items-center p-3">
       <View className={cn("p-2 rounded-full mr-3", isIncome ? "bg-emerald-50" : "bg-red-50")}>
@@ -19,14 +57,36 @@ export function TransactionItem({ transaction }) {
       
       <View className="flex-1">
         <Text className="font-semibold text-gray-900 text-base">{transaction.description}</Text>
-        <Text className="text-xs text-gray-500">
-            {formatDate(transaction.date)} • {transaction.paymentMethod === 'pix' ? 'Pix' : transaction.paymentMethod === 'cartao' ? 'Cartão' : 'Dinheiro'}
-        </Text>
+        
+        <View className="flex-row items-center mt-1 flex-wrap">
+            <Text className="text-xs text-gray-500 mr-2">
+                {formatDate(transaction.date)}
+            </Text>
+            <Text className="text-xs text-emerald-600 font-medium mr-2">
+                {METHOD_LABELS[transaction.paymentMethod] || transaction.paymentMethod}
+            </Text>
+            
+            {transaction.expenseType === 'fixed' && (
+                <View className="bg-gray-100 px-1.5 py-0.5 rounded mr-1">
+                    <Text className="text-[10px] text-gray-500">
+                        Fixa {transaction.recurrence ? `• ${RECURRENCE_MAP[transaction.recurrence.toLowerCase()] || transaction.recurrence}` : ''}
+                    </Text>
+                </View>
+            )}
+        </View>
       </View>
       
-      <Text className={cn("font-bold text-base", isIncome ? "text-emerald-600" : "text-red-600")}>
-        {isIncome ? "+" : "-"} {formatCurrency(transaction.amount)}
-      </Text>
+      <View className="items-end">
+          <Text className={cn("font-bold text-base", isIncome ? "text-emerald-600" : "text-red-600")}>
+            {isIncome ? "+" : "-"} {formatCurrency(transaction.amount)}
+          </Text>
+          
+          <View className={cn("px-2 py-0.5 rounded-full mt-1", statusBg)}>
+              <Text className={cn("text-[10px] font-bold", statusColor)}>
+                  {statusLabel}
+              </Text>
+          </View>
+      </View>
     </Card>
   );
 }

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, FlatList, TextInput, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { View, Text, FlatList, TextInput, TouchableOpacity, ActivityIndicator, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../contexts/AuthContext';
 import { transactionService } from '../services/transactionService';
@@ -13,6 +13,7 @@ export function TransactionsPage({ navigation }) {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState('all'); // all, income, expense
+  const [methodFilter, setMethodFilter] = useState('all'); // all, pix, cartao, dinheiro
 
   useEffect(() => {
     fetchTransactions();
@@ -20,12 +21,23 @@ export function TransactionsPage({ navigation }) {
 
   useEffect(() => {
     filterTransactions();
-  }, [search, filter, transactions]);
+  }, [search, filter, methodFilter, transactions]);
 
   const fetchTransactions = async () => {
     try {
       const data = await transactionService.getAll(user.id);
-      setTransactions(data || []);
+      
+      // Map Supabase snake_case to camelCase
+      const mappedData = (data || []).map(t => ({
+          ...t,
+          expenseType: t.expense_type || t.expenseType,
+          paymentMethod: t.payment_method || t.paymentMethod,
+          userId: t.user_id || t.userId,
+          createdAt: t.created_at || t.createdAt,
+          recurrence: t.recurrence,
+      }));
+
+      setTransactions(mappedData);
     } catch (error) {
       console.error(error);
     } finally {
@@ -40,6 +52,10 @@ export function TransactionsPage({ navigation }) {
       result = result.filter(t => t.type === filter);
     }
 
+    if (methodFilter !== 'all') {
+      result = result.filter(t => t.paymentMethod === methodFilter);
+    }
+
     if (search) {
       result = result.filter(t => 
         t.description.toLowerCase().includes(search.toLowerCase())
@@ -49,16 +65,16 @@ export function TransactionsPage({ navigation }) {
     setFilteredTransactions(result);
   };
 
-  const FilterTab = ({ label, value }) => (
+  const FilterTab = ({ label, value, activeValue, onPress }) => (
     <TouchableOpacity
-      onPress={() => setFilter(value)}
+      onPress={() => onPress(activeValue === value ? 'all' : value)}
       className={`px-4 py-2 rounded-full mr-2 border ${
-        filter === value 
+        activeValue === value 
           ? 'bg-[#7E1A8B] border-[#7E1A8B]' 
           : 'bg-white border-gray-200'
       }`}
     >
-      <Text className={filter === value ? 'text-white font-medium' : 'text-gray-600'}>
+      <Text className={activeValue === value ? 'text-white font-medium' : 'text-gray-600'}>
         {label}
       </Text>
     </TouchableOpacity>
@@ -90,10 +106,16 @@ export function TransactionsPage({ navigation }) {
         </View>
 
         {/* Filters */}
-        <View className="flex-row">
-          <FilterTab label="Todas" value="all" />
-          <FilterTab label="Entradas" value="income" />
-          <FilterTab label="Saídas" value="expense" />
+        <View>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} className="flex-row">
+                <FilterTab label="Todas" value="all" activeValue={filter} onPress={setFilter} />
+                <FilterTab label="Entradas" value="income" activeValue={filter} onPress={setFilter} />
+                <FilterTab label="Saídas" value="expense" activeValue={filter} onPress={setFilter} />
+                <View className="w-4" />
+                <FilterTab label="Pix" value="pix" activeValue={methodFilter} onPress={setMethodFilter} />
+                <FilterTab label="Cartão" value="cartao" activeValue={methodFilter} onPress={setMethodFilter} />
+                <FilterTab label="Dinheiro" value="dinheiro" activeValue={methodFilter} onPress={setMethodFilter} />
+            </ScrollView>
         </View>
       </View>
 

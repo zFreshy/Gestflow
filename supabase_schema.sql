@@ -15,7 +15,9 @@ create table public.transactions (
   health_plan text,
   status text default 'Aguardando',
   expense_type text check (expense_type in ('fixed', 'variable')),
-  interest_rate numeric, -- New field for interest rate (optional)
+  interest_rate numeric, -- New field for interest rate
+  active boolean default true, -- New field to mark if fixed expense is still active
+  end_date date, -- New field to specify when the fixed expense ended
   created_at timestamptz default now()
 );
 

@@ -69,7 +69,9 @@ function AppContent() {
           isBakeryIncome: t.is_bakery_income,
           healthPlan: t.health_plan,
           date: formattedDate,
-          timestamp: new Date(year, month - 1, day).getTime()
+          timestamp: new Date(year, month - 1, day).getTime(),
+          active: t.active,
+          end_date: t.end_date
         };
       });
 
@@ -150,31 +152,77 @@ function AppContent() {
         recurrence: updatedTransaction.recurrence,
         exam: updatedTransaction.exam,
         health_plan: updatedTransaction.healthPlan,
-        status: updatedTransaction.status || 'Aguardando',
+        status: updatedTransaction.status || (updatedTransaction.id ? (transactions.find(t => t.id === updatedTransaction.id)?.status) : 'Aguardando'), // Preserve status if editing
         expense_type: updatedTransaction.expenseType,
+        active: updatedTransaction.active,
+        end_date: updatedTransaction.end_date // Pass end_date to DB
       };
 
-      const { data, error } = await supabase
-        .from('transactions')
-        .update(transactionToUpdate)
-        .eq('id', updatedTransaction.id)
-        .select()
-        .single();
+      // Check if it's a virtual transaction (ID starts with 'virtual-')
+      const isVirtual = updatedTransaction.id && updatedTransaction.id.toString().startsWith('virtual-');
 
-      if (error) throw error;
+      if (isVirtual) {
+          // If virtual, we create a NEW transaction instead of updating
+          // Remove the virtual ID so supabase generates a new one
+          // IMPORTANT: Explicitly add user_id to ensure RLS policies pass
+          const { id, ...transactionToCreate } = {
+              ...transactionToUpdate,
+              user_id: user.id
+          };
+          
+          // Ensure status is meaningful (if user edited it, great, otherwise keep pending or set to whatever makes sense)
+          // Usually when editing a virtual expense, we are "realizing" it or just adjusting it before payment.
+          // Let's treat it as a new insert.
+          
+          const { data, error } = await supabase
+            .from('transactions')
+            .insert([transactionToCreate])
+            .select()
+            .single();
 
-      const savedTransaction = {
-        ...data,
-        paymentMethod: data.payment_method,
-        expenseType: data.expense_type,
-        clientName: data.client_name,
-        isBakeryIncome: data.is_bakery_income,
-        healthPlan: data.health_plan,
-        date: updatedTransaction.date,
-        timestamp: updatedTransaction.timestamp
-      };
+          if (error) throw error;
 
-      setTransactions(prev => prev.map(t => t.id === savedTransaction.id ? savedTransaction : t));
+           const savedTransaction = {
+            ...data,
+            paymentMethod: data.payment_method,
+            expenseType: data.expense_type,
+            clientName: data.client_name,
+            isBakeryIncome: data.is_bakery_income,
+            healthPlan: data.health_plan,
+            date: updatedTransaction.date,
+            timestamp: updatedTransaction.timestamp,
+            active: data.active,
+            end_date: data.end_date
+          };
+
+          setTransactions((prev) => [savedTransaction, ...prev]);
+      } else {
+          // Normal update for existing real transactions
+          const { data, error } = await supabase
+            .from('transactions')
+            .update(transactionToUpdate)
+            .eq('id', updatedTransaction.id)
+            .select()
+            .single();
+
+          if (error) throw error;
+
+          const savedTransaction = {
+            ...data,
+            paymentMethod: data.payment_method,
+            expenseType: data.expense_type,
+            clientName: data.client_name,
+            isBakeryIncome: data.is_bakery_income,
+            healthPlan: data.health_plan,
+            date: updatedTransaction.date,
+            timestamp: updatedTransaction.timestamp,
+            active: data.active,
+            end_date: data.end_date
+          };
+
+          setTransactions(prev => prev.map(t => t.id === savedTransaction.id ? savedTransaction : t));
+      }
+      
       setIsFormOpen(false);
       setEditingTransaction(null);
     } catch (error) {
@@ -204,21 +252,33 @@ function AppContent() {
   const handleUpdateStatus = async (transactionId, newStatus, paymentDate = null, interestAmount = 0) => {
     try {
       const updates = { status: newStatus };
+      const transaction = transactions.find(t => t.id === transactionId);
       
       // If paying, we might update date and amount
       if (newStatus === 'Pago') {
           if (paymentDate) {
-            // Convert DD/MM/YYYY to YYYY-MM-DD
-            const [day, month, year] = paymentDate.split('/');
-            updates.date = `${year}-${month}-${day}`; 
+            // Only update date if NOT a fixed expense
+            // Fixed expenses should keep their original due date to maintain recurrence order/history
+            if (transaction && transaction.expenseType !== 'fixed') {
+                // Convert DD/MM/YYYY to YYYY-MM-DD
+                const [day, month, year] = paymentDate.split('/');
+                updates.date = `${year}-${month}-${day}`; 
+            }
           }
 
           if (interestAmount > 0) {
-             const transaction = transactions.find(t => t.id === transactionId);
              if (transaction) {
                 updates.amount = transaction.amount + interestAmount;
+                // Add interest_rate field update if needed, similar to mobile
+                updates.interest_rate = (interestAmount / transaction.amount) * 100;
              }
           }
+      } else if (newStatus === 'Aguardando' && transaction?.expenseType === 'fixed') {
+          // If unpaying a fixed expense, ensure we reset interest (optional but good for consistency)
+          updates.interest_rate = 0;
+          // We don't revert amount here because we don't know the original amount easily without storing it,
+          // but usually interest adds to amount. If we want to be perfect, we should subtract interest.
+          // For now, just resetting status is what user asked for (date issue).
       }
 
       const { data, error } = await supabase
@@ -304,6 +364,7 @@ function AppContent() {
                     <FixedExpensesPage 
                       transactions={transactions} 
                       onUpdateStatus={handleUpdateStatus} 
+                      onAddTransaction={handleAddTransaction}
                       onEdit={openEditForm} 
                       onDelete={handleDeleteTransaction} 
                     />

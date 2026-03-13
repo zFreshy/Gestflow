@@ -20,6 +20,8 @@ export function TransactionForm({ onAddTransaction, onEditTransaction, isOpen, o
     const [expenseType, setExpenseType] = useState('fixed');
     const [recurrence, setRecurrence] = useState('monthly');
     const [interestRate, setInterestRate] = useState('');
+    const [isActive, setIsActive] = useState(true);
+    const [endDate, setEndDate] = useState(''); // New state for end date
 
     useEffect(() => {
         if (isOpen) {
@@ -42,6 +44,8 @@ export function TransactionForm({ onAddTransaction, onEditTransaction, isOpen, o
                     if ((initialData.expenseType || initialData.expense_type) === 'fixed') {
                         setRecurrence(initialData.recurrence || 'monthly');
                         setInterestRate(initialData.interestRate || initialData.interest_rate || '');
+                        setIsActive(initialData.active !== false); 
+                        setEndDate(initialData.end_date || ''); // Populate end_date
                     }
                 }
             } else {
@@ -56,6 +60,8 @@ export function TransactionForm({ onAddTransaction, onEditTransaction, isOpen, o
                 setExpenseType('fixed');
                 setRecurrence('monthly');
                 setInterestRate('');
+                setIsActive(true);
+                setEndDate('');
             }
         }
     }, [isOpen, initialData]);
@@ -91,6 +97,8 @@ export function TransactionForm({ onAddTransaction, onEditTransaction, isOpen, o
             transaction.expenseType = expenseType;
             if (expenseType === 'fixed') {
                 transaction.recurrence = recurrence;
+                transaction.active = isActive;
+                transaction.end_date = !isActive && endDate ? endDate : null; // Save end_date if inactive
                 if (interestRate) {
                     transaction.interestRate = parseFloat(interestRate);
                 } else {
@@ -98,6 +106,8 @@ export function TransactionForm({ onAddTransaction, onEditTransaction, isOpen, o
                 }
             } else {
                 transaction.recurrence = null;
+                transaction.active = null;
+                transaction.end_date = null;
                 transaction.interestRate = null;
             }
         }
@@ -280,8 +290,45 @@ export function TransactionForm({ onAddTransaction, onEditTransaction, isOpen, o
                                             onChange={(e) => setInterestRate(e.target.value)}
                                         />
                                     </FormField>
-                                </>
-                            )}
+
+                                    <div className="flex items-center gap-2 mt-2">
+                        <input
+                            type="checkbox"
+                            id="isActive"
+                            checked={!isActive}
+                            onChange={(e) => {
+                                setIsActive(!e.target.checked);
+                                if (e.target.checked) {
+                                    // Default to current date if enabling finalization
+                                    setEndDate(new Date().toISOString().split('T')[0]);
+                                } else {
+                                    setEndDate('');
+                                }
+                            }}
+                            className="w-4 h-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500"
+                        />
+                        <label htmlFor="isActive" className="text-sm font-medium text-gray-700">
+                            Despesa Finalizada
+                        </label>
+                    </div>
+
+                    {!isActive && (
+                        <div className="mt-2 pl-6">
+                            <FormField label="Finalizada em (Mês/Data)">
+                                <Input
+                                    type="date"
+                                    value={endDate}
+                                    onChange={(e) => setEndDate(e.target.value)}
+                                    required={!isActive}
+                                />
+                                <p className="text-xs text-gray-500 mt-1">
+                                    A partir desta data, não serão geradas novas cobranças.
+                                </p>
+                            </FormField>
+                        </div>
+                    )}
+                    </>
+                )}
                         </div>
                     )}
 

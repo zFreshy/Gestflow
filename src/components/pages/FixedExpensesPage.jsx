@@ -6,7 +6,7 @@ import { Input } from '../atoms/Input';
 import { Select } from '../atoms/Select';
 import { PaymentModal } from '../organisms/PaymentModal';
 
-export function FixedExpensesPage({ transactions, onUpdateStatus, onEdit, onDelete }) {
+export function FixedExpensesPage({ transactions, onUpdateStatus, onAddTransaction, onEdit, onDelete }) {
     const [searchTerm, setSearchTerm] = useState('');
     const [filterStatus, setFilterStatus] = useState('all'); // 'all', 'paid', 'pending'
     const [currentPage, setCurrentPage] = useState(1);
@@ -78,13 +78,36 @@ export function FixedExpensesPage({ transactions, onUpdateStatus, onEdit, onDele
             // If already paid, just toggle back to pending (simple toggle)
             onUpdateStatus(transaction.id, 'Aguardando');
         } else {
-            // If pending, open modal to confirm details
+            // If pending (real or virtual), open modal to confirm details
             setSelectedPayment(transaction);
         }
     };
 
     const confirmPayment = (id, status, date, interest) => {
-        onUpdateStatus(id, status, date, interest);
+        if (selectedPayment?.isVirtual) {
+            // Create new transaction for virtual expense
+            // We use the virtual expense date as the transaction date to maintain recurrence consistency
+            const newTransaction = {
+                description: selectedPayment.description,
+                amount: selectedPayment.amount + (interest || 0),
+                type: 'expense',
+                paymentMethod: selectedPayment.payment_method || selectedPayment.paymentMethod || 'pix',
+                date: selectedPayment.date, // Use the Due Date, ignore the date from modal to preserve recurrence
+                clientName: selectedPayment.client_name,
+                isBakeryIncome: false,
+                recurrence: selectedPayment.recurrence,
+                expenseType: 'fixed',
+                status: 'Pago',
+                active: true,
+                interestRate: interest ? (interest / selectedPayment.amount) * 100 : 0
+            };
+            
+            if (onAddTransaction) {
+                onAddTransaction(newTransaction);
+            }
+        } else {
+            onUpdateStatus(id, status, date, interest);
+        }
         setSelectedPayment(null);
     };
 
@@ -107,26 +130,69 @@ export function FixedExpensesPage({ transactions, onUpdateStatus, onEdit, onDele
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    Object.values(recurringGroups).forEach(lastExpense => {
-        const lastDate = parseDate(lastExpense.date);
-        
-        // If the last expense is in the future/today and unpaid, it's already in the list.
-        // We don't need a virtual copy of it.
-        if (lastDate >= today && !isPaid(lastExpense.status)) return;
+    const addRecurrence = (date, recurrence) => {
+        const newDate = new Date(date);
+        switch (recurrence) {
+            case 'daily': newDate.setDate(newDate.getDate() + 1); break;
+            case 'weekly': newDate.setDate(newDate.getDate() + 7); break;
+            case 'monthly': newDate.setMonth(newDate.getMonth() + 1); break;
+            case 'quarterly': newDate.setMonth(newDate.getMonth() + 3); break;
+            case 'semiannual': newDate.setMonth(newDate.getMonth() + 6); break;
+            case 'annual': newDate.setFullYear(newDate.getFullYear() + 1); break;
+            case 'biennial': newDate.setFullYear(newDate.getFullYear() + 2); break;
+            default: newDate.setMonth(newDate.getMonth() + 1);
+        }
+        return newDate;
+    };
 
-        // Calculate next due date
-        const nextDate = calculateNextOccurrence(lastExpense);
+    Object.values(recurringGroups).forEach(lastExpense => {
+        let currentDate = parseDate(lastExpense.date);
         
-        // Create virtual expense
-        const virtualExpense = {
-            ...lastExpense,
-            id: `virtual-${lastExpense.id}-${nextDate.getTime()}`, // unique temp id
-            date: nextDate.toLocaleDateString('pt-BR'),
-            status: 'Aguardando', // Always pending for future
-            isVirtual: true // Flag to identify it's a projection
-        };
-        
-        virtualExpenses.push(virtualExpense);
+        // Loop to generate ALL missing occurrences up to the first future one
+        let safetyCounter = 0;
+        const maxIterations = 100; // Prevent infinite loops
+
+        while (safetyCounter < maxIterations) {
+            safetyCounter++;
+            
+            // Calculate next candidate date based on recurrence
+            const nextDate = addRecurrence(currentDate, lastExpense.recurrence);
+            
+            // Update currentDate for next iteration
+            currentDate = nextDate;
+
+            // Check if this date is valid regarding end_date (if inactive)
+             if (lastExpense.active === false) {
+                if (!lastExpense.end_date) break; // Inactive with no end date -> stop generating
+                
+                let endDateObj;
+                // Parse end_date safely (YYYY-MM-DD from DB)
+                if (lastExpense.end_date.includes('/')) {
+                    endDateObj = parseDate(lastExpense.end_date);
+                } else {
+                     const [y, m, d] = lastExpense.end_date.split('-');
+                     endDateObj = new Date(y, m - 1, d);
+                }
+                
+                // If the next occurrence is AFTER the end date, stop generating.
+                if (nextDate > endDateObj) break;
+            }
+
+            // Construct virtual expense
+            const virtualExpense = {
+                ...lastExpense,
+                id: `virtual-${lastExpense.id}-${nextDate.getTime()}`, // Unique ID
+                date: nextDate.toLocaleDateString('pt-BR'), // DD/MM/YYYY
+                status: 'Aguardando', // Always pending
+                isVirtual: true // Flag
+            };
+            
+            virtualExpenses.push(virtualExpense);
+
+            // If we have generated a future expense (>= today), we stop for this group.
+            // This ensures we fill all past gaps + 1 future occurrence.
+            if (nextDate >= today) break;
+        }
     });
 
     // 3. Combine Real + Virtual
@@ -222,18 +288,15 @@ export function FixedExpensesPage({ transactions, onUpdateStatus, onEdit, onDele
             >
                 <div className="flex items-center gap-4">
                     <button
-                        onClick={() => !isVirtual && handleTogglePaid(expense)}
+                        onClick={() => handleTogglePaid(expense)}
                         className={cn(
                             "h-6 w-6 rounded-full flex items-center justify-center transition-all",
-                            isVirtual 
-                                ? "bg-gray-100 text-gray-300 cursor-default"
-                                : paid
-                                    ? "bg-emerald-100 text-emerald-600 hover:bg-emerald-200"
-                                    : "bg-gray-100 text-gray-400 hover:bg-gray-200",
-                            !paid && isOverdue && !isVirtual && "ring-2 ring-red-100"
+                            paid
+                                ? "bg-emerald-100 text-emerald-600 hover:bg-emerald-200"
+                                : "bg-gray-100 text-gray-400 hover:bg-gray-200",
+                            !paid && isOverdue && "ring-2 ring-red-100"
                         )}
-                        title={isVirtual ? "Previsão futura" : (paid ? "Marcar como pendente" : "Marcar como pago")}
-                        disabled={isVirtual}
+                        title={paid ? "Marcar como pendente" : "Marcar como pago"}
                     >
                         {paid ? <CheckCircle className="h-4 w-4" /> : <Circle className="h-4 w-4" />}
                     </button>
@@ -259,6 +322,14 @@ export function FixedExpensesPage({ transactions, onUpdateStatus, onEdit, onDele
                                 <>
                                     <span>•</span>
                                     <span className="text-red-500">Juros: {expense.interestRate}%</span>
+                                </>
+                            )}
+                            {expense.active === false && expense.end_date && (
+                                <>
+                                    <span>•</span>
+                                    <span className="text-orange-600 font-medium">Finalizada em: {expense.end_date}</span>
+                                    <span>•</span>
+                                    <span className="text-green-600 font-medium">Não virá mais cobrança</span>
                                 </>
                             )}
                         </div>
@@ -287,7 +358,7 @@ export function FixedExpensesPage({ transactions, onUpdateStatus, onEdit, onDele
                         </span>
                     </div>
 
-                    {!isVirtual && (onEdit || onDelete) && (
+                    {(onEdit || onDelete) && (
                         <div className="flex items-center gap-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
                             {onEdit && (
                                 <button 
@@ -298,7 +369,7 @@ export function FixedExpensesPage({ transactions, onUpdateStatus, onEdit, onDele
                                     <Pencil className="h-4 w-4" />
                                 </button>
                             )}
-                            {onDelete && (
+                            {onDelete && !isVirtual && (
                                 <button 
                                     onClick={() => onDelete(expense.id)}
                                     className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-500 hover:text-red-600 transition-colors"

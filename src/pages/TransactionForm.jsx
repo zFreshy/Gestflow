@@ -7,10 +7,12 @@ import { Input } from '../components/atoms/Input';
 import { Button } from '../components/atoms/Button';
 import { X, Calendar } from 'lucide-react-native';
 
-export function TransactionForm({ navigation }) {
+export function TransactionForm({ navigation, route }) {
   const { user } = useAuth();
+  const { initialType, initialExpenseType } = route.params || {};
+
   const [loading, setLoading] = useState(false);
-  const [type, setType] = useState('income'); // income, expense
+  const [type, setType] = useState(initialType || 'income'); // income, expense
   const [description, setDescription] = useState('');
   const [amount, setAmount] = useState('');
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
@@ -21,7 +23,7 @@ export function TransactionForm({ navigation }) {
   const [clientName, setClientName] = useState('');
 
   // Expense specific
-  const [expenseType, setExpenseType] = useState('fixed'); // fixed, variable
+  const [expenseType, setExpenseType] = useState(initialExpenseType || 'fixed'); // fixed, variable
   const [recurrence, setRecurrence] = useState('monthly');
   const [interestRate, setInterestRate] = useState('');
 

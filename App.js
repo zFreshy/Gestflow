@@ -12,6 +12,7 @@ import { LoginPage } from './src/pages/LoginPage';
 import { DashboardPage } from './src/pages/DashboardPage';
 import { TransactionsPage } from './src/pages/TransactionsPage';
 import { TransactionForm } from './src/pages/TransactionForm';
+import { FixedExpensesPage } from './src/pages/FixedExpensesPage';
 
 // Placeholder Pages
 const PlaceholderPage = ({ route }) => (
@@ -26,7 +27,6 @@ const Tab = createBottomTabNavigator();
 
 function MoreMenu({ isVisible, onClose, navigation, signOut }) {
   const MENU_ITEMS = [
-    { name: 'FixedExpenses', label: 'Despesas Fixas', icon: FileText },
     { name: 'Calendar', label: 'Calendário', icon: Calendar },
   ];
 
@@ -158,7 +158,7 @@ function TabNavigator({ navigation }) {
 
         <Tab.Screen 
           name="FixedExpenses" 
-          component={PlaceholderPage} 
+          component={FixedExpensesPage} 
           options={{
             tabBarIcon: ({ color }) => <FileText color={color} size={24} />,
             tabBarLabel: 'Despesas'

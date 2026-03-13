@@ -34,10 +34,18 @@ export function TransactionItem({ transaction }) {
   let statusBg = STATUS_MAP[transaction.type]?.bgColor || 'bg-gray-50';
 
   if (transaction.type === 'expense' && transaction.expenseType === 'fixed') {
-      if (['Pago', 'Liberado', 'pago', 'liberado'].includes(transaction.status)) {
+      if (transaction.isVirtual) {
+          statusLabel = 'Previsto';
+          statusColor = 'text-amber-600';
+          statusBg = 'bg-amber-50';
+      } else if (['Pago', 'Liberado', 'pago', 'liberado'].includes(transaction.status)) {
           statusLabel = 'Pago';
           statusColor = 'text-emerald-600';
           statusBg = 'bg-emerald-50';
+      } else if (transaction.isOverdue) {
+          statusLabel = 'Atrasado';
+          statusColor = 'text-red-600';
+          statusBg = 'bg-red-50';
       } else {
           statusLabel = 'Pendente';
           statusColor = 'text-amber-600';
@@ -45,22 +53,37 @@ export function TransactionItem({ transaction }) {
       }
   }
 
+  const isPaid = ['Pago', 'Liberado', 'pago', 'liberado'].includes(transaction.status);
+  const isVirtual = transaction.isVirtual;
+  const isOverdue = transaction.isOverdue;
+
   return (
-    <Card className="mb-3 flex-row items-center p-3">
+    <Card className={cn(
+        "mb-3 flex-row items-center p-3 border",
+        isVirtual ? "border-dashed border-amber-300 bg-amber-50/30" : "border-gray-100",
+        isOverdue && !isPaid && !isVirtual ? "border-red-200 bg-red-50/30" : "",
+        isPaid ? "opacity-70" : ""
+    )}>
       <View className={cn("p-2 rounded-full mr-3", isIncome ? "bg-emerald-50" : "bg-red-50")}>
         {isIncome ? (
           <ArrowUpCircle size={24} color="#059669" />
         ) : (
-          <ArrowDownCircle size={24} color="#DC2626" />
+          <ArrowDownCircle size={24} color={isOverdue && !isPaid ? "#DC2626" : "#DC2626"} />
         )}
       </View>
       
       <View className="flex-1">
-        <Text className="font-semibold text-gray-900 text-base">{transaction.description}</Text>
+        <Text className={cn(
+            "font-semibold text-base",
+            isPaid ? "text-gray-500 line-through" : "text-gray-900",
+            isOverdue && !isPaid ? "text-red-700" : ""
+        )}>
+            {transaction.description} {isVirtual && <Text className="text-amber-600 text-xs font-normal">(Previsão)</Text>}
+        </Text>
         
         <View className="flex-row items-center mt-1 flex-wrap">
-            <Text className="text-xs text-gray-500 mr-2">
-                {formatDate(transaction.date)}
+            <Text className={cn("text-xs mr-2", isOverdue && !isPaid ? "text-red-500 font-medium" : "text-gray-500")}>
+                {isPaid ? `Pago em: ${formatDate(transaction.date)}` : `Vence em: ${formatDate(transaction.date)}`}
             </Text>
             <Text className="text-xs text-emerald-600 font-medium mr-2">
                 {METHOD_LABELS[transaction.paymentMethod] || transaction.paymentMethod}

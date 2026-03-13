@@ -7,7 +7,7 @@ import { LayoutDashboard, Receipt, FileText, Calendar, LogOut, X, ChevronRight }
 const MENU_ITEMS = [
     { name: 'Dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { name: 'Transactions', label: 'Transações', icon: Receipt },
-    { name: 'FixedExpenses', label: 'Despesas Fixas', icon: FileText },
+    // Removed redundant 'FixedExpenses' since it's on the bottom bar
     { name: 'Calendar', label: 'Calendário', icon: Calendar },
 ];
 

@@ -373,11 +373,13 @@ export function DashboardPage({ navigation }) {
     });
   };
 
+  const [selectedBarIndex, setSelectedBarIndex] = useState(null);
+
   const barChartData = useMemo(() => {
     if (!transactions.length) return [];
     
     const today = new Date();
-    const data = [];
+    let rawData = [];
     
     // Helper within useMemo to filter expenses consistent with total logic
     const getExpenseAmount = (txs) => {
@@ -407,16 +409,12 @@ export function DashboardPage({ navigation }) {
 
             const income = dayTransactions.filter(t => t.type === 'income').reduce((sum, t) => sum + t.amount, 0);
             const expense = getExpenseAmount(dayTransactions);
-            
-            data.push({
-                value: income - expense, // Profit/Loss
+            const profit = income - expense;
+
+            rawData.push({
+                value: profit,
                 label: ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'][d.getDay()],
-                frontColor: (income - expense) >= 0 ? '#10B981' : '#EF4444',
-                topLabelComponent: () => (
-                    <Text style={{color: (income - expense) >= 0 ? '#10B981' : '#EF4444', fontSize: 10, marginBottom: 6}}>
-                        {Math.abs(income - expense).toFixed(0)}
-                    </Text>
-                )
+                originalValue: profit,
             });
         }
     } else if (viewMode === 'monthly') {
@@ -436,11 +434,12 @@ export function DashboardPage({ navigation }) {
 
             const income = weekTransactions.filter(t => t.type === 'income').reduce((sum, t) => sum + t.amount, 0);
             const expense = getExpenseAmount(weekTransactions);
+            const profit = income - expense;
 
-            data.push({
-                value: income - expense,
+            rawData.push({
+                value: profit,
                 label,
-                frontColor: (income - expense) >= 0 ? '#10B981' : '#EF4444',
+                originalValue: profit,
             });
         }
     } else if (viewMode === 'quarterly') {
@@ -457,17 +456,100 @@ export function DashboardPage({ navigation }) {
 
             const income = monthTransactions.filter(t => t.type === 'income').reduce((sum, t) => sum + t.amount, 0);
             const expense = getExpenseAmount(monthTransactions);
+            const profit = income - expense;
 
-            data.push({
-                value: income - expense,
+            rawData.push({
+                value: profit,
                 label: monthName,
-                frontColor: (income - expense) >= 0 ? '#10B981' : '#EF4444',
+                originalValue: profit,
             });
         }
     }
+
+    // Determine max value for the "Track" height
+    const dataMax = Math.max(...rawData.map(d => Math.abs(d.value)), 0);
+    // User requested "indo até 30000". We ensure it's at least 30000, or higher if data demands.
+    // Also ensuring reasonable steps (3 sections).
+    const maxValue = Math.max(dataMax * 1.1, 30000);
+    const activeIndex = selectedBarIndex === null ? rawData.length - 1 : selectedBarIndex;
+
+    return rawData.map((item, index) => {
+        const isSelected = index === activeIndex;
+        const absValue = Math.abs(item.value);
+        const isPositive = item.value >= 0;
+        const chartHeight = 200;
+        
+        let fillColor;
+        if (isSelected) {
+            fillColor = '#F472B6'; // Pink-400
+        } else {
+            fillColor = isPositive ? '#10B981' : '#EF4444'; // Emerald or Red
+        }
+
+        return {
+            value: absValue, // Value for the bar
+            frontColor: fillColor,
+            label: item.label,
+            topLabelComponent: isSelected ? () => (
+                <View style={{ marginBottom: 6, alignItems: 'center' }}>
+                    <View style={{
+                        backgroundColor: 'white',
+                        paddingHorizontal: 8,
+                        paddingVertical: 4,
+                        borderRadius: 8,
+                        shadowColor: '#000',
+                        shadowOffset: {width: 0, height: 2},
+                        shadowOpacity: 0.15,
+                        shadowRadius: 3,
+                        elevation: 4,
+                    }}>
+                        <Text style={{ fontSize: 10, color: '#F472B6', fontWeight: 'bold' }}>
+                            {formatCurrency(item.originalValue)}
+                        </Text>
+                    </View>
+                    <View style={{
+                        width: 0,
+                        height: 0,
+                        backgroundColor: 'transparent',
+                        borderStyle: 'solid',
+                        borderLeftWidth: 5,
+                        borderRightWidth: 5,
+                        borderBottomWidth: 0,
+                        borderTopWidth: 5,
+                        borderLeftColor: 'transparent',
+                        borderRightColor: 'transparent',
+                        borderTopColor: 'white',
+                        alignSelf: 'center',
+                    }} />
+                </View>
+            ) : undefined,
+            
+            stacks: [
+                {
+                    value: absValue,
+                    color: fillColor,
+                    borderBottomLeftRadius: 16,
+                    borderBottomRightRadius: 16,
+                    borderTopLeftRadius: 0,
+                    borderTopRightRadius: 0,
+                    marginBottom: 0,
+                },
+                {
+                    value: maxValue - absValue,
+                    color: '#F3F4F6', // Gray-100 (Light track)
+                    borderTopLeftRadius: 16,
+                    borderTopRightRadius: 16,
+                    borderBottomLeftRadius: 0,
+                    borderBottomRightRadius: 0,
+                }
+            ],
+            
+            spacing: 24,
+            labelTextStyle: { color: isSelected ? '#F472B6' : '#9CA3AF', fontWeight: isSelected ? 'bold' : 'normal' },
+        };
+     });
     
-    return data;
-  }, [transactions, viewMode]);
+  }, [transactions, viewMode, selectedBarIndex]);
 
   useFocusEffect(
     useCallback(() => {
@@ -864,23 +946,29 @@ export function DashboardPage({ navigation }) {
                 </View>
 
                 {/* Chart */}
-                <View className="items-center overflow-hidden">
+                <View className="items-center">
                      <BarChart
-                        data={barChartData}
-                        barWidth={32}
-                        spacing={24}
-                        roundedTop
-                        roundedBottom
+                        stackData={barChartData}
+                        barWidth={24} // Reduced from 32 to fit 7 items
+                        spacing={20}  // Reduced from 24 to fit 7 items
                         hideRules
                         xAxisThickness={0}
                         yAxisThickness={0}
-                        yAxisTextStyle={{ color: 'gray' }}
+                        yAxisTextStyle={{ color: '#9CA3AF', fontSize: 10 }}
                         noOfSections={3}
-                        maxValue={Math.max(...barChartData.map(d => Math.abs(d.value)), 100) * 1.2}
-                        width={screenWidth - 80}
+                        maxValue={barChartData.length > 0 ? barChartData[0].maxValue : 30000}
+                        width={screenWidth - 60} // Adjusted width
                         height={200}
                         isAnimated
-                        frontColor={'#10B981'}
+                        onPress={(item, index) => setSelectedBarIndex(index)}
+                        // Extra props for clipping/labels
+                        yAxisExtraHeight={40}
+                        // Custom formatting for Y-axis (compact numbers)
+                        formatYLabel={(label) => {
+                            const val = parseFloat(label);
+                            if (val >= 1000) return `${(val / 1000).toFixed(0)}k`;
+                            return label;
+                        }}
                     />
                 </View>
             </View>

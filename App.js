@@ -3,7 +3,7 @@ import { View, ActivityIndicator, TouchableOpacity, Text, Modal, ScrollView } fr
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { LayoutDashboard, Receipt, FileText, Calendar, MoreHorizontal, Plus, LogOut, X, ChevronRight } from 'lucide-react-native';
 
@@ -96,6 +96,7 @@ function MoreMenu({ isVisible, onClose, navigation, signOut }) {
 function TabNavigator({ navigation }) {
   const { signOut } = useAuth();
   const [isMenuVisible, setIsMenuVisible] = useState(false);
+  const insets = useSafeAreaInsets();
 
   return (
     <>
@@ -107,9 +108,9 @@ function TabNavigator({ navigation }) {
           tabBarStyle: {
             borderTopWidth: 1,
             borderTopColor: '#F3F4F6',
-            paddingBottom: 5,
+            paddingBottom: insets.bottom > 0 ? insets.bottom + 5 : 5,
             paddingTop: 5,
-            height: 60,
+            height: insets.bottom > 0 ? 60 + insets.bottom : 60,
             backgroundColor: '#FFFFFF',
           },
           tabBarLabelStyle: {

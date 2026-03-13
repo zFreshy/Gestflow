@@ -4,28 +4,131 @@ import { useFocusEffect } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { transactionService } from '../services/transactionService';
 import { useAuth } from '../contexts/AuthContext';
-import { PieChart, BarChart } from "react-native-gifted-charts";
-import { LinearGradient } from 'expo-linear-gradient';
+import { BarChart } from "react-native-gifted-charts";
+import Svg, { Circle, Path, G } from 'react-native-svg';
 import { 
   ArrowUpRight, 
   ArrowDownRight, 
   Calendar, 
-  ChevronRight, 
   DollarSign, 
-  TrendingUp, 
-  TrendingDown, 
   Clock, 
   AlertCircle, 
   CheckCircle, 
   Users, 
-  FileText, 
-  Activity,
-  Plus,
-  Bell
+  Activity
 } from 'lucide-react-native';
 import { formatCurrency } from '../utils';
 
 const screenWidth = Dimensions.get('window').width;
+
+// Custom Donut Chart with semicircle transitions
+const DonutChartWithTransitions = ({ data, radius = 120, innerRadius = 80, centerLabel }) => {
+  const total = data.reduce((sum, item) => sum + item.value, 0);
+  const strokeWidth = radius - innerRadius;
+  const circleRadius = strokeWidth / 2;
+  
+  let currentAngle = -90; // Start from top
+  
+  const segments = data.map((item, index) => {
+    const percentage = item.value / total;
+    const angle = percentage * 360;
+    const startAngle = currentAngle;
+    const endAngle = currentAngle + angle;
+    
+    // Calculate path for the segment
+    const startRad = (startAngle * Math.PI) / 180;
+    const endRad = (endAngle * Math.PI) / 180;
+    
+    const centerCircleRadius = (radius + innerRadius) / 2;
+    
+    const x1 = radius + centerCircleRadius * Math.cos(startRad);
+    const y1 = radius + centerCircleRadius * Math.sin(startRad);
+    const x2 = radius + centerCircleRadius * Math.cos(endRad);
+    const y2 = radius + centerCircleRadius * Math.sin(endRad);
+    
+    // Calculate middle point for label
+    const midAngle = (startAngle + endAngle) / 2;
+    const midRad = (midAngle * Math.PI) / 180;
+    const labelRadius = centerCircleRadius + strokeWidth / 2 + 20;
+    const labelX = radius + labelRadius * Math.cos(midRad);
+    const labelY = radius + labelRadius * Math.sin(midRad);
+    
+    const largeArcFlag = angle > 180 ? 1 : 0;
+    
+    const pathData = `
+      M ${x1} ${y1}
+      A ${centerCircleRadius} ${centerCircleRadius} 0 ${largeArcFlag} 1 ${x2} ${y2}
+    `;
+    
+    currentAngle = endAngle;
+    
+    return {
+      path: pathData,
+      color: item.color,
+      startX: x1,
+      startY: y1,
+      endX: x2,
+      endY: y2,
+      labelX,
+      labelY,
+      value: item.value,
+      percentage
+    };
+  });
+  
+  return (
+    <View style={{ alignItems: 'center', justifyContent: 'center' }}>
+      <Svg width={radius * 2 + 80} height={radius * 2 + 80}>
+        <G transform={`translate(40, 40)`}>
+          {segments.map((segment, index) => (
+            <G key={index}>
+              <Path
+                d={segment.path}
+                stroke={segment.color}
+                strokeWidth={strokeWidth}
+                fill="none"
+                strokeLinecap="round"
+              />
+              {/* Semicircle at the end of each segment */}
+              <Circle
+                cx={segment.endX}
+                cy={segment.endY}
+                r={circleRadius}
+                fill={segment.color}
+              />
+            </G>
+          ))}
+        </G>
+      </Svg>
+      
+      {/* Labels positioned around the chart */}
+      {segments.map((segment, index) => (
+        <View
+          key={`label-${index}`}
+          style={{
+            position: 'absolute',
+            left: segment.labelX + 40 - 35,
+            top: segment.labelY + 40 - 15,
+            backgroundColor: 'rgba(0,0,0,0.7)',
+            paddingHorizontal: 8,
+            paddingVertical: 4,
+            borderRadius: 8,
+            minWidth: 70,
+            alignItems: 'center'
+          }}
+        >
+          <Text style={{ color: 'white', fontSize: 12, fontWeight: 'bold' }}>
+            {formatCurrency(segment.value)}
+          </Text>
+        </View>
+      ))}
+      
+      <View style={{ position: 'absolute', alignItems: 'center', justifyContent: 'center' }}>
+        {centerLabel}
+      </View>
+    </View>
+  );
+};
 
 // Helpers
 const isPaid = (status) => ['pago', 'liberado'].includes(status?.toLowerCase());
@@ -423,37 +526,47 @@ export function DashboardPage({ navigation }) {
                 </View>
                 
                 <View className="items-center justify-center relative">
-                    <PieChart
+                    <DonutChartWithTransitions
                         data={stats.categories}
-                        donut
                         radius={120}
                         innerRadius={80}
-                        centerLabelComponent={() => {
-                            return (
-                                <View className="items-center justify-center">
-                                    <Text className="text-gray-500 text-sm font-medium">Saldo Previsto</Text>
-                                    <Text className="text-gray-900 text-2xl font-bold">
-                                        {formatCurrency(stats.projectedBalance || 0)}
-                                    </Text>
-                                </View>
-                            );
-                        }}
+                        centerLabel={
+                            <View className="items-center justify-center">
+                                <Text className="text-gray-500 text-sm font-medium">Saldo Previsto</Text>
+                                <Text className="text-gray-900 text-2xl font-bold">
+                                    {formatCurrency(stats.projectedBalance || 0)}
+                                </Text>
+                            </View>
+                        }
                     />
                 </View>
 
                 {/* Legend */}
-                <View className="flex-row flex-wrap justify-center gap-4 mt-6 w-full">
-                    {stats.categories.map((cat, idx) => (
-                        <View key={idx} className="flex-col items-center min-w-[20%]">
-                            <Text className="text-gray-500 text-xs mb-1">{cat.text}</Text>
-                            <Text className="text-gray-900 font-bold text-sm">
-                                {formatCurrency(cat.value)}
-                            </Text>
-                            <View 
-                                style={{ backgroundColor: cat.color, height: 4, width: 40, borderRadius: 2 }} 
-                            />
-                        </View>
-                    ))}
+                <View className="flex-row flex-wrap justify-between gap-4 mt-8 w-full px-2">
+                    {stats.categories.map((cat, idx) => {
+                        const total = stats.categories.reduce((sum, c) => sum + c.value, 0);
+                        const percentage = Math.round((cat.value / total) * 100);
+                        
+                        return (
+                            <View key={idx} className="flex-col min-w-[28%]">
+                                <Text className="text-gray-500 text-xs mb-1">{cat.text}</Text>
+                                <Text className="text-gray-900 font-bold text-2xl mb-2">
+                                    {percentage}%
+                                </Text>
+                                {/* Progress bar */}
+                                <View className="w-full h-1 bg-gray-200 rounded-full overflow-hidden">
+                                    <View 
+                                        style={{ 
+                                            backgroundColor: cat.color, 
+                                            height: '100%', 
+                                            width: `${percentage}%`,
+                                            borderRadius: 9999
+                                        }} 
+                                    />
+                                </View>
+                            </View>
+                        );
+                    })}
                 </View>
             </View>
 

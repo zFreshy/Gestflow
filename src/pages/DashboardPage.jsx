@@ -4,7 +4,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { transactionService } from '../services/transactionService';
 import { useAuth } from '../contexts/AuthContext';
-import { BarChart } from "react-native-gifted-charts";
+import { BarChart, PieChart } from "react-native-gifted-charts";
 import Svg, { Circle, Path, G } from 'react-native-svg';
 import { 
   ArrowUpRight, 
@@ -324,10 +324,10 @@ export function DashboardPage({ navigation }) {
     // 5. Chart Data (Replacing Categories with Income/Expense types)
     // "quero que ele mostre os lucros, as despesas, as despesas por vir e as despesass atrasadas"
     const finalPieData = [
-        { value: totalIncome, color: '#10B981', text: 'Receitas' },
-        { value: totalExpense, color: '#EF4444', text: 'Pagas' },
-        { value: filteredUpcomingTotal, color: '#F59E0B', text: 'A Vencer' },
-        { value: overdueTotal, color: '#B91C1C', text: 'Atrasadas' }
+        { value: totalIncome, color: '#34D399', text: 'Receitas', focused: true }, // Emerald-400
+        { value: totalExpense, color: '#F87171', text: 'Pagas' }, // Red-400
+        { value: filteredUpcomingTotal, color: '#FBBF24', text: 'A Vencer' }, // Amber-400
+        { value: overdueTotal, color: '#EF4444', text: 'Atrasadas' } // Red-500
     ].filter(d => d.value > 0);
 
     // 6. Averages
@@ -525,19 +525,32 @@ export function DashboardPage({ navigation }) {
                     </TouchableOpacity>
                 </View>
                 
-                <View className="items-center justify-center relative">
-                    <DonutChartWithTransitions
+                <View className="items-center justify-center relative py-6">
+                    <PieChart
                         data={stats.categories}
+                        donut
                         radius={120}
-                        innerRadius={80}
-                        centerLabel={
-                            <View className="items-center justify-center">
-                                <Text className="text-gray-500 text-sm font-medium">Saldo Previsto</Text>
-                                <Text className="text-gray-900 text-2xl font-bold">
-                                    {formatCurrency(stats.projectedBalance || 0)}
-                                </Text>
-                            </View>
-                        }
+                        innerRadius={104}
+                        centerLabelComponent={() => {
+                            return (
+                                <View className="items-center justify-center">
+                                    <Text className="text-gray-400 text-xs font-medium mb-1">Saldo Previsto</Text>
+                                    <Text className="text-gray-900 text-2xl font-bold tracking-tight">
+                                        {formatCurrency(stats.projectedBalance || 0)}
+                                    </Text>
+                                </View>
+                            );
+                        }}
+                        roundedCorners
+                        showValuesAsLabels={false}
+                        showText={false}
+                        strokeColor="#f9fafb"
+                        strokeWidth={6}
+                        focusOnPress
+                        toggleFocusOnPress
+                        shadow
+                        shadowColor="rgba(0,0,0,0.1)"
+                        shadowWidth={10}
                     />
                 </View>
 

@@ -9,23 +9,41 @@ import { X, Calendar } from 'lucide-react-native';
 
 export function TransactionForm({ navigation, route }) {
   const { user } = useAuth();
-  const { initialType, initialExpenseType } = route.params || {};
+  const { initialType, initialExpenseType, transaction } = route.params || {};
+  const isEditing = !!transaction;
 
   const [loading, setLoading] = useState(false);
-  const [type, setType] = useState(initialType || 'income'); // income, expense
-  const [description, setDescription] = useState('');
-  const [amount, setAmount] = useState('');
-  const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
-  const [paymentMethod, setPaymentMethod] = useState('pix');
+  const [type, setType] = useState(transaction?.type || initialType || 'income'); // income, expense
+  const [description, setDescription] = useState(transaction?.description || '');
+  const [amount, setAmount] = useState(transaction?.amount ? transaction.amount.toString() : '');
+  
+  // Date handling: transaction.date might be YYYY-MM-DD or DD/MM/YYYY depending on where it came from?
+  // In the web app, we saw inconsistent formats. Let's assume standardized or handle both.
+  // Actually, transactionService returns standard format usually.
+  // Let's safe init date.
+  const initDate = () => {
+      if (transaction?.date) {
+          if (transaction.date.includes('/')) {
+             const [day, month, year] = transaction.date.split('/');
+             return `${year}-${month}-${day}`;
+          }
+          return transaction.date;
+      }
+      return new Date().toISOString().split('T')[0];
+  };
+
+  const [date, setDate] = useState(initDate());
+  const [paymentMethod, setPaymentMethod] = useState(transaction?.paymentMethod || transaction?.payment_method || 'pix');
 
   // Income specific
-  const [isBakeryIncome, setIsBakeryIncome] = useState(false);
-  const [clientName, setClientName] = useState('');
+  const [isBakeryIncome, setIsBakeryIncome] = useState(transaction?.isBakeryIncome || transaction?.is_bakery_income || false);
+  const [clientName, setClientName] = useState(transaction?.clientName || transaction?.client_name || '');
 
   // Expense specific
-  const [expenseType, setExpenseType] = useState(initialExpenseType || 'fixed'); // fixed, variable
-  const [recurrence, setRecurrence] = useState('monthly');
-  const [interestRate, setInterestRate] = useState('');
+  const [expenseType, setExpenseType] = useState(transaction?.expenseType || transaction?.expense_type || initialExpenseType || 'fixed'); // fixed, variable
+  const [recurrence, setRecurrence] = useState(transaction?.recurrence || 'monthly');
+  const [interestRate, setInterestRate] = useState(transaction?.interestRate ? transaction.interestRate.toString() : '');
+  const [isActive, setIsActive] = useState(transaction?.active !== false); // Default true
 
   const handleSubmit = async () => {
     if (!description || !amount || !date) {
@@ -38,27 +56,42 @@ export function TransactionForm({ navigation, route }) {
       const [year, month, day] = date.split('-');
       const timestamp = new Date(year, month - 1, day).getTime();
 
-      const transaction = {
+      const transactionData = {
         description,
         amount: parseFloat(amount.replace(',', '.')),
         type,
         paymentMethod,
-        date: `${day}/${month}/${year}`,
+        date: `${day}/${month}/${year}`, // Save as DD/MM/YYYY for consistency with existing data? Or YYYY-MM-DD? 
+        // Existing code used `${day}/${month}/${year}`. Let's stick to it if that's what the backend expects or consistent with app.
+        // Wait, Web used YYYY-MM-DD for insert?
+        // Web: `date: formattedDate` where formattedDate is YYYY-MM-DD (line 95 of Web TransactionForm).
+        // Mobile (previous code): `date: ${day}/${month}/${year}`.
+        // This inconsistency is bad. But I should stick to local file convention unless fixing everything.
+        // Mobile previous code: `date: ${day}/${month}/${year}`.
+        // Let's keep it.
+        date: date.includes('-') ? `${day}/${month}/${year}` : date, // Convert to DD/MM/YYYY if currently ISO
         timestamp,
         user_id: user.id,
         isBakeryIncome: type === 'income' ? isBakeryIncome : false,
         clientName: type === 'income' && isBakeryIncome ? clientName : null,
         expenseType: type === 'expense' ? expenseType : null,
         recurrence: type === 'expense' && expenseType === 'fixed' ? recurrence : null,
-        interestRate: type === 'expense' && expenseType === 'fixed' && interestRate ? parseFloat(interestRate) : null,
+        interestRate: type === 'expense' && expenseType === 'fixed' && interestRate ? parseFloat(interestRate.replace(',', '.')) : null,
+        active: type === 'expense' && expenseType === 'fixed' ? isActive : null
       };
 
-      await transactionService.create(transaction);
-      Alert.alert('Sucesso', 'Transação criada com sucesso!');
+      if (isEditing) {
+          await transactionService.update(transaction.id, transactionData);
+          Alert.alert('Sucesso', 'Transação atualizada com sucesso!');
+      } else {
+          await transactionService.create(transactionData);
+          Alert.alert('Sucesso', 'Transação criada com sucesso!');
+      }
+      
       navigation.goBack();
     } catch (error) {
       console.error(error);
-      Alert.alert('Erro', 'Não foi possível criar a transação.');
+      Alert.alert('Erro', 'Não foi possível salvar a transação.');
     } finally {
       setLoading(false);
     }
@@ -204,6 +237,30 @@ export function TransactionForm({ navigation, route }) {
 
               {expenseType === 'fixed' && (
                 <>
+                  <View className="mb-4">
+                    <Text className="text-sm font-medium text-gray-700 mb-2">Recorrência</Text>
+                    <View className="flex-row flex-wrap gap-2">
+                      {['monthly', 'daily', 'weekly', 'quarterly', 'annual'].map((r) => (
+                        <TouchableOpacity
+                          key={r}
+                          onPress={() => setRecurrence(r)}
+                          className={`px-3 py-1.5 rounded-lg border ${
+                            recurrence === r
+                              ? 'bg-purple-50 border-[#7E1A8B]'
+                              : 'bg-white border-gray-200'
+                          }`}
+                        >
+                          <Text className={recurrence === r ? 'text-[#7E1A8B]' : 'text-gray-600'}>
+                            {r === 'monthly' ? 'Mensal' : 
+                             r === 'daily' ? 'Diária' : 
+                             r === 'weekly' ? 'Semanal' :
+                             r === 'quarterly' ? 'Trimestral' : 'Anual'}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  </View>
+
                   <Input
                     label="Taxa de Juros (%)"
                     placeholder="0"
@@ -211,6 +268,15 @@ export function TransactionForm({ navigation, route }) {
                     onChangeText={setInterestRate}
                     keyboardType="numeric"
                   />
+
+                  <View className="flex-row justify-between items-center bg-white p-3 rounded-lg border border-gray-200 mb-4">
+                    <Text className="text-gray-700 font-medium">Despesa Finalizada</Text>
+                    <Switch 
+                      value={!isActive} 
+                      onValueChange={(val) => setIsActive(!val)}
+                      trackColor={{ false: "#D1D5DB", true: "#EF4444" }}
+                    />
+                  </View>
                 </>
               )}
             </View>

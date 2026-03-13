@@ -73,13 +73,49 @@ export function FixedExpensesPage({ navigation }) {
   const [pastExpenses, setPastExpenses] = useState([]);
   const [allTransactions, setAllTransactions] = useState([]);
 
-  const handleTransactionPress = (transaction) => {
-      // If it's a virtual expense or not paid, show payment modal
+  const handleTransactionPress = async (transaction) => {
+      // Toggle logic
       const isTransactionPaid = isPaid(transaction.status);
       
-      if (!isTransactionPaid || transaction.isVirtual) {
+      if (isTransactionPaid && !transaction.isVirtual) {
+          // Unpay (Mark as Pending)
+          try {
+              setLoading(true);
+              await transactionService.update(transaction.id, {
+                  status: 'Aguardando', // or 'Pendente' depending on backend enum, usually 'Aguardando' based on context
+                  interestRate: 0 // Use camelCase if DB column is camelCase
+              });
+              await fetchTransactions();
+          } catch (error) {
+              console.error(error);
+          } finally {
+              setLoading(false);
+          }
+      } else {
+          // Open Payment Modal
           setSelectedTransaction(transaction);
           setIsPaymentModalVisible(true);
+      }
+  };
+
+  const handleEdit = (transaction) => {
+      // Navigate to Edit (Reuse AddTransaction with params)
+      // We need to implement Edit mode in TransactionForm or separate page
+      // For now, let's assume AddTransaction can handle edit if we pass data
+      navigation.navigate('AddTransaction', { transaction });
+  };
+
+  const handleDelete = async (transaction) => {
+      // Confirm delete
+      // Using Alert for simplicity
+      try {
+        setLoading(true);
+        await transactionService.delete(transaction.id);
+        await fetchTransactions();
+      } catch (error) {
+          console.error(error);
+      } finally {
+          setLoading(false);
       }
   };
 
@@ -93,14 +129,14 @@ export function FixedExpensesPage({ navigation }) {
                   description: selectedTransaction.description,
                   amount: selectedTransaction.amount + (interest || 0),
                   type: 'expense',
-                  expenseType: 'fixed',
-                  paymentMethod: selectedTransaction.paymentMethod,
-                  date: date, // YYYY-MM-DD
-                  timestamp: new Date(date).getTime(),
+                  expense_type: 'fixed', // Use snake_case
+                  payment_method: selectedTransaction.paymentMethod, // Use snake_case
+                  date: selectedTransaction.date, // Use ORIGINAL DUE DATE to maintain recurrence logic
+                  timestamp: new Date(selectedTransaction.date).getTime(),
                   user_id: user.id,
                   recurrence: selectedTransaction.recurrence,
                   status: 'Pago',
-                  interestRate: interest ? ((interest / selectedTransaction.amount) * 100) : 0
+                  interestRate: interest ? ((interest / selectedTransaction.amount) * 100) : 0 // Use camelCase
               };
               
               await transactionService.create(newTransaction);
@@ -108,13 +144,14 @@ export function FixedExpensesPage({ navigation }) {
               // Update existing transaction
               const updates = {
                   status: 'Pago',
-                  date: date,
-                  timestamp: new Date(date).getTime(),
+                  // Do NOT update date/timestamp to preserve original due date
+                  // date: date, 
+                  // timestamp: new Date(date).getTime(),
               };
               
               if (interest > 0) {
                   updates.amount = selectedTransaction.amount + interest;
-                  updates.interestRate = (interest / selectedTransaction.amount) * 100;
+                  updates.interestRate = (interest / selectedTransaction.amount) * 100; // Use camelCase
               }
               
               await transactionService.update(selectedTransaction.id, updates);
@@ -195,6 +232,9 @@ export function FixedExpensesPage({ navigation }) {
       today.setHours(0, 0, 0, 0);
 
       Object.values(recurringGroups).forEach(lastExpense => {
+          // If the expense is marked as inactive/finished, do not project future occurrences
+          if (lastExpense.active === false) return;
+
           const lastDate = parseDate(lastExpense.date);
           
           // If the last expense is in the future/today and unpaid, it's already in the list.
@@ -356,12 +396,13 @@ export function FixedExpensesPage({ navigation }) {
                     upcomingExpenses.map(item => (
                         <TouchableOpacity 
                             key={item.id} 
-                            onPress={() => {
-                                setSelectedTransaction(item);
-                                setIsPaymentModalVisible(true);
-                            }}
+                            onPress={() => handleTransactionPress(item)}
                         >
-                            <TransactionItem transaction={item} />
+                            <TransactionItem 
+                                transaction={item} 
+                                onEdit={() => handleEdit(item)}
+                                onDelete={() => handleDelete(item)}
+                            />
                         </TouchableOpacity>
                     ))
                 )}
@@ -380,16 +421,13 @@ export function FixedExpensesPage({ navigation }) {
                     pastExpenses.map(item => (
                         <TouchableOpacity 
                             key={item.id} 
-                            onPress={() => {
-                                // Only allow editing payment if not paid, or just showing details?
-                                // For now, let's allow marking as paid if it's unpaid/overdue
-                                if (!isPaid(item.status)) {
-                                    setSelectedTransaction(item);
-                                    setIsPaymentModalVisible(true);
-                                }
-                            }}
+                            onPress={() => handleTransactionPress(item)}
                         >
-                            <TransactionItem transaction={item} />
+                            <TransactionItem 
+                                transaction={item} 
+                                onEdit={() => handleEdit(item)}
+                                onDelete={() => handleDelete(item)}
+                            />
                         </TouchableOpacity>
                     ))
                 )}

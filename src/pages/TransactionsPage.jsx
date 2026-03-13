@@ -65,6 +65,22 @@ export function TransactionsPage({ navigation }) {
     setFilteredTransactions(result);
   };
 
+  const handleEdit = (transaction) => {
+    navigation.navigate('AddTransaction', { transaction });
+  };
+
+  const handleDelete = async (transaction) => {
+    try {
+      setLoading(true);
+      await transactionService.delete(transaction.id);
+      await fetchTransactions();
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const FilterTab = ({ label, value, activeValue, onPress }) => (
     <TouchableOpacity
       onPress={() => onPress(activeValue === value ? 'all' : value)}
@@ -127,7 +143,13 @@ export function TransactionsPage({ navigation }) {
         <FlatList
           data={filteredTransactions}
           keyExtractor={item => item.id}
-          renderItem={({ item }) => <TransactionItem transaction={item} />}
+          renderItem={({ item }) => (
+            <TransactionItem 
+              transaction={item} 
+              onEdit={() => handleEdit(item)}
+              onDelete={() => handleDelete(item)}
+            />
+          )}
           contentContainerStyle={{ padding: 24, paddingBottom: 100 }}
           ListEmptyComponent={
             <View className="items-center justify-center py-20">

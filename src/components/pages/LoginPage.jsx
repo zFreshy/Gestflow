@@ -2,11 +2,12 @@
 import React, { useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNavigate, Link } from 'react-router-dom';
-import { Lock, Mail, Loader2, ArrowRight } from 'lucide-react';
+import { Lock, Mail, Loader2, ArrowRight, Eye, EyeOff } from 'lucide-react';
 
 export function LoginPage() {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
+    const [showPassword, setShowPassword] = useState(false);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
     const { signIn } = useAuth();
@@ -108,13 +109,20 @@ export function LoginPage() {
                                         <Lock className="h-5 w-5" />
                                     </div>
                                     <input
-                                        type="password"
+                                        type={showPassword ? "text" : "password"}
                                         required
                                         value={password}
                                         onChange={(e) => setPassword(e.target.value)}
-                                        className="w-full h-12 pl-11 pr-4 rounded-xl bg-white border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#7E1A8B]/20 focus:border-[#7E1A8B] transition-all placeholder:text-gray-400 font-medium"
+                                        className="w-full h-12 pl-11 pr-12 rounded-xl bg-white border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#7E1A8B]/20 focus:border-[#7E1A8B] transition-all placeholder:text-gray-400 font-medium"
                                         placeholder="••••••••"
                                     />
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowPassword(!showPassword)}
+                                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-[#7E1A8B] transition-colors focus:outline-none"
+                                    >
+                                        {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                                    </button>
                                 </div>
                             </div>
                         </div>

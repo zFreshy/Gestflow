@@ -526,17 +526,20 @@ export function DashboardPage({ navigation }) {
                 <View style={{ marginBottom: 6, alignItems: 'center' }}>
                     <View style={{
                         backgroundColor: 'white',
-                        paddingHorizontal: 8,
-                        paddingVertical: 4,
+                        paddingHorizontal: 12,
+                        paddingVertical: 6,
                         borderRadius: 8,
+                        minWidth: 80,
+                        alignItems: 'center',
+                        justifyContent: 'center',
                         shadowColor: '#000',
                         shadowOffset: {width: 0, height: 2},
                         shadowOpacity: 0.15,
                         shadowRadius: 3,
                         elevation: 4,
                     }}>
-                        <Text style={{ fontSize: 10, color: '#F472B6', fontWeight: 'bold' }}>
-                            {formatCurrency(item.originalValue)}
+                        <Text style={{ fontSize: 12, color: '#F472B6', fontWeight: 'bold', textAlign: 'center' }} numberOfLines={1}>
+                            {formatCurrency(item.originalValue || 0)}
                         </Text>
                     </View>
                     <View style={{
@@ -544,10 +547,10 @@ export function DashboardPage({ navigation }) {
                         height: 0,
                         backgroundColor: 'transparent',
                         borderStyle: 'solid',
-                        borderLeftWidth: 5,
-                        borderRightWidth: 5,
+                        borderLeftWidth: 6,
+                        borderRightWidth: 6,
                         borderBottomWidth: 0,
-                        borderTopWidth: 5,
+                        borderTopWidth: 6,
                         borderLeftColor: 'transparent',
                         borderRightColor: 'transparent',
                         borderTopColor: 'white',
@@ -939,7 +942,7 @@ export function DashboardPage({ navigation }) {
                  <View className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm relative flex-row items-center">
                     <View className="flex-1">
                         <View className="flex-row items-center justify-between mb-2">
-                             <Text className="text-gray-500 text-xs font-medium">Exames por Convênios</Text>
+                             <Text className="text-gray-500 text-xs font-medium">Vendas por Convênios</Text>
                              <View className="bg-blue-50 p-1.5 rounded-full">
                                 <Users size={16} color="#3B82F6" />
                             </View>

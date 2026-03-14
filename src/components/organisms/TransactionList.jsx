@@ -4,6 +4,7 @@ import { Avatar } from '../atoms/Avatar';
 import { Search, ArrowUpDown, ChevronDown, Pencil, Trash2 } from 'lucide-react';
 import { Input } from '../atoms/Input';
 import { Select } from '../atoms/Select';
+import { cn } from '../../lib/utils';
 
 const METHOD_LABELS = {
     pix: 'Pix',
@@ -26,7 +27,7 @@ const RECURRENCE_MAP = {
     'biennial': 'Bienal'
 };
 
-export function TransactionList({ transactions, onEdit, onDelete }) {
+export function TransactionList({ transactions, onEdit, onDelete, viewMode = 'month' }) {
     const [searchTerm, setSearchTerm] = useState('');
     const [filterType, setFilterType] = useState('all');
     const [filterMethod, setFilterMethod] = useState('all');
@@ -41,13 +42,78 @@ export function TransactionList({ transactions, onEdit, onDelete }) {
 
     const sorted = [...filteredTransactions].sort((a, b) => b.timestamp - a.timestamp);
 
+    // Grouping Logic
+    const groupedTransactions = sorted.reduce((groups, transaction) => {
+        if (viewMode === 'year') {
+            // Group by Month (0-11)
+            const [day, month, year] = transaction.date.split('/');
+            const monthIndex = parseInt(month) - 1;
+            if (!groups[monthIndex]) {
+                groups[monthIndex] = [];
+            }
+            groups[monthIndex].push(transaction);
+        } else {
+            // Group by Date
+            const date = transaction.date;
+            if (!groups[date]) {
+                groups[date] = [];
+            }
+            groups[date].push(transaction);
+        }
+        return groups;
+    }, {});
+
+    const sortedGroupKeys = Object.keys(groupedTransactions).sort((a, b) => {
+        if (viewMode === 'year') {
+            return parseInt(a) - parseInt(b);
+        } else {
+            // Sort dates descending
+            const [dayA, monthA, yearA] = a.split('/');
+            const [dayB, monthB, yearB] = b.split('/');
+            return new Date(yearB, monthB - 1, dayB) - new Date(yearA, monthA - 1, dayA);
+        }
+    });
+
+    const getGroupLabel = (key) => {
+        if (viewMode === 'year') {
+            const MONTHS = [
+                'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+                'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
+            ];
+            return MONTHS[parseInt(key)];
+        } else {
+            return getDayLabel(key);
+        }
+    };
+
+    const getDayLabel = (dateStr) => {
+        if (!dateStr) return '';
+        const [day, month, year] = dateStr.split('/');
+        const date = new Date(year, month - 1, day);
+
+        const today = new Date();
+        if (date.getDate() === today.getDate() && 
+            date.getMonth() === today.getMonth() && 
+            date.getFullYear() === today.getFullYear()) {
+            return 'Hoje';
+        }
+
+        return date.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' });
+    };
+
+    const getDayTotal = (transactions) => {
+        return transactions.reduce((acc, t) => {
+            return acc + (t.type === 'income' ? t.amount : -t.amount);
+        }, 0);
+    };
+
     return (
         <div className="bg-card rounded-2xl border shadow-sm">
             {/* Header */}
             <div className="flex flex-col gap-4 px-6 py-5 border-b border-gray-100">
                 <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
-                        <h3 className="text-lg font-bold">Transações Recentes</h3>
+                        <h3 className="text-lg font-bold">Transações</h3>
                         <span className="bg-gray-100 text-gray-600 text-xs font-bold px-2.5 py-1 rounded-md">
                             {filteredTransactions.length}
                         </span>
@@ -97,162 +163,104 @@ export function TransactionList({ transactions, onEdit, onDelete }) {
                 </div>
             </div>
 
-            {/* Table */}
+            {/* List */}
             {sorted.length === 0 ? (
                 <div className="h-40 flex items-center justify-center text-muted-foreground text-sm border-t">
-                    Nenhuma transação encontrada neste mês.
+                    Nenhuma transação encontrada.
                 </div>
             ) : (
-                <div className="overflow-x-auto">
-                    <table className="w-full">
-                        <thead>
-                            <tr className="border-t">
-                                <th className="px-6 py-3 text-left">
-                                    <div className="flex items-center gap-1 text-xs font-medium text-muted-foreground uppercase tracking-wider cursor-pointer hover:text-foreground transition-colors">
-                                        <ArrowUpDown className="h-3 w-3" /> Descrição
-                                    </div>
-                                </th>
-                                <th className="px-6 py-3 text-left">
-                                    <div className="flex items-center gap-1 text-xs font-medium text-muted-foreground uppercase tracking-wider cursor-pointer hover:text-foreground transition-colors">
-                                        Tipo <ArrowUpDown className="h-3 w-3" />
-                                    </div>
-                                </th>
-                                <th className="px-6 py-3 text-left">
-                                    <div className="flex items-center gap-1 text-xs font-medium text-muted-foreground uppercase tracking-wider cursor-pointer hover:text-foreground transition-colors">
-                                        Data <ArrowUpDown className="h-3 w-3" />
-                                    </div>
-                                </th>
-                                <th className="px-6 py-3 text-left">
-                                    <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                                        Método
-                                    </div>
-                                </th>
-                                <th className="px-6 py-3 text-left">
-                                    <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                                        Valor
-                                    </div>
-                                </th>
-                                <th className="px-6 py-3 text-left">
-                                    <div className="flex items-center gap-1 text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                                        Status <ArrowUpDown className="h-3 w-3" />
-                                    </div>
-                                </th>
-                                {(onEdit || onDelete) && (
-                                    <th className="px-6 py-3 text-right">
-                                        <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                                            Ações
-                                        </div>
-                                    </th>
-                                )}
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {sorted.map((t) => {
-                                const isIncome = t.type === 'income';
-                                
-                                // Determine status label and color
-                                let statusLabel = STATUS_MAP[t.type].label;
-                                let statusColor = STATUS_MAP[t.type].color;
+                <div className="divide-y divide-gray-100">
+                    {sortedGroupKeys.map(key => (
+                        <div key={key} className="p-4 md:p-6">
+                            <div className="flex items-center justify-between mb-4">
+                                <h4 className={cn(
+                                    "text-sm font-semibold capitalize",
+                                    getGroupLabel(key) === 'Hoje' ? "text-blue-600" : 
+                                    viewMode === 'year' ? "text-lg text-[#7E1A8B]" : "text-gray-500"
+                                )}>
+                                    {getGroupLabel(key)}
+                                </h4>
+                                <span className={`text-sm font-bold ${getDayTotal(groupedTransactions[key]) >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                                    {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(getDayTotal(groupedTransactions[key]))}
+                                </span>
+                            </div>
+                            
+                            <div className="space-y-3">
+                                {groupedTransactions[key].map(t => {
+                                    const isIncome = t.type === 'income';
+                                    let statusLabel = STATUS_MAP[t.type].label;
+                                    let statusColor = STATUS_MAP[t.type].color;
 
-                                if (t.type === 'expense' && t.expenseType === 'fixed') {
-                                    if (t.status === 'Pago' || t.status === 'Liberado') {
-                                        statusLabel = 'Pago';
-                                        statusColor = 'text-emerald-500';
-                                    } else {
-                                        statusLabel = 'Pendente';
-                                        statusColor = 'text-amber-500';
+                                    if (t.type === 'expense' && t.expenseType === 'fixed') {
+                                        if (t.status === 'Pago' || t.status === 'Liberado') {
+                                            statusLabel = 'Pago';
+                                            statusColor = 'text-emerald-500';
+                                        } else {
+                                            statusLabel = 'Pendente';
+                                            statusColor = 'text-amber-500';
+                                        }
                                     }
-                                }
 
-                                const formattedAmount = new Intl.NumberFormat('pt-BR', {
-                                    style: 'currency', currency: 'BRL'
-                                }).format(t.amount);
+                                    const formattedAmount = new Intl.NumberFormat('pt-BR', {
+                                        style: 'currency', currency: 'BRL'
+                                    }).format(t.amount);
 
-                                return (
-                                    <tr
-                                        key={t.id}
-                                        className="border-t hover:bg-gray-50/80 transition-colors group"
-                                    >
-                                        <td className="px-6 py-4">
-                                            <div className="flex items-center gap-3">
+                                    return (
+                                        <div key={t.id} className="flex items-center justify-between p-3 rounded-xl border border-gray-100 hover:bg-gray-50 transition-colors group">
+                                            <div className="flex items-center gap-4">
                                                 <Avatar name={t.description} size="sm" />
                                                 <div>
-                                                    <p className="text-sm font-medium leading-tight">{t.description}</p>
-                                                    <div className="flex flex-col gap-0.5 mt-0.5">
-                                                        <p className="text-xs text-emerald-500">
+                                                    <p className="font-semibold text-gray-900">{t.description}</p>
+                                                    <div className="flex items-center gap-2 mt-0.5">
+                                                        <span className="text-xs text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">
                                                             {METHOD_LABELS[t.paymentMethod]}
-                                                        </p>
+                                                        </span>
                                                         {t.expenseType === 'fixed' && (
-                                                            <p className="text-[10px] text-gray-400 flex items-center gap-1">
-                                                                <span className="bg-gray-100 px-1.5 py-0.5 rounded">Fixa</span>
-                                                                {t.recurrence && (
-                                                                    <span>• {RECURRENCE_MAP[t.recurrence.toLowerCase()] || t.recurrence}</span>
-                                                                )}
-                                                            </p>
+                                                            <span className="text-xs text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded">
+                                                                Fixa
+                                                            </span>
                                                         )}
                                                     </div>
                                                 </div>
                                             </div>
-                                        </td>
-                                        <td className="px-6 py-4">
-                                            <span className="text-sm text-muted-foreground">
-                                                {isIncome ? '● Entrada' : '● Saída'}
-                                            </span>
-                                        </td>
-                                        <td className="px-6 py-4 text-sm text-muted-foreground whitespace-nowrap">
-                                            {t.date}
-                                        </td>
-                                        <td className="px-6 py-4 text-sm">
-                                            <span className="text-muted-foreground">
-                                                {METHOD_LABELS[t.paymentMethod] || t.paymentMethod}
-                                            </span>
-                                        </td>
-                                        <td className="px-6 py-4">
-                                            <span className={`text-sm font-semibold ${isIncome ? 'text-emerald-600' : 'text-red-500'}`}>
-                                                {isIncome ? '+' : '-'} {formattedAmount}
-                                            </span>
-                                        </td>
-                                        <td className="px-6 py-4">
-                                            <div className="flex flex-col gap-1">
-                                                <span className={`text-sm font-semibold ${statusColor}`}>
-                                                    {statusLabel}
-                                                </span>
-                                                {t.status === 'Pago' && t.date && (
-                                                    <span className="text-[10px] text-muted-foreground">
-                                                        Pago em: {t.date}
+
+                                            <div className="flex items-center gap-6">
+                                                <div className="text-right">
+                                                    <span className={`block font-bold ${isIncome ? 'text-emerald-600' : 'text-red-600'}`}>
+                                                        {isIncome ? '+' : '-'} {formattedAmount}
                                                     </span>
+                                                    <span className={`text-xs font-medium ${statusColor}`}>
+                                                        {statusLabel}
+                                                    </span>
+                                                </div>
+
+                                                {(onEdit || onDelete) && (
+                                                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                        {onEdit && (
+                                                            <button 
+                                                                onClick={() => onEdit(t)}
+                                                                className="p-1.5 hover:bg-gray-200 rounded-lg text-gray-500 hover:text-blue-600 transition-colors"
+                                                            >
+                                                                <Pencil className="h-4 w-4" />
+                                                            </button>
+                                                        )}
+                                                        {onDelete && (
+                                                            <button 
+                                                                onClick={() => onDelete(t.id)}
+                                                                className="p-1.5 hover:bg-gray-200 rounded-lg text-gray-500 hover:text-red-600 transition-colors"
+                                                            >
+                                                                <Trash2 className="h-4 w-4" />
+                                                            </button>
+                                                        )}
+                                                    </div>
                                                 )}
                                             </div>
-                                        </td>
-                                        {(onEdit || onDelete) && (
-                                            <td className="px-6 py-4 text-right">
-                                                <div className="flex items-center justify-end gap-2 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
-                                                    {onEdit && (
-                                                        <button 
-                                                            onClick={() => onEdit(t)}
-                                                            className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-500 hover:text-blue-600 transition-colors"
-                                                            title="Editar"
-                                                        >
-                                                            <Pencil className="h-4 w-4" />
-                                                        </button>
-                                                    )}
-                                                    {onDelete && (
-                                                        <button 
-                                                            onClick={() => onDelete(t.id)}
-                                                            className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-500 hover:text-red-600 transition-colors"
-                                                            title="Excluir"
-                                                        >
-                                                            <Trash2 className="h-4 w-4" />
-                                                        </button>
-                                                    )}
-                                                </div>
-                                            </td>
-                                        )}
-                                    </tr>
-                                );
-                            })}
-                        </tbody>
-                    </table>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    ))}
                 </div>
             )}
         </div>

@@ -5,13 +5,14 @@ import { cn } from '../../lib/utils';
 import { Input } from '../atoms/Input';
 import { Select } from '../atoms/Select';
 import { PaymentModal } from '../organisms/PaymentModal';
+import { MonthSelector } from '../molecules/MonthSelector';
 
 export function FixedExpensesPage({ transactions, onUpdateStatus, onAddTransaction, onEdit, onDelete }) {
+    const [currentMonth, setCurrentMonth] = useState(new Date());
+    const [viewMode, setViewMode] = useState('month'); // 'month' | 'year'
     const [searchTerm, setSearchTerm] = useState('');
     const [filterStatus, setFilterStatus] = useState('all'); // 'all', 'paid', 'pending'
-    const [currentPage, setCurrentPage] = useState(1);
     const [selectedPayment, setSelectedPayment] = useState(null); // Modal control
-    const itemsPerPage = 5;
 
     // Helper: Normalize Status
     const isPaid = (status) => ['Pago', 'Liberado'].includes(status);
@@ -246,64 +247,86 @@ export function FixedExpensesPage({ transactions, onUpdateStatus, onAddTransacti
     });
 
     // 4. Apply Filters (Search & Status)
+    let filteredExpenses = allCandidates;
+
+    // Filter by Month or Year
+    filteredExpenses = filteredExpenses.filter(t => {
+        const tDate = parseDate(t.date);
+        const sameYear = tDate.getFullYear() === currentMonth.getFullYear();
+        
+        if (viewMode === 'year') {
+            return sameYear;
+        }
+        
+        return sameYear && tDate.getMonth() === currentMonth.getMonth();
+    });
+
     if (searchTerm) {
         const lowerTerm = searchTerm.toLowerCase();
-        allCandidates = allCandidates.filter(t => t.description.toLowerCase().includes(lowerTerm));
+        filteredExpenses = filteredExpenses.filter(t => t.description.toLowerCase().includes(lowerTerm));
     }
 
     if (filterStatus !== 'all') {
         if (filterStatus === 'paid') {
-            allCandidates = allCandidates.filter(t => isPaid(t.status));
+            filteredExpenses = filteredExpenses.filter(t => isPaid(t.status));
         } else if (filterStatus === 'pending') {
-            allCandidates = allCandidates.filter(t => !isPaid(t.status));
+            filteredExpenses = filteredExpenses.filter(t => !isPaid(t.status));
         }
     }
 
-    // 5. Split into Upcoming vs Past
-    const upcomingExpenses = [];
-    const pastExpenses = [];
+    // Sort by Date (Ascending)
+    filteredExpenses.sort((a, b) => parseDate(a.date) - parseDate(b.date));
 
-    allCandidates.forEach(t => {
-        const tDate = parseDate(t.date);
-        const paid = isPaid(t.status);
-
-        // Logic for splitting:
-        // Upcoming: Future dates (>= today) AND Not Paid
-        // Past: Past dates (< today) OR Paid items
+    // Grouping Logic
+    const groupedExpenses = filteredExpenses.reduce((groups, expense) => {
+        const date = parseDate(expense.date);
         
-        if (tDate < today || paid) {
-            pastExpenses.push(t);
+        if (viewMode === 'year') {
+            // Group by Month (0-11)
+            const monthKey = date.getMonth();
+            if (!groups[monthKey]) {
+                groups[monthKey] = [];
+            }
+            groups[monthKey].push(expense);
         } else {
-            upcomingExpenses.push(t);
+            // Group by Date (DD/MM/YYYY)
+            const dateKey = expense.date;
+            if (!groups[dateKey]) {
+                groups[dateKey] = [];
+            }
+            groups[dateKey].push(expense);
+        }
+        return groups;
+    }, {});
+
+    const sortedGroupKeys = Object.keys(groupedExpenses).sort((a, b) => {
+        if (viewMode === 'year') {
+            // Sort by Month Index (numeric)
+            return parseInt(a) - parseInt(b);
+        } else {
+            // Sort by Date
+            const dateA = parseDate(a);
+            const dateB = parseDate(b);
+            return dateA - dateB;
         }
     });
 
-    // 5. Sort Upcoming (Ascending Date: Today -> Future)
-    upcomingExpenses.sort((a, b) => parseDate(a.date) - parseDate(b.date));
-
-    // 6. Sort Past (Unpaid First, Then Descending Date: Yesterday -> Way back)
-    pastExpenses.sort((a, b) => {
-        const paidA = isPaid(a.status);
-        const paidB = isPaid(b.status);
-
-        // If payment status differs, Pending comes first (Pending is false, Paid is true)
-        if (paidA !== paidB) {
-            return paidA ? 1 : -1; 
+    const getGroupLabel = (key) => {
+        if (viewMode === 'year') {
+            const MONTHS = [
+                'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+                'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
+            ];
+            return MONTHS[parseInt(key)];
+        } else {
+            return getDayLabel(key);
         }
+    };
 
-        // If status is same, sort by Date Descending
-        return parseDate(b.date) - parseDate(a.date);
-    });
-
-    // 7. Pagination for Past Expenses
-    const totalPages = Math.ceil(pastExpenses.length / itemsPerPage);
-    const startIndex = (currentPage - 1) * itemsPerPage;
-    const paginatedPastExpenses = pastExpenses.slice(startIndex, startIndex + itemsPerPage);
-
-    const goToPage = (page) => {
-        if (page >= 1 && page <= totalPages) {
-            setCurrentPage(page);
-        }
+    const getDayLabel = (dateStr) => {
+        if (!dateStr) return '';
+        const date = parseDate(dateStr);
+        return date.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' });
     };
 
     const RECURRENCE_MAP = {
@@ -322,6 +345,7 @@ export function FixedExpensesPage({ transactions, onUpdateStatus, onAddTransacti
         // Check if overdue: not paid AND date < today
         const tDate = parseDate(expense.date);
         const isOverdue = !paid && tDate < today;
+        const isToday = !paid && tDate.getDate() === today.getDate() && tDate.getMonth() === today.getMonth() && tDate.getFullYear() === today.getFullYear();
         const isVirtual = expense.isVirtual;
 
         return (
@@ -330,6 +354,7 @@ export function FixedExpensesPage({ transactions, onUpdateStatus, onAddTransacti
                     "flex items-center justify-between p-4 rounded-xl border transition-all hover:bg-gray-50 group",
                     paid ? "bg-gray-50/50 border-gray-100" : "bg-white border-gray-200",
                     isOverdue && "border-red-100 bg-red-50/30",
+                    isToday && "border-blue-200 bg-blue-50/30",
                     isVirtual && "border-amber-100 bg-amber-50/20 border-dashed"
                 )}
             >
@@ -341,7 +366,8 @@ export function FixedExpensesPage({ transactions, onUpdateStatus, onAddTransacti
                             paid
                                 ? "bg-emerald-100 text-emerald-600 hover:bg-emerald-200"
                                 : "bg-gray-100 text-gray-400 hover:bg-gray-200",
-                            !paid && isOverdue && "ring-2 ring-red-100"
+                            !paid && isOverdue && "ring-2 ring-red-100",
+                            !paid && isToday && "ring-2 ring-blue-100"
                         )}
                         title={paid ? "Marcar como pendente" : "Marcar como pago"}
                     >
@@ -356,8 +382,11 @@ export function FixedExpensesPage({ transactions, onUpdateStatus, onAddTransacti
                             {expense.description} {isVirtual && <span className="text-amber-600 text-xs font-normal">(Previsão)</span>}
                         </span>
                         <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                            <span className={cn(isOverdue && "text-red-600 font-medium")}>
-                                {paid ? `Pago em: ${expense.date}` : `Vence em: ${expense.date}`}
+                            <span className={cn(
+                                isOverdue && "text-red-600 font-medium",
+                                isToday && "text-blue-600 font-bold"
+                            )}>
+                                {paid ? `Pago em: ${expense.date}` : isToday ? 'Vence Hoje!' : `Vence em: ${expense.date}`}
                             </span>
                             <span>•</span>
                             <span>
@@ -397,11 +426,13 @@ export function FixedExpensesPage({ transactions, onUpdateStatus, onAddTransacti
                                 ? "bg-emerald-100 text-emerald-700" 
                                 : isOverdue 
                                     ? "bg-red-100 text-red-700"
-                                    : isVirtual 
-                                        ? "bg-amber-100 text-amber-700"
-                                        : "bg-amber-100 text-amber-700"
+                                    : isToday
+                                        ? "bg-blue-100 text-blue-700"
+                                        : isVirtual 
+                                            ? "bg-amber-100 text-amber-700"
+                                            : "bg-amber-100 text-amber-700"
                         )}>
-                            {paid ? 'Pago' : isOverdue ? 'Atrasada' : isVirtual ? 'Previsto' : 'Pendente'}
+                            {paid ? 'Pago' : isOverdue ? 'Atrasada' : isToday ? 'Vence Hoje' : isVirtual ? 'Previsto' : 'Pendente'}
                         </span>
                     </div>
 
@@ -442,118 +473,87 @@ export function FixedExpensesPage({ transactions, onUpdateStatus, onAddTransacti
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div className="flex flex-col gap-1">
                     <h1 className="text-2xl font-bold tracking-tight text-gray-900">Despesas Fixas</h1>
-                    <p className="text-muted-foreground text-sm">Gerencie suas contas recorrentes, pagamentos pendentes e histórico.</p>
+                    <p className="text-muted-foreground text-sm">Gerencie suas contas recorrentes.</p>
                 </div>
                 
-                {/* Search and Filter Bar */}
-                <div className="flex gap-3 w-full md:w-auto">
-                    <div className="relative flex-1 md:w-64">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                        <Input 
-                            placeholder="Buscar despesa..." 
-                            className="pl-9 h-10"
-                            value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
-                        />
-                    </div>
-                    <div className="w-36">
-                        <Select 
-                            value={filterStatus} 
-                            onChange={(e) => setFilterStatus(e.target.value)}
-                            className="h-10"
+                <div className="flex items-center gap-2">
+                    <div className="bg-gray-100 p-1 rounded-lg flex items-center">
+                        <button
+                            onClick={() => setViewMode('month')}
+                            className={cn(
+                                "px-3 py-1.5 rounded-md text-sm font-medium transition-all",
+                                viewMode === 'month' 
+                                    ? "bg-white text-gray-900 shadow-sm" 
+                                    : "text-gray-500 hover:text-gray-900"
+                            )}
                         >
-                            <option value="all">Todos</option>
-                            <option value="pending">Pendentes</option>
-                            <option value="paid">Pagas</option>
-                        </Select>
+                            Mensal
+                        </button>
+                        <button
+                            onClick={() => setViewMode('year')}
+                            className={cn(
+                                "px-3 py-1.5 rounded-md text-sm font-medium transition-all",
+                                viewMode === 'year' 
+                                    ? "bg-white text-gray-900 shadow-sm" 
+                                    : "text-gray-500 hover:text-gray-900"
+                            )}
+                        >
+                            Anual
+                        </button>
                     </div>
+                    <MonthSelector currentDate={currentMonth} onMonthChange={setCurrentMonth} viewMode={viewMode} />
                 </div>
             </div>
 
-            {/* Section 1: Upcoming Expenses */}
-            <Card className="border-l-4 border-l-amber-400">
-                <CardHeader>
-                    <CardTitle className="text-lg flex items-center gap-2 text-amber-700">
-                        <Calendar className="h-5 w-5" />
-                        Despesas por Vir
-                    </CardTitle>
-                </CardHeader>
-                <CardContent>
-                    {upcomingExpenses.length === 0 ? (
-                        <div className="text-center py-8 text-muted-foreground text-sm">
-                            Nenhuma despesa para os próximos dias.
+            {/* Search and Filter Bar */}
+            <div className="flex flex-col md:flex-row gap-3 w-full">
+                <div className="relative flex-1">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input 
+                        placeholder="Buscar despesa..." 
+                        className="pl-9 h-10"
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                    />
+                </div>
+                <div className="w-full md:w-48">
+                    <Select 
+                        value={filterStatus} 
+                        onChange={(e) => setFilterStatus(e.target.value)}
+                        className="h-10"
+                    >
+                        <option value="all">Todos os Status</option>
+                        <option value="pending">Pendentes</option>
+                        <option value="paid">Pagas</option>
+                    </Select>
+                </div>
+            </div>
+
+            <Card className="border-none shadow-none bg-transparent">
+                <CardContent className="p-0">
+                    {filteredExpenses.length === 0 ? (
+                        <div className="text-center py-12 bg-white rounded-2xl border border-dashed border-gray-200">
+                            <Calendar className="h-10 w-10 text-gray-300 mx-auto mb-3" />
+                            <p className="text-gray-500 font-medium">Nenhuma despesa para este {viewMode === 'year' ? 'ano' : 'mês'}.</p>
+                            <p className="text-xs text-gray-400 mt-1">Tente mudar o período ou os filtros.</p>
                         </div>
                     ) : (
-                        <div className="space-y-2">
-                            {upcomingExpenses.map(expense => (
-                                <TransactionItem key={expense.id} expense={expense} />
-                            ))}
-                        </div>
-                    )}
-                </CardContent>
-            </Card>
-
-            {/* Section 2: Past Expenses (History) */}
-            <Card>
-                <CardHeader>
-                    <CardTitle className="text-lg flex items-center gap-2 text-gray-700">
-                        <History className="h-5 w-5" />
-                        Despesas Anteriores
-                    </CardTitle>
-                </CardHeader>
-                <CardContent>
-                    {paginatedPastExpenses.length === 0 ? (
-                        <div className="text-center py-8 text-muted-foreground text-sm">
-                            Nenhuma despesa anterior encontrada.
-                        </div>
-                    ) : (
-                        <div className="space-y-4">
-                            <div className="space-y-2">
-                                {paginatedPastExpenses.map(expense => (
-                                    <TransactionItem key={expense.id} expense={expense} />
-                                ))}
-                            </div>
-
-                            {/* Pagination Controls */}
-                            {totalPages > 1 && (
-                                <div className="flex items-center justify-between pt-4 border-t border-gray-100">
-                                    <div className="text-xs text-muted-foreground">
-                                        Página {currentPage} de {totalPages}
-                                    </div>
-                                    <div className="flex items-center gap-2">
-                                        <button
-                                            onClick={() => goToPage(currentPage - 1)}
-                                            disabled={currentPage === 1}
-                                            className="p-2 rounded-lg hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                                        >
-                                            <ChevronLeft className="h-4 w-4 text-gray-600" />
-                                        </button>
-                                        <div className="flex items-center gap-1">
-                                            {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
-                                                <button
-                                                    key={page}
-                                                    onClick={() => goToPage(page)}
-                                                    className={cn(
-                                                        "w-8 h-8 rounded-lg text-xs font-medium transition-colors",
-                                                        currentPage === page
-                                                            ? "bg-[#7E1A8B] text-white"
-                                                            : "text-gray-600 hover:bg-gray-100"
-                                                    )}
-                                                >
-                                                    {page}
-                                                </button>
-                                            ))}
-                                        </div>
-                                        <button
-                                            onClick={() => goToPage(currentPage + 1)}
-                                            disabled={currentPage === totalPages}
-                                            className="p-2 rounded-lg hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                                        >
-                                            <ChevronRight className="h-4 w-4 text-gray-600" />
-                                        </button>
+                        <div className="space-y-6">
+                            {sortedGroupKeys.map(key => (
+                                <div key={key}>
+                                    <h4 className={cn(
+                                        "text-sm font-semibold capitalize mb-3 ml-1",
+                                        viewMode === 'year' ? "text-lg text-[#7E1A8B]" : "text-gray-500"
+                                    )}>
+                                        {getGroupLabel(key)}
+                                    </h4>
+                                    <div className="space-y-3">
+                                        {groupedExpenses[key].map(expense => (
+                                            <TransactionItem key={expense.id} expense={expense} />
+                                        ))}
                                     </div>
                                 </div>
-                            )}
+                            ))}
                         </div>
                     )}
                 </CardContent>

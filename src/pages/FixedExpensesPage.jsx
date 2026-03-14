@@ -15,10 +15,13 @@ const parseDate = (dateStr) => {
     // Handle ISO format (YYYY-MM-DD) which real transactions use
     if (dateStr.includes('-')) {
         const [year, month, day] = dateStr.split('-');
-        return new Date(year, month - 1, day);
+        return new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
     }
     // Handle DD/MM/YYYY format
-    const [day, month, year] = dateStr.split('/');
+    if (dateStr.includes('/')) {
+        const [day, month, year] = dateStr.split('/');
+        return new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+    }
     return new Date(year, month - 1, day);
 };
 
@@ -190,7 +193,11 @@ export function FixedExpensesPage({ navigation }) {
       const baseFixedExpenses = allTransactions;
 
       // 2. Generate Projections (Virtual Expenses)
+      // Refactored to look back 2 years to catch old but active expenses
       const recurringGroups = {};
+      const lookbackDate = new Date();
+      lookbackDate.setFullYear(lookbackDate.getFullYear() - 2); // 2 years ago
+
       baseFixedExpenses.forEach(t => {
           if (t.recurrence) {
               const key = `${t.description}-${t.amount}-${t.recurrence}`;
@@ -225,7 +232,7 @@ export function FixedExpensesPage({ navigation }) {
           
           // Loop to generate ALL missing occurrences up to the first future one
           let safetyCounter = 0;
-          const maxIterations = 100; // Prevent infinite loops
+          const maxIterations = 500; // Increased limit for long gaps (e.g. 2 years of daily expenses)
   
           while (safetyCounter < maxIterations) {
               safetyCounter++;
@@ -233,37 +240,49 @@ export function FixedExpensesPage({ navigation }) {
               // Calculate next candidate date based on recurrence
               const nextDate = addRecurrence(currentDate, lastExpense.recurrence);
               
-              // Update currentDate for next iteration
-              currentDate = nextDate;
-  
-              // Check if this date is valid regarding end_date (if inactive)
-               if (lastExpense.active === false) {
-                  if (!lastExpense.end_date) break; // Inactive with no end date -> stop generating
-                  
-                  let endDateObj;
-                  // Parse end_date safely (YYYY-MM-DD from DB)
-                  if (lastExpense.end_date.includes('/')) {
-                      endDateObj = parseDate(lastExpense.end_date);
-                  } else {
-                       const [y, m, d] = lastExpense.end_date.split('-');
-                       endDateObj = new Date(y, m - 1, d);
-                  }
-                  
-                  // If the next occurrence is AFTER the end date, stop generating.
-                  if (nextDate > endDateObj) break;
-              }
-  
-              // Construct virtual expense
-              const virtualExpense = {
-                  ...lastExpense,
-                  id: `virtual-${lastExpense.id}-${nextDate.getTime()}`, // Unique ID
-                  date: formatDateISO(nextDate), // ISO format (YYYY-MM-DD)
-                  status: 'Aguardando', // Always pending
-                  isVirtual: true, // Flag
-                  isOverdue: nextDate < today // Can be overdue if filling gaps
-              };
-              
-              virtualExpenses.push(virtualExpense);
+             // Check if this date is valid regarding end_date (if inactive)
+              if (lastExpense.active === false) {
+                 if (!lastExpense.end_date) break; // Inactive with no end date -> stop generating
+                 
+                 let endDateObj;
+                 // Parse end_date safely (YYYY-MM-DD from DB)
+                 if (lastExpense.end_date.includes('/')) {
+                     endDateObj = parseDate(lastExpense.end_date);
+                 } else {
+                      const [y, m, d] = lastExpense.end_date.split('-');
+                      endDateObj = new Date(y, m - 1, d);
+                 }
+                 
+                 // If the next occurrence is AFTER the end date, stop generating.
+                 if (nextDate > endDateObj) break;
+             }
+ 
+             // Update currentDate for next iteration
+             currentDate = nextDate;
+
+             // Check if this virtual expense already exists in DB (gap filling check)
+             // We only add it if it DOESN'T match an existing transaction
+             // Use string comparison for reliability
+             const nextDateStr = formatDateISO(nextDate);
+             const exists = baseFixedExpenses.some(t => 
+                 t.description === lastExpense.description &&
+                 t.amount === lastExpense.amount &&
+                 t.date === nextDateStr
+             );
+
+             if (!exists) {
+                 // Construct virtual expense
+                 const virtualExpense = {
+                     ...lastExpense,
+                     id: `virtual-${lastExpense.id}-${nextDate.getTime()}`, // Unique ID
+                     date: nextDateStr, // ISO format (YYYY-MM-DD)
+                     status: 'Aguardando', // Always pending
+                     isVirtual: true, // Flag
+                     isOverdue: nextDate < today // Can be overdue if filling gaps
+                 };
+                 
+                 virtualExpenses.push(virtualExpense);
+             }
   
               // If we have generated a future expense (>= today), we stop for this group.
               // This ensures we fill all past gaps + 1 future occurrence.
@@ -273,6 +292,21 @@ export function FixedExpensesPage({ navigation }) {
 
       // 3. Combine Real + Virtual
       let allCandidates = [...baseFixedExpenses, ...virtualExpenses];
+
+      // Filter out cancelled transactions (active=false AND date > end_date)
+      allCandidates = allCandidates.filter(t => {
+          if (t.active === false && t.end_date) {
+              const tDate = parseDate(t.date);
+              const endDate = parseDate(t.end_date);
+              
+              // Normalize time for comparison
+              tDate.setHours(0,0,0,0);
+              endDate.setHours(0,0,0,0);
+
+              if (tDate > endDate) return false;
+          }
+          return true;
+      });
 
       // 4. Apply Filters (Search & Status)
       if (search) {

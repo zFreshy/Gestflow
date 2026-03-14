@@ -116,13 +116,43 @@ export function TransactionForm({ navigation, route }) {
                };
                
                await transactionService.create(newTransactionData);
+
+               // If finalizing, propagate to related transactions
+               if (type === 'expense' && expenseType === 'fixed') {
+                   if (!isActive) {
+                        await transactionService.finalizeRecurrence(user.id, description, endDate);
+                   } else {
+                        await transactionService.reactivateRecurrence(user.id, description);
+                   }
+               }
+
                Alert.alert('Sucesso', 'Transação criada com sucesso!');
           } else {
               await transactionService.update(transaction.id, transactionData);
+
+              // If finalizing, propagate to related transactions
+               if (type === 'expense' && expenseType === 'fixed') {
+                   if (!isActive) {
+                        await transactionService.finalizeRecurrence(user.id, description, endDate);
+                   } else {
+                        await transactionService.reactivateRecurrence(user.id, description);
+                   }
+               }
+
               Alert.alert('Sucesso', 'Transação atualizada com sucesso!');
           }
       } else {
           await transactionService.create(transactionData);
+
+          // If finalizing, propagate to related transactions
+           if (type === 'expense' && expenseType === 'fixed') {
+               if (!isActive) {
+                    await transactionService.finalizeRecurrence(user.id, description, endDate);
+               } else {
+                    await transactionService.reactivateRecurrence(user.id, description);
+               }
+           }
+
           Alert.alert('Sucesso', 'Transação criada com sucesso!');
       }
       

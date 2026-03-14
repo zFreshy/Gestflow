@@ -42,5 +42,41 @@ export const transactionService = {
     
     if (error) throw error;
     return true;
+  },
+
+  async finalizeRecurrence(userId, description, endDate) {
+    // 1. Update all existing transactions with same description and type='expense'
+    // to have active=false and end_date=endDate
+    const { error } = await supabase
+        .from('transactions')
+        .update({ 
+            active: false,
+            end_date: endDate
+        })
+        .eq('user_id', userId)
+        .eq('description', description)
+        .eq('type', 'expense')
+        .eq('expense_type', 'fixed');
+
+    if (error) throw error;
+    return true;
+  },
+
+  async reactivateRecurrence(userId, description) {
+    // 1. Update all existing transactions with same description and type='expense'
+    // to have active=true and end_date=null
+    const { error } = await supabase
+        .from('transactions')
+        .update({ 
+            active: true,
+            end_date: null
+        })
+        .eq('user_id', userId)
+        .eq('description', description)
+        .eq('type', 'expense')
+        .eq('expense_type', 'fixed');
+
+    if (error) throw error;
+    return true;
   }
 };

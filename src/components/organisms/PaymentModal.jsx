@@ -1,20 +1,38 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, Modal, TouchableOpacity, TextInput, Platform } from 'react-native';
 import { X, Calendar, DollarSign, Check } from 'lucide-react-native';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { Button } from '../atoms/Button';
 
 export function PaymentModal({ isVisible, transaction, onClose, onConfirm }) {
     const today = new Date().toISOString().split('T')[0];
     const [paymentDate, setPaymentDate] = useState(today);
+    const [showDatePicker, setShowDatePicker] = useState(false);
     const [interestAmount, setInterestAmount] = useState('');
     
     // Reset state when modal opens/closes
-    React.useEffect(() => {
+    useEffect(() => {
         if (isVisible) {
             setPaymentDate(today);
             setInterestAmount('');
         }
     }, [isVisible]);
+
+    const onDateChange = (event, selectedDate) => {
+        setShowDatePicker(false);
+        if (selectedDate) {
+            const d = String(selectedDate.getDate()).padStart(2, '0');
+            const m = String(selectedDate.getMonth() + 1).padStart(2, '0');
+            const y = selectedDate.getFullYear();
+            setPaymentDate(`${y}-${m}-${d}`);
+        }
+    };
+
+    const formatDateDisplay = (isoDate) => {
+        if (!isoDate) return '';
+        const [year, month, day] = isoDate.split('-');
+        return `${day}/${month}/${year}`;
+    };
 
     const handleSubmit = () => {
         const interest = interestAmount ? parseFloat(interestAmount.replace(',', '.')) : 0;
@@ -83,18 +101,26 @@ export function PaymentModal({ isVisible, transaction, onClose, onConfirm }) {
                                     </Text>
                                 </TouchableOpacity>
                                 
-                                <View className={`flex-1 justify-center px-3 border rounded-xl ${
-                                    paymentDate !== today ? 'border-emerald-500 bg-emerald-50/10' : 'border-gray-200'
-                                }`}>
-                                    <TextInput
-                                        value={paymentDate}
-                                        onChangeText={setPaymentDate}
-                                        placeholder="YYYY-MM-DD"
-                                        className="text-gray-900 text-center font-medium h-12"
-                                        keyboardType="numeric"
-                                    />
-                                </View>
+                                <TouchableOpacity 
+                                    onPress={() => setShowDatePicker(true)}
+                                    className={`flex-1 justify-center px-3 border rounded-xl ${
+                                        paymentDate !== today ? 'border-emerald-500 bg-emerald-50/10' : 'border-gray-200'
+                                    }`}
+                                >
+                                    <Text className="text-gray-900 text-center font-medium h-12 pt-3">
+                                        {formatDateDisplay(paymentDate)}
+                                    </Text>
+                                </TouchableOpacity>
                             </View>
+
+                            {showDatePicker && (
+                                <DateTimePicker
+                                    value={new Date(paymentDate.split('-')[0], paymentDate.split('-')[1] - 1, paymentDate.split('-')[2])}
+                                    mode="date"
+                                    display="default"
+                                    onChange={onDateChange}
+                                />
+                            )}
                         </View>
 
                         {/* Interest Input */}

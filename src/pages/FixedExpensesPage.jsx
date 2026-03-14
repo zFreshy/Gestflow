@@ -4,8 +4,10 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../contexts/AuthContext';
 import { transactionService } from '../services/transactionService';
 import { TransactionItem } from '../components/molecules/TransactionItem';
-import { Search, Filter, Plus, Calendar, History } from 'lucide-react-native';
+import { MonthSelector } from '../components/molecules/MonthSelector';
+import { Search, Filter, Plus, Calendar } from 'lucide-react-native';
 import { useFocusEffect } from '@react-navigation/native';
+import { PaymentModal } from '../components/organisms/PaymentModal';
 
 // Helper Functions
 const isPaid = (status) => ['Pago', 'Liberado', 'pago', 'liberado'].includes(status);
@@ -32,8 +34,6 @@ const formatDateISO = (date) => {
     return `${year}-${month}-${day}`;
 };
 
-import { PaymentModal } from '../components/organisms/PaymentModal';
-
 export function FixedExpensesPage({ navigation }) {
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
@@ -41,13 +41,17 @@ export function FixedExpensesPage({ navigation }) {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all'); // all, paid, pending
   
+  // New State for View Mode and Month
+  const [currentMonth, setCurrentMonth] = useState(new Date());
+  const [viewMode, setViewMode] = useState('month'); // 'month' | 'year'
+  const [groupedExpenses, setGroupedExpenses] = useState({});
+  const [sortedGroupKeys, setSortedGroupKeys] = useState([]);
+  
   // Payment Modal State
   const [selectedTransaction, setSelectedTransaction] = useState(null);
   const [isPaymentModalVisible, setIsPaymentModalVisible] = useState(false);
   
   // Data states
-  const [upcomingExpenses, setUpcomingExpenses] = useState([]);
-  const [pastExpenses, setPastExpenses] = useState([]);
   const [allTransactions, setAllTransactions] = useState([]);
 
   const handleTransactionPress = async (transaction) => {
@@ -59,8 +63,8 @@ export function FixedExpensesPage({ navigation }) {
           try {
               setLoading(true);
               await transactionService.update(transaction.id, {
-                  status: 'Aguardando', // or 'Pendente' depending on backend enum, usually 'Aguardando' based on context
-                  interest_rate: 0 // Use snake_case
+                  status: 'Aguardando',
+                  interest_rate: 0
               });
               await fetchTransactions();
           } catch (error) {
@@ -76,15 +80,10 @@ export function FixedExpensesPage({ navigation }) {
   };
 
   const handleEdit = (transaction) => {
-      // Navigate to Edit (Reuse AddTransaction with params)
-      // We need to implement Edit mode in TransactionForm or separate page
-      // For now, let's assume AddTransaction can handle edit if we pass data
       navigation.navigate('AddTransaction', { transaction });
   };
 
   const handleDelete = async (transaction) => {
-      // Confirm delete
-      // Using Alert for simplicity
       try {
         setLoading(true);
         await transactionService.delete(transaction.id);
@@ -101,40 +100,34 @@ export function FixedExpensesPage({ navigation }) {
           setLoading(true);
           
           if (selectedTransaction.isVirtual) {
-              // Create new transaction for virtual expense
               const newTransaction = {
                   description: selectedTransaction.description,
                   amount: selectedTransaction.amount + (interest || 0),
                   type: 'expense',
-                  expense_type: 'fixed', // Use snake_case
-                  payment_method: selectedTransaction.paymentMethod, // Use snake_case
-                  date: selectedTransaction.date, // Use ORIGINAL DUE DATE to maintain recurrence logic
+                  expense_type: 'fixed',
+                  payment_method: selectedTransaction.paymentMethod,
+                  date: selectedTransaction.date,
                   user_id: user.id,
                   recurrence: selectedTransaction.recurrence,
                   status: 'Pago',
-                  active: true, // Explicitly set active
-                  interest_rate: interest ? ((interest / selectedTransaction.amount) * 100) : 0 // Use snake_case
+                  active: true,
+                  interest_rate: interest ? ((interest / selectedTransaction.amount) * 100) : 0
               };
               
               await transactionService.create(newTransaction);
           } else {
-              // Update existing transaction
               const updates = {
                   status: 'Pago',
-                  // Do NOT update date/timestamp to preserve original due date
-                  // date: date, 
-                  // timestamp: new Date(date).getTime(),
               };
               
               if (interest > 0) {
                   updates.amount = selectedTransaction.amount + interest;
-                  updates.interest_rate = (interest / selectedTransaction.amount) * 100; // Use snake_case
+                  updates.interest_rate = (interest / selectedTransaction.amount) * 100;
               }
               
               await transactionService.update(selectedTransaction.id, updates);
           }
           
-          // Refresh list
           await fetchTransactions();
           
       } catch (error) {
@@ -186,14 +179,13 @@ export function FixedExpensesPage({ navigation }) {
   // Process transactions whenever data or filters change
   useEffect(() => {
     processTransactions();
-  }, [allTransactions, search, statusFilter]);
+  }, [allTransactions, search, statusFilter, currentMonth, viewMode]);
 
   const processTransactions = () => {
       // 1. Base Fixed Expenses
       const baseFixedExpenses = allTransactions;
 
       // 2. Generate Projections (Virtual Expenses)
-      // Refactored to look back 2 years to catch old but active expenses
       const recurringGroups = {};
       const lookbackDate = new Date();
       lookbackDate.setFullYear(lookbackDate.getFullYear() - 2); // 2 years ago
@@ -201,7 +193,6 @@ export function FixedExpensesPage({ navigation }) {
       baseFixedExpenses.forEach(t => {
           if (t.recurrence) {
               const key = `${t.description}-${t.amount}-${t.recurrence}`;
-              // Track the latest occurrence
               if (!recurringGroups[key] || parseDate(recurringGroups[key].date) < parseDate(t.date)) {
                   recurringGroups[key] = t;
               }
@@ -229,23 +220,17 @@ export function FixedExpensesPage({ navigation }) {
 
       Object.values(recurringGroups).forEach(lastExpense => {
           let currentDate = parseDate(lastExpense.date);
-          
-          // Loop to generate ALL missing occurrences up to the first future one
           let safetyCounter = 0;
-          const maxIterations = 500; // Increased limit for long gaps (e.g. 2 years of daily expenses)
+          const maxIterations = 500; 
   
           while (safetyCounter < maxIterations) {
               safetyCounter++;
-              
-              // Calculate next candidate date based on recurrence
               const nextDate = addRecurrence(currentDate, lastExpense.recurrence);
               
-             // Check if this date is valid regarding end_date (if inactive)
               if (lastExpense.active === false) {
-                 if (!lastExpense.end_date) break; // Inactive with no end date -> stop generating
+                 if (!lastExpense.end_date) break; 
                  
                  let endDateObj;
-                 // Parse end_date safely (YYYY-MM-DD from DB)
                  if (lastExpense.end_date.includes('/')) {
                      endDateObj = parseDate(lastExpense.end_date);
                  } else {
@@ -253,16 +238,10 @@ export function FixedExpensesPage({ navigation }) {
                       endDateObj = new Date(y, m - 1, d);
                  }
                  
-                 // If the next occurrence is AFTER the end date, stop generating.
                  if (nextDate > endDateObj) break;
              }
  
-             // Update currentDate for next iteration
              currentDate = nextDate;
-
-             // Check if this virtual expense already exists in DB (gap filling check)
-             // We only add it if it DOESN'T match an existing transaction
-             // Use string comparison for reliability
              const nextDateStr = formatDateISO(nextDate);
              const exists = baseFixedExpenses.some(t => 
                  t.description === lastExpense.description &&
@@ -271,21 +250,17 @@ export function FixedExpensesPage({ navigation }) {
              );
 
              if (!exists) {
-                 // Construct virtual expense
                  const virtualExpense = {
                      ...lastExpense,
-                     id: `virtual-${lastExpense.id}-${nextDate.getTime()}`, // Unique ID
-                     date: nextDateStr, // ISO format (YYYY-MM-DD)
-                     status: 'Aguardando', // Always pending
-                     isVirtual: true, // Flag
-                     isOverdue: nextDate < today // Can be overdue if filling gaps
+                     id: `virtual-${lastExpense.id}-${nextDate.getTime()}`,
+                     date: nextDateStr, 
+                     status: 'Aguardando',
+                     isVirtual: true,
+                     isOverdue: nextDate < today
                  };
-                 
                  virtualExpenses.push(virtualExpense);
              }
   
-              // If we have generated a future expense (>= today), we stop for this group.
-              // This ensures we fill all past gaps + 1 future occurrence.
               if (nextDate >= today) break;
           }
       });
@@ -293,16 +268,13 @@ export function FixedExpensesPage({ navigation }) {
       // 3. Combine Real + Virtual
       let allCandidates = [...baseFixedExpenses, ...virtualExpenses];
 
-      // Filter out cancelled transactions (active=false AND date > end_date)
+      // Filter out cancelled
       allCandidates = allCandidates.filter(t => {
           if (t.active === false && t.end_date) {
               const tDate = parseDate(t.date);
               const endDate = parseDate(t.end_date);
-              
-              // Normalize time for comparison
               tDate.setHours(0,0,0,0);
               endDate.setHours(0,0,0,0);
-
               if (tDate > endDate) return false;
           }
           return true;
@@ -322,48 +294,62 @@ export function FixedExpensesPage({ navigation }) {
           }
       }
 
-      // 5. Split into Upcoming vs Past
-      const upcoming = [];
-      const past = [];
-
-      allCandidates.forEach(t => {
+      // 5. Filter by Month/Year and Group
+      let filtered = allCandidates.filter(t => {
           const tDate = parseDate(t.date);
-          const paid = isPaid(t.status);
-          
-          // Mark overdue for display logic
-          // Overdue if: Not Paid AND Date < Today
-          // Note: Virtual expenses are by definition >= today (from calculateNextOccurrence), so they are never overdue.
-          // Real expenses can be overdue.
-          const overdue = !paid && tDate < today;
-          t.isOverdue = overdue;
+          const sameYear = tDate.getFullYear() === currentMonth.getFullYear();
+          if (viewMode === 'year') return sameYear;
+          return sameYear && tDate.getMonth() === currentMonth.getMonth();
+      });
 
-          // Logic for splitting:
-          // Upcoming: Future dates (>= today) AND Not Paid
-          // Past: Past dates (< today) OR Paid items
+      // Sort by Date
+      filtered.sort((a, b) => parseDate(a.date) - parseDate(b.date));
+
+      // Grouping
+      const groups = filtered.reduce((acc, expense) => {
+          const date = parseDate(expense.date);
+          let key;
           
-          if (tDate < today || paid) {
-              past.push(t);
+          if (viewMode === 'year') {
+              key = date.getMonth(); // 0-11
           } else {
-              upcoming.push(t);
+              key = formatDateISO(date);
+          }
+          
+          if (!acc[key]) acc[key] = [];
+          acc[key].push(expense);
+          return acc;
+      }, {});
+
+      setGroupedExpenses(groups);
+      
+      const sortedKeys = Object.keys(groups).sort((a, b) => {
+          if (viewMode === 'year') {
+              return parseInt(a) - parseInt(b);
+          } else {
+              return parseDate(a) - parseDate(b);
           }
       });
+      
+      setSortedGroupKeys(sortedKeys);
+  };
 
-      // 6. Sort Upcoming (Ascending Date: Today -> Future)
-      upcoming.sort((a, b) => parseDate(a.date) - parseDate(b.date));
-
-      // 7. Sort Past (Unpaid First, Then Descending Date)
-      past.sort((a, b) => {
-          const paidA = isPaid(a.status);
-          const paidB = isPaid(b.status);
-
-          if (paidA !== paidB) {
-              return paidA ? 1 : -1; // Unpaid first
-          }
-          return parseDate(b.date) - parseDate(a.date); // Descending date
-      });
-
-      setUpcomingExpenses(upcoming);
-      setPastExpenses(past);
+  const getGroupLabel = (key) => {
+      if (viewMode === 'year') {
+          const MONTHS = [
+              'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+              'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
+          ];
+          return MONTHS[parseInt(key)];
+      } else {
+          const date = parseDate(key);
+          const today = new Date();
+          today.setHours(0,0,0,0);
+          
+          if (date.getTime() === today.getTime()) return 'Hoje';
+          
+          return date.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' });
+      }
   };
 
   const FilterTab = ({ label, value, activeValue, onPress }) => (
@@ -390,19 +376,40 @@ export function FixedExpensesPage({ navigation }) {
           onConfirm={handleConfirmPayment}
       />
       
-      <View className="px-6 py-4 bg-white border-b border-gray-100">
-        <View className="flex-row justify-between items-center mb-4">
-          <Text className="text-2xl font-bold text-gray-900">Despesas Fixas</Text>
+      <View className="px-6 pt-6 pb-4 bg-white border-b border-gray-100 rounded-b-3xl shadow-sm z-10">
+        <View className="flex-row justify-between items-start mb-6">
+          <View>
+             <Text className="text-3xl font-extrabold text-gray-900 tracking-tight">Despesas Fixas</Text>
+             <Text className="text-gray-500 text-sm mt-1">Gerencie suas contas recorrentes</Text>
+          </View>
           <TouchableOpacity 
             onPress={() => navigation.navigate('AddTransaction', { initialType: 'expense', initialExpenseType: 'fixed' })}
-            className="h-10 w-10 bg-[#7E1A8B] rounded-full items-center justify-center shadow-lg shadow-purple-200"
+            className="h-12 w-12 bg-[#7E1A8B] rounded-2xl items-center justify-center shadow-lg shadow-purple-200 active:scale-95 transition-transform"
           >
-            <Plus color="white" size={24} />
+            <Plus color="white" size={24} strokeWidth={2.5} />
           </TouchableOpacity>
         </View>
 
+        {/* View Mode Toggle */}
+        <View className="flex-row bg-gray-100 p-1.5 rounded-xl mb-6 self-start">
+            <TouchableOpacity 
+                onPress={() => setViewMode('month')}
+                className={`px-4 py-2 rounded-lg ${viewMode === 'month' ? 'bg-white shadow-sm' : ''}`}
+            >
+                <Text className={`text-xs font-bold ${viewMode === 'month' ? 'text-gray-900' : 'text-gray-500'}`}>Mensal</Text>
+            </TouchableOpacity>
+            <TouchableOpacity 
+                onPress={() => setViewMode('year')}
+                className={`px-4 py-2 rounded-lg ${viewMode === 'year' ? 'bg-white shadow-sm' : ''}`}
+            >
+                <Text className={`text-xs font-bold ${viewMode === 'year' ? 'text-gray-900' : 'text-gray-500'}`}>Anual</Text>
+            </TouchableOpacity>
+        </View>
+
+        <MonthSelector currentDate={currentMonth} onMonthChange={setCurrentMonth} viewMode={viewMode} />
+
         {/* Search */}
-        <View className="flex-row items-center bg-gray-100 rounded-xl px-4 h-12 mb-4">
+        <View className="flex-row items-center bg-gray-50 border border-gray-200 rounded-2xl px-4 h-12 mb-4 mt-2">
           <Search color="#9CA3AF" size={20} />
           <TextInput
             placeholder="Buscar despesas..."
@@ -415,7 +422,7 @@ export function FixedExpensesPage({ navigation }) {
 
         {/* Filters */}
         <View>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} className="flex-row">
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} className="flex-row" contentContainerStyle={{ paddingRight: 20 }}>
                 <FilterTab label="Todas" value="all" activeValue={statusFilter} onPress={setStatusFilter} />
                 <FilterTab label="Pagas" value="paid" activeValue={statusFilter} onPress={setStatusFilter} />
                 <FilterTab label="Pendentes" value="pending" activeValue={statusFilter} onPress={setStatusFilter} />
@@ -431,56 +438,45 @@ export function FixedExpensesPage({ navigation }) {
         <ScrollView 
             contentContainerStyle={{ padding: 24, paddingBottom: 100 }}
             refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+            showsVerticalScrollIndicator={false}
         >
-            {/* Section 1: Upcoming */}
-            <View className="mb-8">
-                <View className="flex-row items-center mb-4 border-l-4 border-amber-400 pl-3">
-                    <Calendar color="#B45309" size={20} />
-                    <Text className="ml-2 text-lg font-bold text-amber-700">Despesas por Vir</Text>
+            {sortedGroupKeys.length === 0 ? (
+                <View className="items-center justify-center py-20 opacity-50">
+                    <View className="bg-gray-100 p-6 rounded-full mb-4">
+                        <Calendar color="#9CA3AF" size={40} />
+                    </View>
+                    <Text className="text-gray-500 font-bold text-lg mt-2">Nada por aqui</Text>
+                    <Text className="text-sm text-gray-400 mt-1 text-center">Nenhuma despesa encontrada para este {viewMode === 'year' ? 'ano' : 'mês'}.</Text>
                 </View>
-                
-                {upcomingExpenses.length === 0 ? (
-                    <Text className="text-gray-400 text-center py-4">Nenhuma despesa para os próximos dias.</Text>
-                ) : (
-                    upcomingExpenses.map(item => (
-                        <TouchableOpacity 
-                            key={item.id} 
-                            onPress={() => handleTransactionPress(item)}
-                        >
-                            <TransactionItem 
-                                transaction={item} 
-                                onEdit={() => handleEdit(item)}
-                                onDelete={() => handleDelete(item)}
-                            />
-                        </TouchableOpacity>
-                    ))
-                )}
-            </View>
-
-            {/* Section 2: Past */}
-            <View>
-                <View className="flex-row items-center mb-4 pl-3">
-                    <History color="#374151" size={20} />
-                    <Text className="ml-2 text-lg font-bold text-gray-700">Despesas Anteriores</Text>
+            ) : (
+                <View className="space-y-8">
+                    {sortedGroupKeys.map(key => (
+                        <View key={key}>
+                            <View className="flex-row items-center mb-4">
+                                <View className={`h-8 w-1 rounded-full mr-3 ${viewMode === 'year' ? 'bg-[#7E1A8B]' : 'bg-gray-300'}`} />
+                                <Text className={`text-base font-bold capitalize ${viewMode === 'year' ? 'text-[#7E1A8B] text-xl' : 'text-gray-600'}`}>
+                                    {getGroupLabel(key)}
+                                </Text>
+                            </View>
+                            <View className="gap-3">
+                                {groupedExpenses[key].map(item => (
+                                    <TouchableOpacity 
+                                        key={item.id} 
+                                        onPress={() => handleTransactionPress(item)}
+                                        activeOpacity={0.7}
+                                    >
+                                        <TransactionItem 
+                                            transaction={item} 
+                                            onEdit={() => handleEdit(item)}
+                                            onDelete={() => handleDelete(item)}
+                                        />
+                                    </TouchableOpacity>
+                                ))}
+                            </View>
+                        </View>
+                    ))}
                 </View>
-
-                {pastExpenses.length === 0 ? (
-                    <Text className="text-gray-400 text-center py-4">Nenhuma despesa anterior encontrada.</Text>
-                ) : (
-                    pastExpenses.map(item => (
-                        <TouchableOpacity 
-                            key={item.id} 
-                            onPress={() => handleTransactionPress(item)}
-                        >
-                            <TransactionItem 
-                                transaction={item} 
-                                onEdit={() => handleEdit(item)}
-                                onDelete={() => handleDelete(item)}
-                            />
-                        </TouchableOpacity>
-                    ))
-                )}
-            </View>
+            )}
         </ScrollView>
       )}
     </SafeAreaView>

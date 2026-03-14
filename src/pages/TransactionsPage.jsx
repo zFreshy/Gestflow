@@ -5,7 +5,28 @@ import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../contexts/AuthContext';
 import { transactionService } from '../services/transactionService';
 import { TransactionItem } from '../components/molecules/TransactionItem';
-import { Search, Filter, Plus } from 'lucide-react-native';
+import { MonthSelector } from '../components/molecules/MonthSelector';
+import { Search, Filter, Plus, Calendar } from 'lucide-react-native';
+
+const formatDateISO = (date) => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+};
+
+const parseDate = (dateStr) => {
+    if (!dateStr) return new Date(0);
+    if (dateStr.includes('-')) {
+        const [year, month, day] = dateStr.split('-');
+        return new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+    }
+    if (dateStr.includes('/')) {
+        const [day, month, year] = dateStr.split('/');
+        return new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+    }
+    return new Date(year, month - 1, day);
+};
 
 export function TransactionsPage({ navigation }) {
   const { user } = useAuth();
@@ -16,6 +37,12 @@ export function TransactionsPage({ navigation }) {
   const [filter, setFilter] = useState('all'); // all, income, expense
   const [methodFilter, setMethodFilter] = useState('all'); // all, pix, cartao, dinheiro
 
+  // New State for View Mode and Month
+  const [currentMonth, setCurrentMonth] = useState(new Date());
+  const [viewMode, setViewMode] = useState('month'); // 'month' | 'year'
+  const [groupedTransactions, setGroupedTransactions] = useState({});
+  const [sortedGroupKeys, setSortedGroupKeys] = useState([]);
+
   useFocusEffect(
     useCallback(() => {
       fetchTransactions();
@@ -23,14 +50,13 @@ export function TransactionsPage({ navigation }) {
   );
 
   useEffect(() => {
-    filterTransactions();
-  }, [search, filter, methodFilter, transactions]);
+    processTransactions();
+  }, [search, filter, methodFilter, transactions, currentMonth, viewMode]);
 
   const fetchTransactions = async () => {
     try {
       const data = await transactionService.getAll(user.id);
       
-      // Map Supabase snake_case to camelCase
       const mappedData = (data || []).map(t => ({
           ...t,
           expenseType: t.expense_type || t.expenseType,
@@ -48,7 +74,7 @@ export function TransactionsPage({ navigation }) {
     }
   };
 
-  const filterTransactions = () => {
+  const processTransactions = () => {
     let result = transactions;
 
     if (filter !== 'all') {
@@ -65,7 +91,64 @@ export function TransactionsPage({ navigation }) {
       );
     }
 
+    // Filter by Month/Year
+    result = result.filter(t => {
+        if (!t.date) return false;
+        const tDate = parseDate(t.date);
+        const sameYear = tDate.getFullYear() === currentMonth.getFullYear();
+        if (viewMode === 'year') return sameYear;
+        return sameYear && tDate.getMonth() === currentMonth.getMonth();
+    });
+
+    // Sort by Date Descending (Newest first)
+    result.sort((a, b) => parseDate(b.date) - parseDate(a.date));
+
+    // Grouping
+    const groups = result.reduce((acc, t) => {
+        const date = parseDate(t.date);
+        let key;
+        
+        if (viewMode === 'year') {
+            key = date.getMonth(); // 0-11
+        } else {
+            key = formatDateISO(date);
+        }
+        
+        if (!acc[key]) acc[key] = [];
+        acc[key].push(t);
+        return acc;
+    }, {});
+
+    setGroupedTransactions(groups);
+
+    const sortedKeys = Object.keys(groups).sort((a, b) => {
+        if (viewMode === 'year') {
+            return parseInt(a) - parseInt(b); // Jan to Dec
+        } else {
+            return parseDate(b) - parseDate(a); // Newest to Oldest
+        }
+    });
+
+    setSortedGroupKeys(sortedKeys);
     setFilteredTransactions(result);
+  };
+
+  const getGroupLabel = (key) => {
+      if (viewMode === 'year') {
+          const MONTHS = [
+              'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+              'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
+          ];
+          return MONTHS[parseInt(key)];
+      } else {
+          const date = parseDate(key);
+          const today = new Date();
+          today.setHours(0,0,0,0);
+          
+          if (date.getTime() === today.getTime()) return 'Hoje';
+          
+          return date.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' });
+      }
   };
 
   const handleEdit = (transaction) => {
@@ -103,7 +186,10 @@ export function TransactionsPage({ navigation }) {
     <SafeAreaView className="flex-1 bg-gray-50">
       <View className="px-6 py-4 bg-white border-b border-gray-100">
         <View className="flex-row justify-between items-center mb-4">
-          <Text className="text-2xl font-bold text-gray-900">Transações</Text>
+          <View>
+              <Text className="text-2xl font-bold text-gray-900">Transações</Text>
+              <Text className="text-gray-500 text-xs">Gerencie todos os seus registros</Text>
+          </View>
           <TouchableOpacity 
             onPress={() => navigation.navigate('AddTransaction')}
             className="h-10 w-10 bg-[#7E1A8B] rounded-full items-center justify-center shadow-lg shadow-purple-200"
@@ -111,6 +197,24 @@ export function TransactionsPage({ navigation }) {
             <Plus color="white" size={24} />
           </TouchableOpacity>
         </View>
+
+        {/* View Mode Toggle */}
+        <View className="flex-row bg-gray-100 p-1 rounded-lg mb-4 self-start">
+            <TouchableOpacity 
+                onPress={() => setViewMode('month')}
+                className={`px-3 py-1.5 rounded-md ${viewMode === 'month' ? 'bg-white shadow-sm' : ''}`}
+            >
+                <Text className={`text-xs font-bold ${viewMode === 'month' ? 'text-gray-900' : 'text-gray-500'}`}>Mensal</Text>
+            </TouchableOpacity>
+            <TouchableOpacity 
+                onPress={() => setViewMode('year')}
+                className={`px-3 py-1.5 rounded-md ${viewMode === 'year' ? 'bg-white shadow-sm' : ''}`}
+            >
+                <Text className={`text-xs font-bold ${viewMode === 'year' ? 'text-gray-900' : 'text-gray-500'}`}>Anual</Text>
+            </TouchableOpacity>
+        </View>
+
+        <MonthSelector currentDate={currentMonth} onMonthChange={setCurrentMonth} viewMode={viewMode} />
 
         {/* Search */}
         <View className="flex-row items-center bg-gray-100 rounded-xl px-4 h-12 mb-4">
@@ -143,24 +247,37 @@ export function TransactionsPage({ navigation }) {
           <ActivityIndicator size="large" color="#7E1A8B" />
         </View>
       ) : (
-        <FlatList
-          data={filteredTransactions}
-          keyExtractor={item => item.id}
-          renderItem={({ item }) => (
-            <TransactionItem 
-              transaction={item} 
-              onEdit={() => handleEdit(item)}
-              onDelete={() => handleDelete(item)}
-            />
-          )}
-          contentContainerStyle={{ padding: 24, paddingBottom: 100 }}
-          ListEmptyComponent={
-            <View className="items-center justify-center py-20">
-              <Filter size={48} color="#E5E7EB" />
-              <Text className="text-gray-400 mt-4">Nenhuma transação encontrada</Text>
-            </View>
-          }
-        />
+        <ScrollView 
+            contentContainerStyle={{ padding: 24, paddingBottom: 100 }}
+        >
+            {sortedGroupKeys.length === 0 ? (
+                <View className="items-center py-8">
+                    <Calendar color="#D1D5DB" size={40} />
+                    <Text className="text-gray-500 font-medium mt-3">Nenhuma transação encontrada.</Text>
+                </View>
+            ) : (
+                <View className="space-y-6">
+                    {sortedGroupKeys.map(key => (
+                        <View key={key} className="mb-6">
+                            <Text className={`text-sm font-bold mb-3 capitalize ${viewMode === 'year' ? 'text-[#7E1A8B] text-lg' : 'text-gray-500'}`}>
+                                {getGroupLabel(key)}
+                            </Text>
+                            <View className="space-y-3">
+                                {groupedTransactions[key].map(item => (
+                                    <View key={item.id} className="mb-3">
+                                        <TransactionItem 
+                                            transaction={item} 
+                                            onEdit={() => handleEdit(item)}
+                                            onDelete={() => handleDelete(item)}
+                                        />
+                                    </View>
+                                ))}
+                            </View>
+                        </View>
+                    ))}
+                </View>
+            )}
+        </ScrollView>
       )}
     </SafeAreaView>
   );

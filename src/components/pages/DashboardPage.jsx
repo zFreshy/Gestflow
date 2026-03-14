@@ -430,7 +430,7 @@ export function DashboardPage({ transactions }) {
 
                 {/* Card 3 — Donut chart */}
                 <StatCard
-                    title="Exames por Convênios"
+                    title="Vendas por Convênios"
                     icon={Users}
                     accent="purple"
                 >

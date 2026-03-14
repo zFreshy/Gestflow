@@ -1,13 +1,16 @@
 import React, { useState } from 'react';
-import { View, Text, Alert, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
+import { View, Text, Alert, KeyboardAvoidingView, Platform, ScrollView, TouchableOpacity, Image } from 'react-native';
 import { useAuth } from '../contexts/AuthContext';
 import { Input } from '../components/atoms/Input';
 import { Button } from '../components/atoms/Button';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Eye, EyeOff } from 'lucide-react-native';
+import logo from '../../assets/icon.png';
 
 export function LoginPage() {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
+    const [showPassword, setShowPassword] = useState(false);
     const [loading, setLoading] = useState(false);
     const { signIn } = useAuth();
 
@@ -36,10 +39,8 @@ export function LoginPage() {
                 <ScrollView contentContainerStyle={{ flexGrow: 1 }}>
                     <View className="flex-1 justify-center px-8">
                         <View className="items-center mb-12">
-                            <View className="h-20 w-20 bg-[#7E1A8B] rounded-2xl items-center justify-center mb-4 transform rotate-3">
-                                <Text className="text-white text-4xl font-bold">F</Text>
-                            </View>
-                            <Text className="text-3xl font-bold text-[#7E1A8B]">Fornalha</Text>
+                            <Image source={logo} className="h-20 w-20 mb-4 rounded-xl" /> 
+                            <Text className="text-3xl font-bold text-[#7E1A8B]">Gestflow</Text>
                             <Text className="text-gray-500 mt-2 text-center">
                                 Gerencie suas transações com simplicidade
                             </Text>
@@ -60,7 +61,16 @@ export function LoginPage() {
                                 placeholder="••••••••"
                                 value={password}
                                 onChangeText={setPassword}
-                                secureTextEntry
+                                secureTextEntry={!showPassword}
+                                rightElement={
+                                    <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
+                                        {showPassword ? (
+                                            <EyeOff size={20} color="#9CA3AF" />
+                                        ) : (
+                                            <Eye size={20} color="#9CA3AF" />
+                                        )}
+                                    </TouchableOpacity>
+                                }
                             />
 
                             <Button 

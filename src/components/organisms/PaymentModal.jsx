@@ -5,8 +5,17 @@ import { Button } from '../atoms/Button';
 import { FormField } from '../molecules/FormField';
 
 export function PaymentModal({ transaction, onClose, onConfirm }) {
-    const today = new Date();
-    const [paymentDate, setPaymentDate] = useState(today.toISOString().split('T')[0]);
+    // Helper to get local date in YYYY-MM-DD format
+    const getToday = () => {
+        const today = new Date();
+        const year = today.getFullYear();
+        const month = String(today.getMonth() + 1).padStart(2, '0');
+        const day = String(today.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+    };
+
+    const todayStr = getToday();
+    const [paymentDate, setPaymentDate] = useState(todayStr);
     const [interestAmount, setInterestAmount] = useState('');
     const [useToday, setUseToday] = useState(true);
 
@@ -25,13 +34,11 @@ export function PaymentModal({ transaction, onClose, onConfirm }) {
 
     const handleDateChange = (e) => {
         setPaymentDate(e.target.value);
-        const todayStr = new Date().toISOString().split('T')[0];
-        setUseToday(e.target.value === todayStr);
+        setUseToday(e.target.value === getToday());
     };
 
     const setToday = () => {
-        const todayStr = new Date().toISOString().split('T')[0];
-        setPaymentDate(todayStr);
+        setPaymentDate(getToday());
         setUseToday(true);
     };
 

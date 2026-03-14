@@ -127,14 +127,16 @@ export function CalendarGrid({ transactions, onEdit, onDelete }) {
             while (currentProjection <= endOfMonth && safety < 1000) {
                 safety++;
                 
-                // If the projection is within the viewed month AND it is in the future (or today)
-                if (currentProjection >= startOfMonth && currentProjection <= endOfMonth && currentProjection >= today) {
+                // If the projection is within the viewed month
+                if (currentProjection >= startOfMonth && currentProjection <= endOfMonth) {
+                    const isOverdue = currentProjection < today;
                     virtuals.push({
                         ...lastExpense,
                         id: `virtual-${lastExpense.id}-${currentProjection.getTime()}`,
                         date: currentProjection.toLocaleDateString('pt-BR'),
-                        status: 'Aguardando',
-                        isVirtual: true
+                        status: isOverdue ? 'Atrasado' : 'Aguardando',
+                        isVirtual: true,
+                        isOverdue: isOverdue
                     });
                 }
                 
@@ -249,12 +251,14 @@ export function CalendarGrid({ transactions, onEdit, onDelete }) {
                                                     className={cn(
                                                         "px-1.5 py-0.5 rounded text-[10px] font-medium truncate",
                                                         t.isVirtual 
-                                                            ? "bg-amber-100 text-amber-700 border border-amber-200 border-dashed"
+                                                            ? (t.isOverdue 
+                                                                ? "bg-red-50 text-red-700 border border-red-200 border-dashed" 
+                                                                : "bg-amber-100 text-amber-700 border border-amber-200 border-dashed")
                                                             : t.type === 'income' 
                                                                 ? "bg-emerald-100 text-emerald-700" 
                                                                 : "bg-red-100 text-red-700"
                                                     )}
-                                                    title={t.description + (t.isVirtual ? " (Previsto)" : "")}
+                                                    title={t.description + (t.isVirtual ? (t.isOverdue ? " (Atrasado)" : " (Previsto)") : "")}
                                                 >
                                                     {t.description}
                                                 </div>
@@ -297,7 +301,9 @@ export function CalendarGrid({ transactions, onEdit, onDelete }) {
                                         className={cn(
                                             "flex items-center justify-between p-3 rounded-lg border transition-colors shadow-sm group",
                                             t.isVirtual 
-                                                ? "bg-amber-50/50 border-amber-200 border-dashed hover:bg-amber-50"
+                                                ? (t.isOverdue 
+                                                    ? "bg-red-50/50 border-red-200 border-dashed hover:bg-red-50" 
+                                                    : "bg-amber-50/50 border-amber-200 border-dashed hover:bg-amber-50")
                                                 : "bg-white border-gray-100 hover:bg-gray-50"
                                         )}
                                     >

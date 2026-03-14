@@ -88,39 +88,62 @@ export function DashboardPage({ transactions }) {
         // If the last expense is in the future/today and unpaid, it's already in the list.
         if (lastDate >= today && !isPaid(lastExpense.status)) return;
 
-        let nextDate = calculateNextOccurrence(lastExpense);
-
-        // If nextDate is the same as lastDate (meaning lastDate >= today and was Paid),
-        // we must project the NEXT occurrence after that.
-        if (nextDate.getTime() === lastDate.getTime()) {
-            const d = new Date(nextDate);
-            switch (lastExpense.recurrence?.toLowerCase()) {
-                case 'daily': d.setDate(d.getDate() + 1); break;
-                case 'weekly': d.setDate(d.getDate() + 7); break;
-                case 'monthly': d.setMonth(d.getMonth() + 1); break;
-                case 'quarterly': d.setMonth(d.getMonth() + 3); break;
-                case 'semiannual': d.setMonth(d.getMonth() + 6); break;
-                case 'annual': d.setFullYear(d.getFullYear() + 1); break;
-                case 'biennial': d.setFullYear(d.getFullYear() + 2); break;
-                default: d.setMonth(d.getMonth() + 1);
-            }
-            nextDate = d;
-        }
+        let currentDate = new Date(lastDate);
         
-        virtualExpenses.push({
-            ...lastExpense,
-            id: `virtual-${lastExpense.id}-${nextDate.getTime()}`,
-            date: nextDate.toLocaleDateString('pt-BR'),
-            status: 'Aguardando',
-            isVirtual: true
-        });
+        // Advance to next occurrence initially
+        switch (lastExpense.recurrence?.toLowerCase()) {
+            case 'daily': currentDate.setDate(currentDate.getDate() + 1); break;
+            case 'weekly': currentDate.setDate(currentDate.getDate() + 7); break;
+            case 'monthly': currentDate.setMonth(currentDate.getMonth() + 1); break;
+            case 'quarterly': currentDate.setMonth(currentDate.getMonth() + 3); break;
+            case 'semiannual': currentDate.setMonth(currentDate.getMonth() + 6); break;
+            case 'annual': currentDate.setFullYear(currentDate.getFullYear() + 1); break;
+            case 'biennial': currentDate.setFullYear(currentDate.getFullYear() + 2); break;
+            default: currentDate.setMonth(currentDate.getMonth() + 1);
+        }
+
+        // Generate all missing occurrences up to the first future one
+        // We limit the loop to avoid infinite loops in case of errors (e.g. 5 years)
+        let safetyCounter = 0;
+        while (safetyCounter < 60) { // Max 5 years of monthly occurrences
+            const isOverdue = currentDate < today;
+            
+            virtualExpenses.push({
+                ...lastExpense,
+                id: `virtual-${lastExpense.id}-${currentDate.getTime()}`,
+                date: currentDate.toLocaleDateString('pt-BR'),
+                status: isOverdue ? 'Atrasado' : 'Aguardando',
+                isVirtual: true,
+                isOverdue: isOverdue
+            });
+
+            // If we just added a future occurrence, we stop (showing only the next upcoming one)
+            if (!isOverdue) break;
+
+            // Advance to next occurrence
+            switch (lastExpense.recurrence?.toLowerCase()) {
+                case 'daily': currentDate.setDate(currentDate.getDate() + 1); break;
+                case 'weekly': currentDate.setDate(currentDate.getDate() + 7); break;
+                case 'monthly': currentDate.setMonth(currentDate.getMonth() + 1); break;
+                case 'quarterly': currentDate.setMonth(currentDate.getMonth() + 3); break;
+                case 'semiannual': currentDate.setMonth(currentDate.getMonth() + 6); break;
+                case 'annual': currentDate.setFullYear(currentDate.getFullYear() + 1); break;
+                case 'biennial': currentDate.setFullYear(currentDate.getFullYear() + 2); break;
+                default: currentDate.setMonth(currentDate.getMonth() + 1);
+            }
+            safetyCounter++;
+        }
     });
 
     // New metrics
     const realUpcoming = fixedExpenses.filter(t => isPending(t.status) && getTransactionDate(t.date) >= today);
-    const upcomingExpenses = [...realUpcoming, ...virtualExpenses];
+    const virtualUpcoming = virtualExpenses.filter(t => !t.isOverdue);
+    const upcomingExpenses = [...realUpcoming, ...virtualUpcoming];
     
-    const overdueExpenses = fixedExpenses.filter(t => isPending(t.status) && getTransactionDate(t.date) < today);
+    const realOverdue = fixedExpenses.filter(t => isPending(t.status) && getTransactionDate(t.date) < today);
+    const virtualOverdue = virtualExpenses.filter(t => t.isOverdue);
+    const overdueExpenses = [...realOverdue, ...virtualOverdue];
+
     const paidFixedExpenses = fixedExpenses.filter(t => isPaid(t.status));
 
     const upcomingTotal = upcomingExpenses.reduce((acc, curr) => acc + curr.amount, 0);

@@ -6,11 +6,20 @@ import { FormField } from '../molecules/FormField';
 import { X } from 'lucide-react';
 
 export function TransactionForm({ onAddTransaction, onEditTransaction, isOpen, onClose, initialData }) {
+    // Helper to get local date in YYYY-MM-DD format
+    const getToday = () => {
+        const today = new Date();
+        const year = today.getFullYear();
+        const month = String(today.getMonth() + 1).padStart(2, '0');
+        const day = String(today.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+    };
+
     const [activeTab, setActiveTab] = useState('income');
     const [description, setDescription] = useState('');
     const [amount, setAmount] = useState('');
     const [paymentMethod, setPaymentMethod] = useState('pix');
-    const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+    const [date, setDate] = useState(getToday());
     
     // Income specific states
     const [isBakeryIncome, setIsBakeryIncome] = useState(false);
@@ -54,7 +63,7 @@ export function TransactionForm({ onAddTransaction, onEditTransaction, isOpen, o
                 setDescription('');
                 setAmount('');
                 setPaymentMethod('pix');
-                setDate(new Date().toISOString().split('T')[0]);
+                setDate(getToday());
                 setIsBakeryIncome(false);
                 setClientName('');
                 setExpenseType('fixed');

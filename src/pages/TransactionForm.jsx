@@ -30,7 +30,12 @@ export function TransactionForm({ navigation, route }) {
           }
           return transaction.date;
       }
-      return new Date().toISOString().split('T')[0];
+      // Return local date YYYY-MM-DD
+      const today = new Date();
+      const year = today.getFullYear();
+      const month = String(today.getMonth() + 1).padStart(2, '0');
+      const day = String(today.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
   };
 
   const [date, setDate] = useState(initDate());

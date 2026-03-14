@@ -29,16 +29,39 @@ export function TransactionItem({ transaction, onEdit, onDelete }) {
   const [isMenuVisible, setIsMenuVisible] = useState(false);
   const isIncome = transaction.type === 'income';
   
+  const getTransactionDate = (dateStr) => {
+    if (!dateStr) return new Date();
+    if (dateStr.includes('-')) {
+        const [year, month, day] = dateStr.split('-');
+        return new Date(year, month - 1, day);
+    }
+    if (dateStr.includes('/')) {
+        const [day, month, year] = dateStr.split('/');
+        return new Date(year, month - 1, day);
+    }
+    return new Date(dateStr);
+  };
+
   // Status Logic
   let statusLabel = STATUS_MAP[transaction.type]?.label || 'Processado';
   let statusColor = STATUS_MAP[transaction.type]?.color || 'text-gray-500';
   let statusBg = STATUS_MAP[transaction.type]?.bgColor || 'bg-gray-50';
 
   if (transaction.type === 'expense' && transaction.expenseType === 'fixed') {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const tDate = getTransactionDate(transaction.date);
+
       if (transaction.isVirtual) {
-          statusLabel = 'Previsto';
-          statusColor = 'text-amber-600';
-          statusBg = 'bg-amber-50';
+          if (tDate < today) {
+              statusLabel = 'Atrasado';
+              statusColor = 'text-red-600';
+              statusBg = 'bg-red-50';
+          } else {
+              statusLabel = 'Previsto';
+              statusColor = 'text-amber-600';
+              statusBg = 'bg-amber-50';
+          }
       } else if (['Pago', 'Liberado', 'pago', 'liberado'].includes(transaction.status)) {
           statusLabel = 'Pago';
           statusColor = 'text-emerald-600';

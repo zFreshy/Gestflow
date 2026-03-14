@@ -5,7 +5,16 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import { Button } from '../atoms/Button';
 
 export function PaymentModal({ isVisible, transaction, onClose, onConfirm }) {
-    const today = new Date().toISOString().split('T')[0];
+    // Helper to get local date in YYYY-MM-DD format
+    const getToday = () => {
+        const today = new Date();
+        const year = today.getFullYear();
+        const month = String(today.getMonth() + 1).padStart(2, '0');
+        const day = String(today.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+    };
+
+    const today = getToday();
     const [paymentDate, setPaymentDate] = useState(today);
     const [showDatePicker, setShowDatePicker] = useState(false);
     const [interestAmount, setInterestAmount] = useState('');

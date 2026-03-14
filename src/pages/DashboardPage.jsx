@@ -352,16 +352,38 @@ export function DashboardPage({ navigation }) {
         { value: overdueTotal, color: '#EF4444', text: 'Atrasadas' } // Red-500
     ].filter(d => d.value > 0);
 
-    // 6. Averages
-    const uniqueDates = new Set(data.map(t => t.date)).size || 1;
-    const uniqueMonths = new Set(data.map(t => {
+    // 6. Period Totals (User requested "Totals" for these periods, despite "Média" label)
+    const todayStr = today.toLocaleDateString('pt-BR');
+    const currentMonthStr = `${today.getMonth() + 1}/${today.getFullYear()}`;
+    const currentYear = today.getFullYear();
+
+    // Daily: Today
+    const dailyTxs = data.filter(t => {
         const d = getTransactionDate(t.date);
-        return `${d.getMonth() + 1}/${d.getFullYear()}`;
-    })).size || 1;
-    const uniqueYears = new Set(data.map(t => {
+        return d.toLocaleDateString('pt-BR') === todayStr;
+    });
+    
+    // Monthly: Current Month
+    const monthlyTxs = data.filter(t => {
         const d = getTransactionDate(t.date);
-        return d.getFullYear();
-    })).size || 1;
+        return (d.getMonth() + 1) === (today.getMonth() + 1) && d.getFullYear() === currentYear;
+    });
+
+    // Yearly: Current Year
+    const yearlyTxs = data.filter(t => {
+        const d = getTransactionDate(t.date);
+        return d.getFullYear() === currentYear;
+    });
+
+    const calculateStats = (txs) => {
+        const inc = txs.filter(t => t.type === 'income').reduce((acc, t) => acc + t.amount, 0);
+        const exp = txs.filter(t => {
+            if (t.type !== 'expense') return false;
+            if (t.expenseType === 'fixed') return isPaid(t.status);
+            return true;
+        }).reduce((acc, t) => acc + t.amount, 0);
+        return { income: inc, expense: exp, profit: inc - exp };
+    };
 
     setStats({
       totalIncome,
@@ -376,21 +398,9 @@ export function DashboardPage({ navigation }) {
       paidFixedTotal: paidFixedExpenses.reduce((acc, t) => acc + t.amount, 0),
       paidFixedCount: paidFixedExpenses.length,
       averages: {
-        daily: { 
-            income: totalIncome / uniqueDates, 
-            expense: totalExpense / uniqueDates, 
-            profit: (totalIncome - totalExpense) / uniqueDates 
-        },
-        monthly: { 
-            income: totalIncome / uniqueMonths, 
-            expense: totalExpense / uniqueMonths, 
-            profit: (totalIncome - totalExpense) / uniqueMonths 
-        },
-        yearly: { 
-            income: totalIncome / uniqueYears, 
-            expense: totalExpense / uniqueYears, 
-            profit: (totalIncome - totalExpense) / uniqueYears 
-        }
+        daily: calculateStats(dailyTxs),
+        monthly: calculateStats(monthlyTxs),
+        yearly: calculateStats(yearlyTxs)
       }
     });
   };
@@ -880,25 +890,21 @@ export function DashboardPage({ navigation }) {
                      {/* Patients */}
                      <View className="flex-1 bg-white p-4 rounded-2xl border border-gray-100 shadow-sm relative justify-between">
                         <View className="flex-row justify-between items-start mb-2">
-                            <Text className="text-gray-500 text-xs font-medium">Pacientes</Text>
+                            <Text className="text-gray-500 text-xs font-medium">Clientes</Text>
                             <View className="bg-blue-50 p-1.5 rounded-full">
                                 <Users size={16} color="#3B82F6" />
                             </View>
                         </View>
                         <View className="items-center mb-2">
-                            <Text className="text-gray-900 text-3xl font-bold">268</Text>
+                            <Text className="text-gray-900 text-3xl font-bold">0</Text>
                             <Text className="text-gray-400 text-[10px]">Total</Text>
-                        </View>
-                        <View className="flex-row justify-between items-end">
-                            <Text className="text-emerald-500 text-[10px] font-bold">+12 novos</Text>
-                            <Text className="text-emerald-500 text-[10px] font-bold">~43%</Text>
                         </View>
                     </View>
 
                     {/* Statement Types */}
                     <View className="flex-1 bg-white p-4 rounded-2xl border border-gray-100 shadow-sm relative">
                          <View className="flex-row justify-between items-start mb-2">
-                            <Text className="text-gray-500 text-xs font-medium">Extratos</Text>
+                            <Text className="text-gray-500 text-xs font-medium">Tipos de Extratos</Text>
                             <View className="bg-blue-50 p-1.5 rounded-full">
                                 <Activity size={16} color="#3B82F6" />
                             </View>
@@ -906,20 +912,30 @@ export function DashboardPage({ navigation }) {
                         <View className="flex-row justify-between mt-2">
                              <View className="items-center">
                                 <Activity size={12} color="#3B82F6" className="mb-1" />
-                                <Text className="text-gray-900 font-bold text-lg">2</Text>
+                                <Text className="text-gray-900 font-bold text-lg">
+                                    {stats.paidFixedCount}
+                                </Text>
                                 <Text className="text-gray-400 text-[8px]">Obrigatórios</Text>
+                                <Text className="text-gray-500 text-[8px] font-bold mt-1">
+                                    {formatCurrency(stats.paidFixedTotal)}
+                                </Text>
                              </View>
                              <View className="w-px bg-gray-100 h-full mx-1" />
                              <View className="items-center">
                                 <Clock size={12} color="#F59E0B" className="mb-1" />
-                                <Text className="text-gray-900 font-bold text-lg">1</Text>
+                                <Text className="text-gray-900 font-bold text-lg">
+                                    {transactions.filter(t => t.type === 'expense' && t.expenseType === 'variable').length}
+                                </Text>
                                 <Text className="text-gray-400 text-[8px]">Variáveis</Text>
+                                <Text className="text-gray-500 text-[8px] font-bold mt-1">
+                                    {formatCurrency(transactions.filter(t => t.type === 'expense' && t.expenseType === 'variable').reduce((acc, t) => acc + t.amount, 0))}
+                                </Text>
                              </View>
                         </View>
                     </View>
                 </View>
 
-                 {/* Exams (Mocked Donut) */}
+                 {/* Exams (Payment Methods) */}
                  <View className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm relative flex-row items-center">
                     <View className="flex-1">
                         <View className="flex-row items-center justify-between mb-2">
@@ -928,16 +944,58 @@ export function DashboardPage({ navigation }) {
                                 <Users size={16} color="#3B82F6" />
                             </View>
                         </View>
-                        <View className="flex-row items-center mt-2">
-                            <View className="h-2 w-2 rounded-full bg-blue-600 mr-2" />
-                            <Text className="text-gray-700 text-xs">1 Pix</Text>
+                        
+                        {/* Dynamic Legend based on Payment Methods */}
+                        <View className="mt-2 space-y-1">
+                            {Object.entries(
+                                transactions
+                                    .filter(t => t.type === 'income')
+                                    .reduce((acc, t) => {
+                                        const method = t.paymentMethod || 'Outros';
+                                        acc[method] = (acc[method] || 0) + 1;
+                                        return acc;
+                                    }, {})
+                            ).slice(0, 3).map(([method, count], idx) => (
+                                <View key={idx} className="flex-row items-center">
+                                    <View className={`h-2 w-2 rounded-full mr-2`} style={{ backgroundColor: ['#2563EB', '#10B981', '#F59E0B', '#EF4444'][idx % 4] }} />
+                                    <Text className="text-gray-700 text-xs capitalize">{count} {method}</Text>
+                                </View>
+                            ))}
+                            {transactions.filter(t => t.type === 'income').length === 0 && (
+                                <Text className="text-gray-400 text-xs">Sem dados</Text>
+                            )}
                         </View>
                     </View>
-                    <View className="h-16 w-16 items-center justify-center relative">
-                        {/* Simple CSS/View Circle for mock */}
-                        <View className="absolute w-16 h-16 rounded-full border-[6px] border-blue-600 opacity-20" />
-                        <View className="absolute w-16 h-16 rounded-full border-[6px] border-blue-600 border-l-transparent border-b-transparent rotate-45" />
-                        <Text className="font-bold text-gray-900">1</Text>
+                    
+                    <View className="h-20 w-20 items-center justify-center relative">
+                         <PieChart
+                            data={
+                                Object.entries(
+                                    transactions
+                                        .filter(t => t.type === 'income')
+                                        .reduce((acc, t) => {
+                                            const method = t.paymentMethod || 'Outros';
+                                            acc[method] = (acc[method] || 0) + 1;
+                                            return acc;
+                                        }, {})
+                                ).map(([method, count], idx) => ({
+                                    value: count,
+                                    color: ['#2563EB', '#10B981', '#F59E0B', '#EF4444'][idx % 4],
+                                    text: method
+                                }))
+                            }
+                            donut
+                            radius={32}
+                            innerRadius={24}
+                            showText={false}
+                            centerLabelComponent={() => {
+                                return (
+                                    <Text className="text-gray-900 font-bold text-xs">
+                                        {transactions.filter(t => t.type === 'income').length}
+                                    </Text>
+                                );
+                            }}
+                        />
                     </View>
                 </View>
 

@@ -25,9 +25,17 @@ const METHOD_LABELS = {
     dinheiro: 'Dinheiro',
 };
 
-export function TransactionItem({ transaction, onEdit, onDelete }) {
+export function TransactionItem({ transaction, onPress, onEdit, onDelete }) {
   const [isMenuVisible, setIsMenuVisible] = useState(false);
   const isIncome = transaction.type === 'income';
+  
+  const handlePress = () => {
+      if (onPress) {
+          onPress();
+      } else if (onEdit) {
+          onEdit();
+      }
+  };
   
   const getTransactionDate = (dateStr) => {
     if (!dateStr) return new Date();
@@ -82,100 +90,86 @@ export function TransactionItem({ transaction, onEdit, onDelete }) {
   const isOverdue = transaction.isOverdue;
 
   return (
-    <View className="mb-3">
-        <Card className={cn(
-            "flex-row items-center p-3 border relative",
-            isVirtual ? "border-dashed border-amber-300 bg-amber-50/30" : "border-gray-100",
-            isOverdue && !isPaid && !isVirtual ? "border-red-200 bg-red-50/30" : "",
-            isPaid ? "opacity-70" : ""
+    <View className="mb-1">
+        <TouchableOpacity 
+            onPress={handlePress}
+            onLongPress={() => setIsMenuVisible(true)}
+            activeOpacity={0.7}
+            className={cn(
+                "flex-row items-center py-2",
+                isVirtual ? "opacity-70" : ""
+            )}
+        >
+        <View className={cn(
+            "h-12 w-12 rounded-2xl items-center justify-center mr-4 shadow-sm", 
+            isIncome ? "bg-emerald-100 shadow-emerald-100" : "bg-red-50 shadow-red-100"
         )}>
-        <View className={cn("p-2 rounded-full mr-3", isIncome ? "bg-emerald-50" : "bg-red-50")}>
             {isIncome ? (
-            <ArrowUpCircle size={24} color="#059669" />
+            <ArrowUpCircle size={22} color="#059669" strokeWidth={2.5} />
             ) : (
-            <ArrowDownCircle size={24} color={isOverdue && !isPaid ? "#DC2626" : "#DC2626"} />
+            <ArrowDownCircle size={22} color={isOverdue && !isPaid ? "#DC2626" : "#EF4444"} strokeWidth={2.5} />
             )}
         </View>
         
-        <View className="flex-1">
+        <View className="flex-1 mr-2">
             <Text className={cn(
-                "font-semibold text-base",
-                isPaid ? "text-gray-500 line-through" : "text-gray-900",
+                "font-bold text-base text-gray-900",
+                isPaid ? "text-gray-400 line-through" : "text-gray-900",
                 isOverdue && !isPaid ? "text-red-700" : ""
-            )}>
-                {transaction.description} {isVirtual && <Text className="text-amber-600 text-xs font-normal">(Previsão)</Text>}
+            )} numberOfLines={1}>
+                {transaction.description} {isVirtual && <Text className="text-amber-600 text-xs font-normal">(Prev)</Text>}
             </Text>
             
-            <View className="flex-row items-center mt-1 flex-wrap">
-                <Text className={cn("text-xs mr-2", isOverdue && !isPaid ? "text-red-500 font-medium" : "text-gray-500")}>
-                    {isPaid ? `Pago em: ${formatDate(transaction.date)}` 
-                        : (transaction.expenseType === 'fixed' 
-                            ? `Vence em: ${formatDate(transaction.date)}`
-                            : formatDate(transaction.date)
-                        )
-                    }
-                </Text>
-                <Text className="text-xs text-emerald-600 font-medium mr-2">
+            <View className="flex-row items-center mt-0.5">
+                <Text className={cn("text-xs font-medium", isOverdue && !isPaid ? "text-red-500" : "text-gray-500")}>
                     {METHOD_LABELS[transaction.paymentMethod] || transaction.paymentMethod}
                 </Text>
                 
                 {transaction.expenseType === 'fixed' && (
-                    <View className="flex-row flex-wrap gap-1">
-                        <View className="bg-gray-100 px-1.5 py-0.5 rounded mr-1">
-                            <Text className="text-[10px] text-gray-500">
-                                Fixa {transaction.recurrence ? `• ${RECURRENCE_MAP[transaction.recurrence.toLowerCase()] || transaction.recurrence}` : ''}
-                            </Text>
-                        </View>
+                    <>
+                        <Text className="text-xs text-gray-300 mx-1">•</Text>
+                        <Text className="text-xs text-purple-600 font-medium">
+                            {RECURRENCE_MAP[transaction.recurrence?.toLowerCase()] || transaction.recurrence || 'Fixa'}
+                        </Text>
+                        
+                        {/* Finalized Indicator */}
                         {transaction.active === false && transaction.end_date && (
-                            <View className="flex-row gap-1">
-                                <View className="bg-orange-50 px-1.5 py-0.5 rounded mr-1 border border-orange-100">
-                                    <Text className="text-[10px] text-orange-600 font-medium">
-                                        Fim: {formatDate(transaction.end_date)}
-                                    </Text>
-                                </View>
-                                <View className="bg-green-50 px-1.5 py-0.5 rounded mr-1 border border-green-100">
-                                    <Text className="text-[10px] text-green-600 font-medium">
-                                        Sem cobrança
-                                    </Text>
-                                </View>
+                            <View className="ml-2 bg-orange-100 px-1.5 py-0.5 rounded border border-orange-200">
+                                <Text className="text-[10px] text-orange-700 font-medium">
+                                    Fim: {formatDate(transaction.end_date)}
+                                </Text>
                             </View>
                         )}
-                    </View>
+                    </>
                 )}
             </View>
         </View>
         
         <View className="items-end">
-            <Text className={cn("font-bold text-base", isIncome ? "text-emerald-600" : "text-red-600")}>
+            <Text className={cn("font-bold text-base", isIncome ? "text-emerald-600" : "text-gray-900")}>
                 {isIncome ? "+" : "-"} {formatCurrency(transaction.amount)}
             </Text>
             
             <View className="flex-row items-center gap-2">
-                <View className={cn("px-2 py-0.5 rounded-full mt-1", statusBg)}>
-                    <Text className={cn("text-[10px] font-bold", statusColor)}>
-                        {statusLabel}
-                    </Text>
-                </View>
-
-                {!isVirtual && (onEdit || onDelete) && (
-                    <TouchableOpacity 
-                        onPress={() => setIsMenuVisible(true)}
-                        className="p-1 rounded-full active:bg-gray-100"
-                    >
-                        <MoreVertical size={16} color="#9CA3AF" />
-                    </TouchableOpacity>
-                )}
-                {isVirtual && onEdit && (
-                    <TouchableOpacity 
-                        onPress={() => setIsMenuVisible(true)}
-                        className="p-1 rounded-full active:bg-gray-100"
-                    >
-                        <MoreVertical size={16} color="#9CA3AF" />
-                    </TouchableOpacity>
+                {(statusLabel !== 'Processado' && statusLabel !== 'Pendente') && (
+                    <View className={cn("px-2 py-0.5 rounded-full mt-1", statusBg)}>
+                        <Text className={cn("text-[10px] font-bold", statusColor)}>
+                            {statusLabel}
+                        </Text>
+                    </View>
                 )}
             </View>
         </View>
-        </Card>
+
+        {(onEdit || onDelete) && (
+            <TouchableOpacity 
+                onPress={() => setIsMenuVisible(true)}
+                className="p-2 ml-1 -mr-2 rounded-full active:bg-gray-100"
+            >
+                <MoreVertical size={20} color="#9CA3AF" />
+            </TouchableOpacity>
+        )}
+        </TouchableOpacity>
 
         {/* Options Modal */}
         <Modal

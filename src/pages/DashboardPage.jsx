@@ -257,7 +257,7 @@ export function DashboardPage({ navigation }) {
     const recurringGroups = {};
     fixedExpenses.forEach(t => {
         if (t.recurrence) {
-            const key = `${t.description}-${t.amount}-${t.recurrence}`;
+            const key = `${t.description}-${t.recurrence}`;
             if (!recurringGroups[key] || getTransactionDate(recurringGroups[key].date) < getTransactionDate(t.date)) {
                 recurringGroups[key] = t;
             }

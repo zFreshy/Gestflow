@@ -17,6 +17,8 @@ const formatDateISO = (date) => {
 
 const parseDate = (dateStr) => {
     if (!dateStr) return new Date(0);
+    if (typeof dateStr !== 'string') return new Date(dateStr);
+
     if (dateStr.includes('-')) {
         const [year, month, day] = dateStr.split('-');
         return new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
@@ -25,7 +27,7 @@ const parseDate = (dateStr) => {
         const [day, month, year] = dateStr.split('/');
         return new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
     }
-    return new Date(year, month - 1, day);
+    return new Date(dateStr);
 };
 
 export function TransactionsPage({ navigation }) {
@@ -123,7 +125,7 @@ export function TransactionsPage({ navigation }) {
 
     const sortedKeys = Object.keys(groups).sort((a, b) => {
         if (viewMode === 'year') {
-            return parseInt(a) - parseInt(b); // Jan to Dec
+            return parseInt(b) - parseInt(a); // Dec to Jan (Newest first)
         } else {
             return parseDate(b) - parseDate(a); // Newest to Oldest
         }
@@ -147,8 +149,21 @@ export function TransactionsPage({ navigation }) {
           
           if (date.getTime() === today.getTime()) return 'Hoje';
           
+          // Format: "Terça, 14" to match reference style more closely, or keep full date
+          // Using a cleaner format: "Terça-feira, 14 de Março"
           return date.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' });
       }
+  };
+
+  const calculateGroupTotal = (transactions) => {
+      return transactions.reduce((acc, t) => {
+          const amount = parseFloat(t.amount || 0);
+          if (t.type === 'income') {
+              return acc + amount;
+          } else {
+              return acc - amount;
+          }
+      }, 0);
   };
 
   const handleEdit = (transaction) => {
@@ -249,6 +264,7 @@ export function TransactionsPage({ navigation }) {
       ) : (
         <ScrollView 
             contentContainerStyle={{ padding: 24, paddingBottom: 100 }}
+            showsVerticalScrollIndicator={false}
         >
             {sortedGroupKeys.length === 0 ? (
                 <View className="items-center py-8">
@@ -257,24 +273,35 @@ export function TransactionsPage({ navigation }) {
                 </View>
             ) : (
                 <View className="space-y-6">
-                    {sortedGroupKeys.map(key => (
-                        <View key={key} className="mb-6">
-                            <Text className={`text-sm font-bold mb-3 capitalize ${viewMode === 'year' ? 'text-[#7E1A8B] text-lg' : 'text-gray-500'}`}>
-                                {getGroupLabel(key)}
-                            </Text>
-                            <View className="space-y-3">
-                                {groupedTransactions[key].map(item => (
-                                    <View key={item.id} className="mb-3">
-                                        <TransactionItem 
-                                            transaction={item} 
-                                            onEdit={() => handleEdit(item)}
-                                            onDelete={() => handleDelete(item)}
-                                        />
-                                    </View>
-                                ))}
+                    {sortedGroupKeys.map(key => {
+                        const groupTransactions = groupedTransactions[key];
+                        const groupTotal = calculateGroupTotal(groupTransactions);
+                        
+                        return (
+                            <View key={key} className="bg-white rounded-3xl p-5 shadow-sm shadow-gray-200">
+                                <View className="flex-row justify-between items-center mb-4 pb-2 border-b border-gray-50">
+                                    <Text className="text-lg font-bold text-gray-900 capitalize">
+                                        {getGroupLabel(key)}
+                                    </Text>
+                                    <Text className={`text-base font-bold ${groupTotal >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                                        {groupTotal >= 0 ? '+' : ''}{groupTotal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                                    </Text>
+                                </View>
+                                <View>
+                                    {groupTransactions.map((item, index) => (
+                                        <View key={item.id} className={index < groupTransactions.length - 1 ? "mb-4" : ""}>
+                                            <TransactionItem 
+                                                transaction={item} 
+                                                onPress={() => handleEdit(item)}
+                                                onEdit={() => handleEdit(item)}
+                                                onDelete={() => handleDelete(item)}
+                                            />
+                                        </View>
+                                    ))}
+                                </View>
                             </View>
-                        </View>
-                    ))}
+                        );
+                    })}
                 </View>
             )}
         </ScrollView>

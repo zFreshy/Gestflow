@@ -14,6 +14,8 @@ const isPaid = (status) => ['Pago', 'Liberado', 'pago', 'liberado'].includes(sta
 
 const parseDate = (dateStr) => {
     if (!dateStr) return new Date(0);
+    if (typeof dateStr !== 'string') return new Date(dateStr);
+
     // Handle ISO format (YYYY-MM-DD) which real transactions use
     if (dateStr.includes('-')) {
         const [year, month, day] = dateStr.split('-');
@@ -24,7 +26,7 @@ const parseDate = (dateStr) => {
         const [day, month, year] = dateStr.split('/');
         return new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
     }
-    return new Date(year, month - 1, day);
+    return new Date(dateStr);
 };
 
 const formatDateISO = (date) => {
@@ -192,7 +194,7 @@ export function FixedExpensesPage({ navigation }) {
 
       baseFixedExpenses.forEach(t => {
           if (t.recurrence) {
-              const key = `${t.description}-${t.amount}-${t.recurrence}`;
+              const key = `${t.description}-${t.recurrence}`;
               if (!recurringGroups[key] || parseDate(recurringGroups[key].date) < parseDate(t.date)) {
                   recurringGroups[key] = t;
               }
@@ -352,6 +354,19 @@ export function FixedExpensesPage({ navigation }) {
       }
   };
 
+  const calculateGroupTotal = (transactions) => {
+      return transactions.reduce((acc, t) => {
+          const amount = parseFloat(t.amount || 0);
+          // For Fixed Expenses, usually they are expenses (-), but sometimes logic might differ.
+          // Assuming all are expenses unless specified.
+          if (t.type === 'income') {
+              return acc + amount;
+          } else {
+              return acc - amount;
+          }
+      }, 0);
+  };
+
   const FilterTab = ({ label, value, activeValue, onPress }) => (
     <TouchableOpacity
       onPress={() => onPress(activeValue === value ? 'all' : value)}
@@ -449,32 +464,36 @@ export function FixedExpensesPage({ navigation }) {
                     <Text className="text-sm text-gray-400 mt-1 text-center">Nenhuma despesa encontrada para este {viewMode === 'year' ? 'ano' : 'mês'}.</Text>
                 </View>
             ) : (
-                <View className="space-y-8">
-                    {sortedGroupKeys.map(key => (
-                        <View key={key}>
-                            <View className="flex-row items-center mb-4">
-                                <View className={`h-8 w-1 rounded-full mr-3 ${viewMode === 'year' ? 'bg-[#7E1A8B]' : 'bg-gray-300'}`} />
-                                <Text className={`text-base font-bold capitalize ${viewMode === 'year' ? 'text-[#7E1A8B] text-xl' : 'text-gray-600'}`}>
-                                    {getGroupLabel(key)}
-                                </Text>
+                <View className="space-y-6">
+                    {sortedGroupKeys.map(key => {
+                        const groupTransactions = groupedExpenses[key];
+                        const groupTotal = calculateGroupTotal(groupTransactions);
+                        
+                        return (
+                            <View key={key} className="bg-white rounded-3xl p-5 shadow-sm shadow-gray-200">
+                                <View className="flex-row justify-between items-center mb-4 pb-2 border-b border-gray-50">
+                                    <Text className="text-lg font-bold text-gray-900 capitalize">
+                                        {getGroupLabel(key)}
+                                    </Text>
+                                    <Text className={`text-base font-bold ${groupTotal >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                                        {groupTotal >= 0 ? '+' : ''}{groupTotal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                                    </Text>
+                                </View>
+                                <View>
+                                    {groupedExpenses[key].map((item, index) => (
+                                        <View key={item.id} className={index < groupedExpenses[key].length - 1 ? "mb-4" : ""}>
+                                            <TransactionItem 
+                                                transaction={item} 
+                                                onPress={() => handleTransactionPress(item)}
+                                                onEdit={() => handleEdit(item)}
+                                                onDelete={() => handleDelete(item)}
+                                            />
+                                        </View>
+                                    ))}
+                                </View>
                             </View>
-                            <View className="gap-3">
-                                {groupedExpenses[key].map(item => (
-                                    <TouchableOpacity 
-                                        key={item.id} 
-                                        onPress={() => handleTransactionPress(item)}
-                                        activeOpacity={0.7}
-                                    >
-                                        <TransactionItem 
-                                            transaction={item} 
-                                            onEdit={() => handleEdit(item)}
-                                            onDelete={() => handleDelete(item)}
-                                        />
-                                    </TouchableOpacity>
-                                ))}
-                            </View>
-                        </View>
-                    ))}
+                        );
+                    })}
                 </View>
             )}
         </ScrollView>

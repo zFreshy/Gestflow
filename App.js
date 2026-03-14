@@ -9,6 +9,7 @@ import { LayoutDashboard, Receipt, FileText, Calendar, MoreHorizontal, Plus, Log
 
 import { AuthProvider, useAuth } from './src/contexts/AuthContext';
 import { LoginPage } from './src/pages/LoginPage';
+import { ForgotPasswordPage } from './src/pages/ForgotPasswordPage';
 import { DashboardPage } from './src/pages/DashboardPage';
 import { TransactionsPage } from './src/pages/TransactionsPage';
 import { TransactionForm } from './src/pages/TransactionForm';
@@ -221,7 +222,10 @@ function AppContent() {
             <Stack.Screen name="Calendar" component={PlaceholderPage} />
           </>
         ) : (
-          <Stack.Screen name="Login" component={LoginPage} />
+          <>
+            <Stack.Screen name="Login" component={LoginPage} />
+            <Stack.Screen name="ForgotPassword" component={ForgotPasswordPage} />
+          </>
         )}
       </Stack.Navigator>
       <StatusBar style="auto" />

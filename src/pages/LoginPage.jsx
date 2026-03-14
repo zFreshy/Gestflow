@@ -7,7 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Eye, EyeOff } from 'lucide-react-native';
 import logo from '../../assets/icon.png';
 
-export function LoginPage() {
+export function LoginPage({ navigation }) {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [showPassword, setShowPassword] = useState(false);
@@ -83,7 +83,7 @@ export function LoginPage() {
                             <Button 
                                 title="Esqueceu a senha?" 
                                 variant="ghost" 
-                                onPress={() => {}}
+                                onPress={() => navigation.navigate('ForgotPassword')}
                                 className="mt-2"
                             />
                         </View>

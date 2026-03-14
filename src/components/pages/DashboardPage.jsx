@@ -160,28 +160,41 @@ export function DashboardPage({ transactions }) {
     const fixedTotal = fixedExpenses.reduce((acc, curr) => acc + curr.amount, 0);
     const variableTotal = variableExpenses.reduce((acc, curr) => acc + curr.amount, 0);
 
-    // Calculate averages
-    const uniqueDates = [...new Set(transactions.map(t => t.date))].length || 1;
-    const uniqueMonths = [...new Set(transactions.map(t => {
-        const [d, m, y] = t.date.split('/');
-        return `${m}/${y}`;
-    }))].length || 1;
-    const uniqueYears = [...new Set(transactions.map(t => {
-        const [d, m, y] = t.date.split('/');
-        return y;
-    }))].length || 1;
+    // 6. Period Totals (Logic replicated from Mobile)
+    const todayStr = today.toLocaleDateString('pt-BR');
+    const currentYear = today.getFullYear();
 
-    const dailyAvgIncome = totalIncome / uniqueDates;
-    const dailyAvgExpense = totalExpense / uniqueDates;
-    const dailyAvgProfit = dailyAvgIncome - dailyAvgExpense;
+    // Daily: Today
+    const dailyTxs = transactions.filter(t => {
+        const d = getTransactionDate(t.date);
+        return d.toLocaleDateString('pt-BR') === todayStr;
+    });
+    
+    // Monthly: Current Month
+    const monthlyTxs = transactions.filter(t => {
+        const d = getTransactionDate(t.date);
+        return (d.getMonth() + 1) === (today.getMonth() + 1) && d.getFullYear() === currentYear;
+    });
 
-    const monthlyAvgIncome = totalIncome / uniqueMonths;
-    const monthlyAvgExpense = totalExpense / uniqueMonths;
-    const monthlyAvgProfit = monthlyAvgIncome - monthlyAvgExpense;
+    // Yearly: Current Year
+    const yearlyTxs = transactions.filter(t => {
+        const d = getTransactionDate(t.date);
+        return d.getFullYear() === currentYear;
+    });
 
-    const yearlyAvgIncome = totalIncome / uniqueYears;
-    const yearlyAvgExpense = totalExpense / uniqueYears;
-    const yearlyAvgProfit = yearlyAvgIncome - yearlyAvgExpense;
+    const calculateStats = (txs) => {
+        const inc = txs.filter(t => t.type === 'income').reduce((acc, t) => acc + t.amount, 0);
+        const exp = txs.filter(t => {
+            if (t.type !== 'expense') return false;
+            if (t.expenseType === 'fixed') return isPaid(t.status);
+            return true;
+        }).reduce((acc, t) => acc + t.amount, 0);
+        return { income: inc, expense: exp, profit: inc - exp };
+    };
+
+    const dailyStats = calculateStats(dailyTxs);
+    const monthlyStats = calculateStats(monthlyTxs);
+    const yearlyStats = calculateStats(yearlyTxs);
 
     return (
         <div className="space-y-6">
@@ -306,16 +319,16 @@ export function DashboardPage({ transactions }) {
                     <div className="flex flex-col gap-2 mt-2">
                         <div className="flex justify-between items-center text-sm">
                             <span className="text-muted-foreground">Lucro</span>
-                            <span className="font-medium text-emerald-600">{formatCurrency(dailyAvgIncome)}</span>
+                            <span className="font-medium text-emerald-600">{formatCurrency(dailyStats.income)}</span>
                         </div>
                         <div className="flex justify-between items-center text-sm">
                             <span className="text-muted-foreground">Despesa</span>
-                            <span className="font-medium text-red-600">{formatCurrency(dailyAvgExpense)}</span>
+                            <span className="font-medium text-red-600">{formatCurrency(dailyStats.expense)}</span>
                         </div>
                         <div className="flex justify-between items-center text-sm pt-2 border-t">
                             <span className="font-medium text-gray-700">Saldo</span>
-                            <span className={cn("font-bold", dailyAvgProfit >= 0 ? "text-blue-600" : "text-red-600")}>
-                                {formatCurrency(dailyAvgProfit)}
+                            <span className={cn("font-bold", dailyStats.profit >= 0 ? "text-blue-600" : "text-red-600")}>
+                                {formatCurrency(dailyStats.profit)}
                             </span>
                         </div>
                     </div>
@@ -330,16 +343,16 @@ export function DashboardPage({ transactions }) {
                     <div className="flex flex-col gap-2 mt-2">
                         <div className="flex justify-between items-center text-sm">
                             <span className="text-muted-foreground">Lucro</span>
-                            <span className="font-medium text-emerald-600">{formatCurrency(monthlyAvgIncome)}</span>
+                            <span className="font-medium text-emerald-600">{formatCurrency(monthlyStats.income)}</span>
                         </div>
                         <div className="flex justify-between items-center text-sm">
                             <span className="text-muted-foreground">Despesa</span>
-                            <span className="font-medium text-red-600">{formatCurrency(monthlyAvgExpense)}</span>
+                            <span className="font-medium text-red-600">{formatCurrency(monthlyStats.expense)}</span>
                         </div>
                         <div className="flex justify-between items-center text-sm pt-2 border-t">
                             <span className="font-medium text-gray-700">Saldo</span>
-                            <span className={cn("font-bold", monthlyAvgProfit >= 0 ? "text-blue-600" : "text-red-600")}>
-                                {formatCurrency(monthlyAvgProfit)}
+                            <span className={cn("font-bold", monthlyStats.profit >= 0 ? "text-blue-600" : "text-red-600")}>
+                                {formatCurrency(monthlyStats.profit)}
                             </span>
                         </div>
                     </div>
@@ -354,16 +367,16 @@ export function DashboardPage({ transactions }) {
                     <div className="flex flex-col gap-2 mt-2">
                         <div className="flex justify-between items-center text-sm">
                             <span className="text-muted-foreground">Lucro</span>
-                            <span className="font-medium text-emerald-600">{formatCurrency(yearlyAvgIncome)}</span>
+                            <span className="font-medium text-emerald-600">{formatCurrency(yearlyStats.income)}</span>
                         </div>
                         <div className="flex justify-between items-center text-sm">
                             <span className="text-muted-foreground">Despesa</span>
-                            <span className="font-medium text-red-600">{formatCurrency(yearlyAvgExpense)}</span>
+                            <span className="font-medium text-red-600">{formatCurrency(yearlyStats.expense)}</span>
                         </div>
                         <div className="flex justify-between items-center text-sm pt-2 border-t">
                             <span className="font-medium text-gray-700">Saldo</span>
-                            <span className={cn("font-bold", yearlyAvgProfit >= 0 ? "text-blue-600" : "text-red-600")}>
-                                {formatCurrency(yearlyAvgProfit)}
+                            <span className={cn("font-bold", yearlyStats.profit >= 0 ? "text-blue-600" : "text-red-600")}>
+                                {formatCurrency(yearlyStats.profit)}
                             </span>
                         </div>
                     </div>

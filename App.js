@@ -14,6 +14,7 @@ import { DashboardPage } from './src/pages/DashboardPage';
 import { TransactionsPage } from './src/pages/TransactionsPage';
 import { TransactionForm } from './src/pages/TransactionForm';
 import { FixedExpensesPage } from './src/pages/FixedExpensesPage';
+import { CalendarPage } from './src/pages/CalendarPage';
 
 // Placeholder Pages
 const PlaceholderPage = ({ route }) => (
@@ -219,7 +220,7 @@ function AppContent() {
               }}
             />
             {/* Screens accessible via Menu */}
-            <Stack.Screen name="Calendar" component={PlaceholderPage} />
+            <Stack.Screen name="Calendar" component={CalendarPage} />
           </>
         ) : (
           <>

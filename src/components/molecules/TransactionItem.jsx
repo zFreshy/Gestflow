@@ -85,7 +85,12 @@ export function TransactionItem({ transaction, onEdit, onDelete }) {
             
             <View className="flex-row items-center mt-1 flex-wrap">
                 <Text className={cn("text-xs mr-2", isOverdue && !isPaid ? "text-red-500 font-medium" : "text-gray-500")}>
-                    {isPaid ? `Pago em: ${formatDate(transaction.date)}` : `Vence em: ${formatDate(transaction.date)}`}
+                    {isPaid ? `Pago em: ${formatDate(transaction.date)}` 
+                        : (transaction.expenseType === 'fixed' 
+                            ? `Vence em: ${formatDate(transaction.date)}`
+                            : formatDate(transaction.date)
+                        )
+                    }
                 </Text>
                 <Text className="text-xs text-emerald-600 font-medium mr-2">
                     {METHOD_LABELS[transaction.paymentMethod] || transaction.paymentMethod}

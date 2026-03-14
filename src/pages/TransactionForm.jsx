@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, ScrollView, TextInput, TouchableOpacity, Switch, Alert, KeyboardAvoidingView, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { useAuth } from '../contexts/AuthContext';
 import { transactionService } from '../services/transactionService';
 import { Input } from '../components/atoms/Input';
@@ -45,6 +46,34 @@ export function TransactionForm({ navigation, route }) {
   const [interestRate, setInterestRate] = useState(transaction?.interestRate ? transaction.interestRate.toString() : '');
   const [isActive, setIsActive] = useState(transaction?.active !== false); // Default true
   const [endDate, setEndDate] = useState(transaction?.end_date || ''); // New state for end date
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [showEndDatePicker, setShowEndDatePicker] = useState(false);
+
+  const onDateChange = (event, selectedDate) => {
+    setShowDatePicker(false);
+    if (selectedDate) {
+      const d = String(selectedDate.getDate()).padStart(2, '0');
+      const m = String(selectedDate.getMonth() + 1).padStart(2, '0');
+      const y = selectedDate.getFullYear();
+      setDate(`${y}-${m}-${d}`);
+    }
+  };
+
+  const onEndDateChange = (event, selectedDate) => {
+    setShowEndDatePicker(false);
+    if (selectedDate) {
+      const d = String(selectedDate.getDate()).padStart(2, '0');
+      const m = String(selectedDate.getMonth() + 1).padStart(2, '0');
+      const y = selectedDate.getFullYear();
+      setEndDate(`${y}-${m}-${d}`);
+    }
+  };
+
+  const formatDateDisplay = (isoDate) => {
+    if (!isoDate) return '';
+    const [year, month, day] = isoDate.split('-');
+    return `${day}/${month}/${year}`;
+  };
 
   const handleSubmit = async () => {
     if (!description || !amount || !date) {
@@ -170,12 +199,26 @@ export function TransactionForm({ navigation, route }) {
             keyboardType="numeric"
           />
 
-          <Input
-            label="Data (AAAA-MM-DD)"
-            placeholder="2023-10-25"
-            value={date}
-            onChangeText={setDate}
-          />
+          <TouchableOpacity onPress={() => setShowDatePicker(true)} className="mb-4">
+            <View pointerEvents="none">
+              <Input
+                label="Data"
+                placeholder="DD/MM/AAAA"
+                value={formatDateDisplay(date)}
+                editable={false}
+                rightElement={<Calendar size={20} color="#9CA3AF" />}
+              />
+            </View>
+          </TouchableOpacity>
+
+          {showDatePicker && (
+            <DateTimePicker
+              value={new Date(date.split('-')[0], date.split('-')[1] - 1, date.split('-')[2])}
+              mode="date"
+              display="default"
+              onChange={onDateChange}
+            />
+          )}
 
           {/* Payment Method */}
           <View className="mb-4">
@@ -296,12 +339,27 @@ export function TransactionForm({ navigation, route }) {
 
                   {!isActive && (
                     <View className="bg-red-50 p-3 rounded-lg border border-red-100 mb-4">
-                        <Input
-                            label="Data de Finalização (AAAA-MM-DD)"
-                            placeholder="2023-10-25"
-                            value={endDate}
-                            onChangeText={setEndDate}
-                        />
+                        <TouchableOpacity onPress={() => setShowEndDatePicker(true)}>
+                            <View pointerEvents="none">
+                                <Input
+                                    label="Data de Finalização"
+                                    placeholder="DD/MM/AAAA"
+                                    value={formatDateDisplay(endDate)}
+                                    editable={false}
+                                    rightElement={<Calendar size={20} color="#DC2626" />}
+                                />
+                            </View>
+                        </TouchableOpacity>
+
+                        {showEndDatePicker && (
+                            <DateTimePicker
+                                value={endDate ? new Date(endDate.split('-')[0], endDate.split('-')[1] - 1, endDate.split('-')[2]) : new Date()}
+                                mode="date"
+                                display="default"
+                                onChange={onEndDateChange}
+                            />
+                        )}
+
                         <Text className="text-xs text-red-600 mt-1">
                             A partir desta data, não serão geradas novas cobranças.
                         </Text>

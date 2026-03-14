@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, FlatList, TextInput, TouchableOpacity, ActivityIndicator, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../contexts/AuthContext';
 import { transactionService } from '../services/transactionService';
 import { TransactionItem } from '../components/molecules/TransactionItem';
@@ -15,9 +16,11 @@ export function TransactionsPage({ navigation }) {
   const [filter, setFilter] = useState('all'); // all, income, expense
   const [methodFilter, setMethodFilter] = useState('all'); // all, pix, cartao, dinheiro
 
-  useEffect(() => {
-    fetchTransactions();
-  }, []);
+  useFocusEffect(
+    useCallback(() => {
+      fetchTransactions();
+    }, [])
+  );
 
   useEffect(() => {
     filterTransactions();

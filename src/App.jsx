@@ -182,6 +182,37 @@ function AppContent() {
 
           if (error) throw error;
 
+          // Propagate finalization or reactivation if fixed expense
+          let requiresRefetch = false;
+          if (transactionToUpdate.type === 'expense' && transactionToUpdate.expense_type === 'fixed') {
+               if (transactionToUpdate.active === false && transactionToUpdate.end_date) {
+                   await supabase
+                    .from('transactions')
+                    .update({ 
+                        active: false,
+                        end_date: transactionToUpdate.end_date
+                    })
+                    .eq('user_id', user.id)
+                    .eq('description', transactionToUpdate.description)
+                    .eq('type', 'expense')
+                    .eq('expense_type', 'fixed');
+                   requiresRefetch = true;
+               } else if (transactionToUpdate.active === true) {
+                   // Reactivate series
+                   await supabase
+                    .from('transactions')
+                    .update({ 
+                        active: true,
+                        end_date: null
+                    })
+                    .eq('user_id', user.id)
+                    .eq('description', transactionToUpdate.description)
+                    .eq('type', 'expense')
+                    .eq('expense_type', 'fixed');
+                   requiresRefetch = true;
+               }
+          }
+
            const savedTransaction = {
             ...data,
             paymentMethod: data.payment_method,
@@ -195,7 +226,11 @@ function AppContent() {
             end_date: data.end_date
           };
 
-          setTransactions((prev) => [savedTransaction, ...prev]);
+          if (requiresRefetch) {
+              await fetchTransactions();
+          } else {
+              setTransactions((prev) => [savedTransaction, ...prev]);
+          }
       } else {
           // Normal update for existing real transactions
           const { data, error } = await supabase
@@ -206,6 +241,37 @@ function AppContent() {
             .single();
 
           if (error) throw error;
+
+          // Propagate finalization or reactivation if fixed expense
+          let requiresRefetch = false;
+          if (transactionToUpdate.type === 'expense' && transactionToUpdate.expense_type === 'fixed') {
+               if (transactionToUpdate.active === false && transactionToUpdate.end_date) {
+                   await supabase
+                    .from('transactions')
+                    .update({ 
+                        active: false,
+                        end_date: transactionToUpdate.end_date
+                    })
+                    .eq('user_id', user.id)
+                    .eq('description', transactionToUpdate.description)
+                    .eq('type', 'expense')
+                    .eq('expense_type', 'fixed');
+                   requiresRefetch = true;
+               } else if (transactionToUpdate.active === true) {
+                   // Reactivate series
+                   await supabase
+                    .from('transactions')
+                    .update({ 
+                        active: true,
+                        end_date: null
+                    })
+                    .eq('user_id', user.id)
+                    .eq('description', transactionToUpdate.description)
+                    .eq('type', 'expense')
+                    .eq('expense_type', 'fixed');
+                   requiresRefetch = true;
+               }
+          }
 
           const savedTransaction = {
             ...data,
@@ -220,7 +286,11 @@ function AppContent() {
             end_date: data.end_date
           };
 
-          setTransactions(prev => prev.map(t => t.id === savedTransaction.id ? savedTransaction : t));
+          if (requiresRefetch) {
+              await fetchTransactions();
+          } else {
+              setTransactions(prev => prev.map(t => t.id === savedTransaction.id ? savedTransaction : t));
+          }
       }
       
       setIsFormOpen(false);

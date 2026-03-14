@@ -24,11 +24,23 @@ export function FixedExpensesPage({ transactions, onUpdateStatus, onAddTransacti
         }).format(value);
     };
 
-    // Helper: Parse Date (DD/MM/YYYY)
+    // Helper: Parse Date (DD/MM/YYYY or YYYY-MM-DD)
     const parseDate = (dateStr) => {
         if (!dateStr) return new Date(0);
-        const [day, month, year] = dateStr.split('/');
-        return new Date(year, month - 1, day);
+        
+        // Handle ISO YYYY-MM-DD (e.g. from end_date)
+        if (dateStr.includes('-')) {
+            const [year, month, day] = dateStr.split('-');
+            return new Date(year, month - 1, day);
+        }
+
+        // Handle DD/MM/YYYY
+        if (dateStr.includes('/')) {
+            const [day, month, year] = dateStr.split('/');
+            return new Date(year, month - 1, day);
+        }
+
+        return new Date(0);
     };
 
     // Helper: Calculate next occurrence for recurring expenses
@@ -115,11 +127,18 @@ export function FixedExpensesPage({ transactions, onUpdateStatus, onAddTransacti
     const baseFixedExpenses = transactions.filter(t => t.type === 'expense' && t.expenseType === 'fixed');
 
     // 2. Generate Projections (Virtual Expenses) based on ALL fixed expenses (before filtering)
+    // Refactored to look back 2 years to catch old but active expenses
     const recurringGroups = {};
+    const lookbackDate = new Date();
+    lookbackDate.setFullYear(lookbackDate.getFullYear() - 2); // 2 years ago
+
     baseFixedExpenses.forEach(t => {
         if (t.recurrence) {
             const key = `${t.description}-${t.amount}-${t.recurrence}`;
-            // Track the latest occurrence
+            
+            // Only consider if it's the "best" candidate so far (latest date)
+            // But we must respect the database: if we have multiple, we want the LATEST one.
+            // Actually, we want to find the latest occurrence in DB to start projecting from.
             if (!recurringGroups[key] || parseDate(recurringGroups[key].date) < parseDate(t.date)) {
                 recurringGroups[key] = t;
             }
@@ -148,9 +167,12 @@ export function FixedExpensesPage({ transactions, onUpdateStatus, onAddTransacti
     Object.values(recurringGroups).forEach(lastExpense => {
         let currentDate = parseDate(lastExpense.date);
         
+        // If the last known expense is very old (older than lookback), we might want to skip it OR project forward.
+        // If it's active, we MUST project forward to today.
+        
         // Loop to generate ALL missing occurrences up to the first future one
         let safetyCounter = 0;
-        const maxIterations = 100; // Prevent infinite loops
+        const maxIterations = 500; // Increased limit for long gaps (e.g. 2 years of daily expenses)
 
         while (safetyCounter < maxIterations) {
             safetyCounter++;
@@ -158,9 +180,6 @@ export function FixedExpensesPage({ transactions, onUpdateStatus, onAddTransacti
             // Calculate next candidate date based on recurrence
             const nextDate = addRecurrence(currentDate, lastExpense.recurrence);
             
-            // Update currentDate for next iteration
-            currentDate = nextDate;
-
             // Check if this date is valid regarding end_date (if inactive)
              if (lastExpense.active === false) {
                 if (!lastExpense.end_date) break; // Inactive with no end date -> stop generating
@@ -178,16 +197,29 @@ export function FixedExpensesPage({ transactions, onUpdateStatus, onAddTransacti
                 if (nextDate > endDateObj) break;
             }
 
-            // Construct virtual expense
-            const virtualExpense = {
-                ...lastExpense,
-                id: `virtual-${lastExpense.id}-${nextDate.getTime()}`, // Unique ID
-                date: nextDate.toLocaleDateString('pt-BR'), // DD/MM/YYYY
-                status: 'Aguardando', // Always pending
-                isVirtual: true // Flag
-            };
-            
-            virtualExpenses.push(virtualExpense);
+            // Update currentDate for next iteration
+            currentDate = nextDate;
+
+            // Check if this virtual expense already exists in DB (gap filling check)
+            // We only add it if it DOESN'T match an existing transaction
+            const exists = baseFixedExpenses.some(t => 
+                t.description === lastExpense.description &&
+                t.amount === lastExpense.amount &&
+                parseDate(t.date).getTime() === nextDate.getTime()
+            );
+
+            if (!exists) {
+                // Construct virtual expense
+                const virtualExpense = {
+                    ...lastExpense,
+                    id: `virtual-${lastExpense.id}-${nextDate.getTime()}`, // Unique ID
+                    date: nextDate.toLocaleDateString('pt-BR'), // DD/MM/YYYY
+                    status: 'Aguardando', // Always pending
+                    isVirtual: true // Flag
+                };
+                
+                virtualExpenses.push(virtualExpense);
+            }
 
             // If we have generated a future expense (>= today), we stop for this group.
             // This ensures we fill all past gaps + 1 future occurrence.
@@ -197,6 +229,21 @@ export function FixedExpensesPage({ transactions, onUpdateStatus, onAddTransacti
 
     // 3. Combine Real + Virtual
     let allCandidates = [...baseFixedExpenses, ...virtualExpenses];
+
+    // Filter out cancelled transactions (active=false AND date > end_date)
+    allCandidates = allCandidates.filter(t => {
+        if (t.active === false && t.end_date) {
+            const tDate = parseDate(t.date);
+            const endDate = parseDate(t.end_date);
+            // Hide if transaction date is strictly after end date
+            // Using setHours to ensure we compare dates only
+            tDate.setHours(0,0,0,0);
+            endDate.setHours(0,0,0,0);
+            
+            if (tDate > endDate) return false;
+        }
+        return true;
+    });
 
     // 4. Apply Filters (Search & Status)
     if (searchTerm) {

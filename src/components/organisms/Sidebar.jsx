@@ -49,7 +49,7 @@ export function Sidebar({ isOpen, onClose }) {
                         "font-bold tracking-tight text-[#7E1A8B] transition-all",
                         isCollapsed ? "text-xl" : "text-3xl"
                     )}>
-                        {isCollapsed ? 'F' : 'Fornalha'}
+                        {isCollapsed ? 'G' : 'Gestflow'}
                     </span>
                     
                     {/* Mobile Close Button */}

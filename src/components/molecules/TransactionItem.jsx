@@ -3,7 +3,7 @@ import { Typography } from '../atoms/Typography';
 import { ArrowDownRight, ArrowUpRight, Copy, CreditCard, Banknote } from 'lucide-react';
 import { cn } from '../../lib/utils';
 
-export function TransactionItem({ description, amount, date, type, paymentMethod }) {
+export function TransactionItem({ description, amount, date, type, paymentMethod, userEmail }) {
     const isIncome = type === 'income';
 
     const MethodIcon = () => {
@@ -16,6 +16,13 @@ export function TransactionItem({ description, amount, date, type, paymentMethod
             default:
                 return <Banknote className="h-4 w-4 text-muted-foreground" />;
         }
+    };
+
+    const getUserName = (email) => {
+        if (email === 'ecarneirodemelo@gmail.com') return 'Nal';
+        if (email === 'esthermenezes90@gmail.com') return 'Esther';
+        if (email === 'matheusv090807@gmail.com') return 'Matheus';
+        return 'Sistema';
     };
 
     return (
@@ -44,6 +51,14 @@ export function TransactionItem({ description, amount, date, type, paymentMethod
                                 {paymentMethod}
                             </Typography>
                         </div>
+                        {userEmail && (
+                            <>
+                                <span className="text-muted-foreground/50 text-xs">•</span>
+                                <Typography variant="muted" className="text-xs">
+                                    Por: {getUserName(userEmail)}
+                                </Typography>
+                            </>
+                        )}
                     </div>
                 </div>
             </div>

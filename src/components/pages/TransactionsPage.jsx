@@ -69,9 +69,27 @@ export function TransactionsPage({ transactions, onEdit, onDelete, onBatchDelete
         }
     };
 
+    const getEmailFromStorage = () => {
+        try {
+            if (user?.email) return user.email;
+            for (let i = 0; i < localStorage.length; i++) {
+                const key = localStorage.key(i);
+                if (key && key.startsWith('sb-') && key.endsWith('-auth-token')) {
+                    const item = localStorage.getItem(key);
+                    if (item) {
+                        const parsed = JSON.parse(item);
+                        if (parsed?.user?.email) return parsed.user.email;
+                    }
+                }
+            }
+        } catch (e) {}
+        return '';
+    };
+
     const executeImport = async (parsedTransactions) => {
         setIsSaving(true);
         try {
+            const userEmail = getEmailFromStorage();
             const transactionsToSave = parsedTransactions.map(t => {
                 const [day, month, year] = t.date.split('/');
                 const formattedDate = `${year}-${month}-${day}`;
@@ -85,7 +103,8 @@ export function TransactionsPage({ transactions, onEdit, onDelete, onBatchDelete
                     status: t.status,
                     expense_type: t.expenseType,
                     is_bakery_income: t.isBakeryIncome,
-                    user_id: user.id
+                    user_id: user.id,
+                    user_email: userEmail
                 };
             });
 

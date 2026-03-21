@@ -36,6 +36,35 @@ function AppContent() {
   const PAGE_SIZE = 50;
   
   const { user } = useAuth();
+  
+  // Utilitário para pegar o email real do localstorage, já que às vezes a sessão do auth desincroniza
+  const getEmailFromStorage = () => {
+      try {
+          if (user?.email) {
+              console.log("Email from useAuth:", user.email);
+              return user.email;
+          }
+          
+          // Fallback para localStorage
+          for (let i = 0; i < localStorage.length; i++) {
+              const key = localStorage.key(i);
+              if (key && key.startsWith('sb-') && key.endsWith('-auth-token')) {
+                  const item = localStorage.getItem(key);
+                  if (item) {
+                      const parsed = JSON.parse(item);
+                      if (parsed?.user?.email) {
+                          console.log("Email from localStorage:", parsed.user.email);
+                          return parsed.user.email;
+                      }
+                  }
+              }
+          }
+      } catch (e) {
+          console.error("Erro ao buscar email do storage", e);
+      }
+      console.log("No email found, returning empty string");
+      return '';
+  };
   const location = useLocation();
 
   // Use current month
@@ -62,7 +91,7 @@ function AppContent() {
       
       let query = supabase
         .from('transactions')
-        .select('*', { count: 'exact' })
+        .select('id, description, amount, type, payment_method, date, subtitle, client_name, is_bakery_income, recurrence, exam, health_plan, status, expense_type, interest_rate, active, end_date, user_email, created_at', { count: 'exact' })
         .order('date', { ascending: false });
 
       let start = 0;
@@ -93,7 +122,8 @@ function AppContent() {
           date: formattedDate,
           timestamp: new Date(year, month - 1, day).getTime(),
           active: t.active,
-          end_date: t.end_date
+          end_date: t.end_date,
+          user_email: t.user_email
         };
       });
 
@@ -144,8 +174,11 @@ function AppContent() {
         health_plan: newTransaction.healthPlan,
         status: newTransaction.status || 'Aguardando',
         expense_type: newTransaction.expenseType,
-        user_id: user.id
+        user_id: user.id,
+        user_email: getEmailFromStorage()
       };
+
+      console.log("Saving transaction with email:", transactionToSave.user_email);
 
       const { data, error } = await supabase
         .from('transactions')
@@ -164,7 +197,8 @@ function AppContent() {
         isBakeryIncome: data.is_bakery_income,
         healthPlan: data.health_plan,
         date: newTransaction.date, // Use original date string
-        timestamp: newTransaction.timestamp
+        timestamp: newTransaction.timestamp,
+        user_email: data.user_email
       };
 
       setTransactions((prev) => [savedTransaction, ...prev]);
@@ -208,7 +242,8 @@ function AppContent() {
           // IMPORTANT: Explicitly add user_id to ensure RLS policies pass
           const { id, ...transactionToCreate } = {
               ...transactionToUpdate,
-              user_id: user.id
+              user_id: user.id,
+              user_email: getEmailFromStorage()
           };
           
           // Ensure status is meaningful (if user edited it, great, otherwise keep pending or set to whatever makes sense)
@@ -262,7 +297,8 @@ function AppContent() {
             date: updatedTransaction.date,
             timestamp: updatedTransaction.timestamp,
             active: data.active,
-            end_date: data.end_date
+            end_date: data.end_date,
+            user_email: data.user_email
           };
 
           if (requiresRefetch) {
@@ -320,7 +356,8 @@ function AppContent() {
             date: updatedTransaction.date,
             timestamp: updatedTransaction.timestamp,
             active: data.active,
-            end_date: data.end_date
+            end_date: data.end_date,
+            user_email: data.user_email
           };
 
           if (requiresRefetch) {
@@ -425,7 +462,8 @@ function AppContent() {
           isBakeryIncome: data.is_bakery_income,
           healthPlan: data.health_plan,
           date: formattedDate,
-          timestamp: new Date(year, month - 1, day).getTime()
+          timestamp: new Date(year, month - 1, day).getTime(),
+          user_email: data.user_email
       };
 
       setTransactions(prev => prev.map(t => 

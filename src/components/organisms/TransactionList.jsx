@@ -405,6 +405,11 @@ export function TransactionList({ transactions, onEdit, onDelete, onBatchDelete,
                                                                 Fixa
                                                             </span>
                                                         )}
+                                                        {t.user_email && (
+                                                            <span className="text-xs text-purple-600 bg-purple-50 px-1.5 py-0.5 rounded">
+                                                                Por: {t.user_email === 'ecarneirodemelo@gmail.com' ? 'Nal' : t.user_email === 'esthermenezes90@gmail.com' ? 'Esther' : t.user_email === 'matheusv090807@gmail.com' ? 'Matheus' : 'Sistema'}
+                                                            </span>
+                                                        )}
                                                     </div>
                                                 </div>
                                             </div>

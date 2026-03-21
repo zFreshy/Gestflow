@@ -18,6 +18,7 @@ create table public.transactions (
   interest_rate numeric, -- New field for interest rate
   active boolean default true, -- New field to mark if fixed expense is still active
   end_date date, -- New field to specify when the fixed expense ended
+  user_email text, -- New field to track who created the transaction
   created_at timestamptz default now()
 );
 

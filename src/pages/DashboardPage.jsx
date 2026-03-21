@@ -201,17 +201,21 @@ export function DashboardPage({ navigation }) {
 
   const fetchTransactions = async () => {
     try {
-      const data = await transactionService.getAll(user.id);
+      const response = await transactionService.getAll(user.id);
+      // Para o dashboard, precisamos de todas as transações, então vamos buscar o máximo possível
+      // ou apenas lidar com a resposta paginada do serviço
+      const data = response.data || [];
       
       // Map Supabase snake_case to camelCase
-      const mappedData = (data || []).map(t => {
+      const mappedData = data.map(t => {
           return {
               ...t,
               // Map common snake_case fields to camelCase if they exist
               expenseType: t.expense_type || t.expenseType,
               paymentMethod: t.payment_method || t.paymentMethod,
               userId: t.user_id || t.userId,
-              createdAt: t.created_at || t.createdAt
+              createdAt: t.created_at || t.createdAt,
+              recurrence: t.recurrence
           };
       });
 

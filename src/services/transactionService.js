@@ -1,14 +1,18 @@
 import { supabase } from '../lib/supabase';
 
 export const transactionService = {
-  async getAll(userId) {
-    const { data, error } = await supabase
+  async getAll(userId, page = 0, pageSize = 50) {
+    const start = page * pageSize;
+    const end = start + pageSize - 1;
+
+    const { data, error, count } = await supabase
       .from('transactions')
-      .select('*')
-      .order('date', { ascending: false });
+      .select('*', { count: 'exact' })
+      .order('date', { ascending: false })
+      .range(start, end);
     
     if (error) throw error;
-    return data;
+    return { data, count, hasMore: start + data.length < count };
   },
 
   async create(transaction) {

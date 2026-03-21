@@ -37,6 +37,9 @@ export function TransactionsPage({ navigation }) {
   const [transactions, setTransactions] = useState([]);
   const [filteredTransactions, setFilteredTransactions] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
+  const [page, setPage] = useState(0);
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState('all'); // all, income, expense
   const [methodFilter, setMethodFilter] = useState('all'); // all, pix, cartao, dinheiro
@@ -54,7 +57,9 @@ export function TransactionsPage({ navigation }) {
 
   useFocusEffect(
     useCallback(() => {
-      fetchTransactions();
+      setPage(0);
+      setHasMore(true);
+      fetchTransactions(0, true);
     }, [])
   );
 
@@ -62,11 +67,18 @@ export function TransactionsPage({ navigation }) {
     processTransactions();
   }, [search, filter, methodFilter, transactions, currentMonth, viewMode]);
 
-  const fetchTransactions = async () => {
+  const fetchTransactions = async (pageToFetch = page, reset = false) => {
     try {
-      const data = await transactionService.getAll(user.id);
+      if (reset) {
+        setLoading(true);
+      } else {
+        setLoadingMore(true);
+      }
+
+      const response = await transactionService.getAll(user.id, pageToFetch);
+      const data = response.data || [];
       
-      const mappedData = (data || []).map(t => ({
+      const mappedData = data.map(t => ({
           ...t,
           expenseType: t.expense_type || t.expenseType,
           paymentMethod: t.payment_method || t.paymentMethod,
@@ -75,11 +87,26 @@ export function TransactionsPage({ navigation }) {
           recurrence: t.recurrence,
       }));
 
-      setTransactions(mappedData);
+      if (reset) {
+        setTransactions(mappedData);
+      } else {
+        setTransactions(prev => [...prev, ...mappedData]);
+      }
+      
+      setHasMore(response.hasMore);
     } catch (error) {
       console.error(error);
     } finally {
       setLoading(false);
+      setLoadingMore(false);
+    }
+  };
+
+  const loadMore = () => {
+    if (!loading && !loadingMore && hasMore) {
+      const nextPage = page + 1;
+      setPage(nextPage);
+      fetchTransactions(nextPage);
     }
   };
 
@@ -610,6 +637,20 @@ export function TransactionsPage({ navigation }) {
                             </View>
                         );
                     })}
+                    
+                    {hasMore && (
+                        <TouchableOpacity 
+                            onPress={loadMore}
+                            disabled={loadingMore}
+                            className="bg-white py-4 rounded-2xl items-center justify-center border border-gray-100 mt-2 mb-6"
+                        >
+                            {loadingMore ? (
+                                <ActivityIndicator size="small" color="#7E1A8B" />
+                            ) : (
+                                <Text className="text-[#7E1A8B] font-bold text-base">Carregar Mais</Text>
+                            )}
+                        </TouchableOpacity>
+                    )}
                 </View>
             )}
         </ScrollView>

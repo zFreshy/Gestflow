@@ -1,17 +1,29 @@
 import { supabase } from '../lib/supabase';
 
 export const transactionService = {
-  async getAll(userId, page = 0, pageSize = 50) {
-    const start = page * pageSize;
-    const end = start + pageSize - 1;
-
-    const { data, error, count } = await supabase
+  async getAll(userId, page = 0, pageSize = 50, fetchAll = false) {
+    let query = supabase
       .from('transactions')
       .select('*', { count: 'exact' })
-      .order('date', { ascending: false })
-      .range(start, end);
+      .order('date', { ascending: false });
+
+    let start = 0;
+    let end = 0;
+
+    if (!fetchAll) {
+        start = page * pageSize;
+        end = start + pageSize - 1;
+        query = query.range(start, end);
+    }
+
+    const { data, error, count } = await query;
     
     if (error) throw error;
+    
+    if (fetchAll) {
+        return { data, count, hasMore: false };
+    }
+    
     return { data, count, hasMore: start + data.length < count };
   },
 

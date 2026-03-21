@@ -201,13 +201,19 @@ export function DashboardPage({ navigation }) {
 
   const fetchTransactions = async () => {
     try {
-      const response = await transactionService.getAll(user.id);
-      // Para o dashboard, precisamos de todas as transações, então vamos buscar o máximo possível
-      // ou apenas lidar com a resposta paginada do serviço
-      const data = response.data || [];
+      // Passa true no quarto parâmetro (fetchAll) para trazer todas as transações de uma vez
+      const response = await transactionService.getAll(user.id, 0, 50, true);
+      
+      // Handle the case where response might not be what we expect
+      let dataToMap = [];
+      if (Array.isArray(response)) {
+          dataToMap = response;
+      } else if (response && Array.isArray(response.data)) {
+          dataToMap = response.data;
+      }
       
       // Map Supabase snake_case to camelCase
-      const mappedData = data.map(t => {
+      const mappedData = dataToMap.map(t => {
           return {
               ...t,
               // Map common snake_case fields to camelCase if they exist

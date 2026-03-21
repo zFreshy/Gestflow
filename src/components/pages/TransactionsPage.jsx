@@ -6,7 +6,7 @@ import { Upload, Save, X } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
 
-export function TransactionsPage({ transactions, onEdit, onDelete, onImportSuccess }) {
+export function TransactionsPage({ transactions, onEdit, onDelete, onBatchDelete, onImportSuccess }) {
     const { user } = useAuth();
     const [currentMonth, setCurrentMonth] = useState(new Date());
     const [viewMode, setViewMode] = useState('month'); // 'month' | 'year'
@@ -31,6 +31,68 @@ export function TransactionsPage({ transactions, onEdit, onDelete, onImportSucce
 
         return sameYear && tDate.getMonth() === currentMonth.getMonth();
     });
+
+    const saveTransactionsToDB = async (parsedTransactions) => {
+        if (parsedTransactions.length === 0) return;
+        setIsSaving(true);
+        try {
+            // Verifica se as transações que estamos tentando importar já existem para este usuário e data
+            const datesToImport = [...new Set(parsedTransactions.map(t => {
+                const [day, month, year] = t.date.split('/');
+                return `${year}-${month}-${day}`;
+            }))];
+            
+            const { data: existingData, error: checkError } = await supabase
+                .from('transactions')
+                .select('date')
+                .eq('user_id', user.id)
+                .in('date', datesToImport)
+                .like('description', 'Lucro Padaria%');
+                
+            if (checkError) throw checkError;
+            
+            if (existingData && existingData.length > 0) {
+                const confirmSave = window.confirm(
+                    "Parece que você já importou algumas vendas para essas datas anteriormente.\n\nDeseja importar novamente? Isso pode duplicar seus registros."
+                );
+                if (!confirmSave) {
+                    setIsSaving(false);
+                    return;
+                }
+            }
+
+            const transactionsToSave = parsedTransactions.map(t => {
+                const [day, month, year] = t.date.split('/');
+                const formattedDate = `${year}-${month}-${day}`;
+                
+                return {
+                    description: t.description,
+                    amount: t.amount,
+                    type: t.type,
+                    payment_method: t.paymentMethod,
+                    date: formattedDate,
+                    status: t.status,
+                    expense_type: t.expenseType,
+                    is_bakery_income: t.isBakeryIncome,
+                    user_id: user.id
+                };
+            });
+
+            const { error } = await supabase
+                .from('transactions')
+                .insert(transactionsToSave);
+
+            if (error) throw error;
+
+            alert('Importação salva com sucesso!');
+            if (onImportSuccess) onImportSuccess();
+        } catch (error) {
+            console.error('Erro ao salvar importação:', error);
+            alert('Erro ao salvar transações importadas.');
+        } finally {
+            setIsSaving(false);
+        }
+    };
 
     const handleFileUpload = (event) => {
         const file = event.target.files[0];
@@ -109,13 +171,13 @@ export function TransactionsPage({ transactions, onEdit, onDelete, onImportSucce
             
             // Portanto, podemos mapear EXATAMENTE as posições "L" que a tag <m18> terá para cada método de pagamento!
             const positionToMethodMap = {
-                87: 'Dinheiro',
-                162: 'Cartão de Crédito',
-                237: 'Cartão de Débito',
-                312: 'Crédito Loja (fiado)',
-                387: 'Vale Alimentação',
-                462: 'Vale Combustível',
-                537: 'PIX',
+                87: { name: 'Dinheiro', id: 'dinheiro' },
+                162: { name: 'Cartão de Crédito', id: 'cartao' },
+                237: { name: 'Cartão de Débito', id: 'debito' },
+                312: { name: 'Crédito Loja (fiado)', id: 'credito_loja' },
+                387: { name: 'Vale Alimentação', id: 'vale_alimentacao' },
+                462: { name: 'Vale Combustível', id: 'vale_combustivel' },
+                537: { name: 'PIX', id: 'pix' },
             };
 
             // Passo 3: Extrair os valores das bandas <TfrxNullBand Height="19"...>
@@ -143,22 +205,25 @@ export function TransactionsPage({ transactions, onEdit, onDelete, onImportSucce
                         // Encontra o método de pagamento baseado no L exato
                         // Usamos uma margem de tolerância pequena caso o gerador de relatórios mova 1 ou 2 pixels
                         let method = 'Diversos';
-                        for (const [pos, methodName] of Object.entries(positionToMethodMap)) {
+                        let methodId = 'diversos';
+                        for (const [pos, methodObj] of Object.entries(positionToMethodMap)) {
                             if (Math.abs(lPos - parseInt(pos, 10)) <= 5) {
-                                method = methodName;
+                                method = methodObj.name;
+                                methodId = methodObj.id;
                                 break;
                             }
                         }
                         
                         newTransactions.push({
                             id: `imported-${Date.now()}-${i}-${lPos}`,
-                            description: `Vendas do dia (${method})`,
+                            description: `Lucro Padaria`,
                             amount: amount,
                             type: 'income',
                             date: dates[i],
                             status: 'Pago',
                             expenseType: 'variable',
-                            paymentMethod: method,
+                            paymentMethod: methodId,
+                            isBakeryIncome: true,
                             isImported: true
                         });
                     }
@@ -166,58 +231,15 @@ export function TransactionsPage({ transactions, onEdit, onDelete, onImportSucce
             }
             
             if (newTransactions.length > 0) {
-                setImportedTransactions(prev => [...newTransactions, ...prev]);
-                alert(`Sucesso! ${newTransactions.length} transações (Receitas Diárias) importadas temporariamente para visualização.`);
+                // Ao invés de jogar pro estado temporário, salva direto
+                saveTransactionsToDB(newTransactions);
             } else {
                 alert('Não foi possível identificar os valores corretamente. Verifique se o arquivo segue o padrão de "PAGAMENTOS AGRUPADO POR DATA".');
-                console.log("Datas encontradas:", dates);
-                console.log("Linhas de dados encontradas:", dataRows.length);
             }
         };
 
         reader.readAsText(file);
         event.target.value = null;
-    };
-
-    const handleSaveImport = async () => {
-        if (importedTransactions.length === 0) return;
-        setIsSaving(true);
-        try {
-            const transactionsToSave = importedTransactions.map(t => {
-                const [day, month, year] = t.date.split('/');
-                const formattedDate = `${year}-${month}-${day}`;
-                
-                return {
-                    description: t.description,
-                    amount: t.amount,
-                    type: t.type,
-                    payment_method: t.paymentMethod,
-                    date: formattedDate,
-                    status: t.status,
-                    expense_type: t.expenseType,
-                    user_id: user.id
-                };
-            });
-
-            const { error } = await supabase
-                .from('transactions')
-                .insert(transactionsToSave);
-
-            if (error) throw error;
-
-            alert('Importação salva com sucesso!');
-            setImportedTransactions([]);
-            if (onImportSuccess) onImportSuccess();
-        } catch (error) {
-            console.error('Erro ao salvar importação:', error);
-            alert('Erro ao salvar transações importadas.');
-        } finally {
-            setIsSaving(false);
-        }
-    };
-
-    const handleCancelImport = () => {
-        setImportedTransactions([]);
     };
 
     return (
@@ -237,33 +259,13 @@ export function TransactionsPage({ transactions, onEdit, onDelete, onImportSucce
                         onChange={handleFileUpload}
                     />
 
-                    {importedTransactions.length > 0 && (
-                        <>
-                            <button
-                                onClick={handleSaveImport}
-                                disabled={isSaving}
-                                className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white hover:bg-green-700 rounded-lg text-sm font-semibold transition-colors disabled:opacity-50"
-                            >
-                                <Save className="h-4 w-4" />
-                                {isSaving ? 'Salvando...' : `Salvar (${importedTransactions.length})`}
-                            </button>
-                            <button
-                                onClick={handleCancelImport}
-                                disabled={isSaving}
-                                className="flex items-center gap-2 px-4 py-2 bg-red-100 text-red-700 hover:bg-red-200 rounded-lg text-sm font-semibold transition-colors disabled:opacity-50"
-                            >
-                                <X className="h-4 w-4" />
-                                Cancelar
-                            </button>
-                        </>
-                    )}
-
                     <button
                         onClick={() => fileInputRef.current?.click()}
-                        className="flex items-center gap-2 px-4 py-2 bg-purple-100 text-purple-700 hover:bg-purple-200 rounded-lg text-sm font-semibold transition-colors"
+                        disabled={isSaving}
+                        className="flex items-center gap-2 px-4 py-2 bg-purple-100 text-purple-700 hover:bg-purple-200 rounded-lg text-sm font-semibold transition-colors disabled:opacity-50"
                     >
                         <Upload className="h-4 w-4" />
-                        Importar .FP3
+                        {isSaving ? 'Importando...' : 'Importar .FP3'}
                     </button>
 
                     <div className="bg-gray-100 p-1 rounded-lg flex items-center ml-2">
@@ -300,6 +302,7 @@ export function TransactionsPage({ transactions, onEdit, onDelete, onImportSucce
                     transactions={filteredTransactions} 
                     onEdit={onEdit} 
                     onDelete={onDelete}
+                    onBatchDelete={onBatchDelete}
                     viewMode={viewMode}
                 />
             </div>

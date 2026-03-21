@@ -319,6 +319,22 @@ function AppContent() {
     }
   };
 
+  const handleBatchDeleteTransactions = async (transactionIds) => {
+    try {
+      const { error } = await supabase
+        .from('transactions')
+        .delete()
+        .in('id', transactionIds);
+
+      if (error) throw error;
+
+      setTransactions(prev => prev.filter(t => !transactionIds.includes(t.id)));
+    } catch (error) {
+      console.error('Error batch deleting transactions:', error);
+      alert('Erro ao excluir transações');
+    }
+  };
+
   const handleUpdateStatus = async (transactionId, newStatus, paymentDate = null, interestAmount = 0) => {
     try {
       const updates = { status: newStatus };
@@ -425,6 +441,7 @@ function AppContent() {
                       transactions={transactions} 
                       onEdit={openEditForm} 
                       onDelete={handleDeleteTransaction}
+                      onBatchDelete={handleBatchDeleteTransactions}
                       onImportSuccess={fetchTransactions}
                     />
                   } 

@@ -213,7 +213,12 @@ export function TransactionForm({ onAddTransaction, onEditTransaction, isOpen, o
                         <Select value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)}>
                             <option value="pix">PIX</option>
                             <option value="dinheiro">Dinheiro</option>
-                            <option value="cartao">Cartão</option>
+                            <option value="cartao">Cartão de Crédito</option>
+                            <option value="debito">Cartão de Débito</option>
+                            <option value="credito_loja">Crédito Loja (fiado)</option>
+                            <option value="vale_alimentacao">Vale Alimentação</option>
+                            <option value="vale_combustivel">Vale Combustível</option>
+                            <option value="diversos">Diversos</option>
                         </Select>
                     </FormField>
 

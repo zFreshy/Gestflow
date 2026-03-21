@@ -8,8 +8,13 @@ import { cn } from '../../lib/utils';
 
 const METHOD_LABELS = {
     pix: 'Pix',
-    cartao: 'Cartão',
+    cartao: 'Cartão de Crédito',
+    debito: 'Cartão de Débito',
     dinheiro: 'Dinheiro',
+    credito_loja: 'Crédito Loja (fiado)',
+    vale_alimentacao: 'Vale Alimentação',
+    vale_combustivel: 'Vale Combustível',
+    diversos: 'Diversos'
 };
 
 const STATUS_MAP = {
@@ -27,15 +32,90 @@ const RECURRENCE_MAP = {
     'biennial': 'Bienal'
 };
 
-export function TransactionList({ transactions, onEdit, onDelete, viewMode = 'month' }) {
+export function TransactionList({ transactions, onEdit, onDelete, onBatchDelete, viewMode = 'month' }) {
     const [searchTerm, setSearchTerm] = useState('');
     const [filterType, setFilterType] = useState('all');
     const [filterMethod, setFilterMethod] = useState('all');
     const [isFilterOpen, setIsFilterOpen] = useState(false);
+    
+    // Batch selection states
+    const [selectedIds, setSelectedIds] = useState(new Set());
+    const [isSelectionMode, setIsSelectionMode] = useState(false);
+
+    const toggleSelection = (id) => {
+        const newSet = new Set(selectedIds);
+        if (newSet.has(id)) {
+            newSet.delete(id);
+        } else {
+            newSet.add(id);
+        }
+        setSelectedIds(newSet);
+    };
+
+    const toggleSelectAll = () => {
+        if (selectedIds.size === filteredTransactions.length) {
+            setSelectedIds(new Set());
+        } else {
+            setSelectedIds(new Set(filteredTransactions.map(t => t.id)));
+        }
+    };
+
+    const toggleGroupSelection = (groupKey) => {
+        const groupTransactions = groupedTransactions[groupKey];
+        const groupIds = groupTransactions.map(t => t.id);
+        const newSet = new Set(selectedIds);
+        
+        // Verifica se todos os itens deste grupo já estão selecionados
+        const allSelected = groupIds.every(id => newSet.has(id));
+        
+        if (allSelected) {
+            // Deselecionar todos do grupo
+            groupIds.forEach(id => newSet.delete(id));
+        } else {
+            // Selecionar todos do grupo
+            groupIds.forEach(id => newSet.add(id));
+        }
+        
+        setSelectedIds(newSet);
+    };
+
+    const isGroupFullySelected = (groupKey) => {
+        const groupTransactions = groupedTransactions[groupKey];
+        if (!groupTransactions || groupTransactions.length === 0) return false;
+        return groupTransactions.every(t => selectedIds.has(t.id));
+    };
+
+    const isGroupPartiallySelected = (groupKey) => {
+        const groupTransactions = groupedTransactions[groupKey];
+        if (!groupTransactions || groupTransactions.length === 0) return false;
+        const selectedCount = groupTransactions.filter(t => selectedIds.has(t.id)).length;
+        return selectedCount > 0 && selectedCount < groupTransactions.length;
+    };
+
+    const handleBatchDelete = () => {
+        if (selectedIds.size === 0) return;
+        
+        if (window.confirm(`Tem certeza que deseja excluir ${selectedIds.size} transações selecionadas?`)) {
+            if (onBatchDelete) {
+                onBatchDelete(Array.from(selectedIds));
+                setSelectedIds(new Set());
+                setIsSelectionMode(false);
+            }
+        }
+    };
 
     const filteredTransactions = transactions.filter(t => {
         const matchesSearch = t.description.toLowerCase().includes(searchTerm.toLowerCase());
-        const matchesType = filterType === 'all' || t.type === filterType;
+        
+        let matchesType = true;
+        if (filterType === 'income') {
+            matchesType = t.type === 'income';
+        } else if (filterType === 'bakery_income') {
+            matchesType = t.type === 'income' && t.isBakeryIncome === true;
+        } else if (filterType === 'expense') {
+            matchesType = t.type === 'expense';
+        }
+        
         const matchesMethod = filterMethod === 'all' || t.paymentMethod === filterMethod;
         return matchesSearch && matchesType && matchesMethod;
     });
@@ -117,9 +197,59 @@ export function TransactionList({ transactions, onEdit, onDelete, viewMode = 'mo
                         <span className="bg-gray-100 text-gray-600 text-xs font-bold px-2.5 py-1 rounded-md">
                             {filteredTransactions.length}
                         </span>
+                        
+                        {/* Batch Delete Actions */}
+                        {isSelectionMode ? (
+                            <div className="flex items-center gap-2 ml-2 animate-in fade-in slide-in-from-left-4">
+                                <button
+                                    onClick={toggleSelectAll}
+                                    className="text-sm text-gray-600 hover:text-gray-900 px-2 py-1 rounded hover:bg-gray-100 transition-colors"
+                                >
+                                    {selectedIds.size === filteredTransactions.length ? 'Desmarcar Todos' : 'Selecionar Todos'}
+                                </button>
+                                <span className="text-sm font-medium text-gray-400">|</span>
+                                <span className="text-sm font-medium text-purple-600">
+                                    {selectedIds.size} selecionados
+                                </span>
+                                <button
+                                    onClick={handleBatchDelete}
+                                    disabled={selectedIds.size === 0}
+                                    className="ml-2 flex items-center gap-1 text-sm bg-red-50 text-red-600 hover:bg-red-100 px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+                                >
+                                    <Trash2 className="h-4 w-4" />
+                                    Excluir Selecionados
+                                </button>
+                                <button
+                                    onClick={() => {
+                                        setIsSelectionMode(false);
+                                        setSelectedIds(new Set());
+                                    }}
+                                    className="ml-1 text-sm text-gray-500 hover:text-gray-700 px-2 py-1.5"
+                                >
+                                    Cancelar
+                                </button>
+                            </div>
+                        ) : (
+                            <button
+                                onClick={() => setIsSelectionMode(true)}
+                                className="ml-2 text-sm text-gray-500 hover:text-purple-600 px-2 py-1 rounded hover:bg-purple-50 transition-colors hidden md:block"
+                            >
+                                Seleção Múltipla
+                            </button>
+                        )}
                     </div>
                     
                     <div className="flex items-center gap-2">
+                        {/* Mobile Selection Button */}
+                        {!isSelectionMode && (
+                            <button
+                                onClick={() => setIsSelectionMode(true)}
+                                className="md:hidden flex items-center justify-center h-9 w-9 border rounded-lg text-gray-500 hover:bg-gray-50"
+                                aria-label="Seleção Múltipla"
+                            >
+                                <ArrowUpDown className="h-4 w-4" />
+                            </button>
+                        )}
                         <div className="relative w-64 hidden md:block">
                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                             <Input 
@@ -129,6 +259,12 @@ export function TransactionList({ transactions, onEdit, onDelete, viewMode = 'mo
                                 onChange={(e) => setSearchTerm(e.target.value)}
                             />
                         </div>
+                        <button 
+                            className={`flex items-center gap-1.5 text-sm font-medium border rounded-lg px-3 py-2 transition-colors hidden sm:flex ${filterType === 'bakery_income' ? 'bg-purple-50 text-purple-700 border-purple-200' : 'text-gray-600 hover:bg-gray-50'}`}
+                            onClick={() => setFilterType(filterType === 'bakery_income' ? 'all' : 'bakery_income')}
+                        >
+                            🍞 Só Padaria
+                        </button>
                         <button 
                             className={`flex items-center gap-1.5 text-sm font-medium border rounded-lg px-3 py-2 transition-colors ${isFilterOpen ? 'bg-gray-100 text-gray-900' : 'text-gray-600 hover:bg-gray-50'}`}
                             onClick={() => setIsFilterOpen(!isFilterOpen)}
@@ -150,14 +286,20 @@ export function TransactionList({ transactions, onEdit, onDelete, viewMode = 'mo
                         </div>
                         <Select value={filterType} onChange={(e) => setFilterType(e.target.value)}>
                             <option value="all">Todos os Tipos</option>
-                            <option value="income">Entradas (Lucro)</option>
+                            <option value="income">Entradas (Todas)</option>
+                            <option value="bakery_income">Entradas (Só Padaria)</option>
                             <option value="expense">Saídas (Despesas)</option>
                         </Select>
                         <Select value={filterMethod} onChange={(e) => setFilterMethod(e.target.value)}>
                             <option value="all">Todos os Métodos</option>
                             <option value="pix">Pix</option>
-                            <option value="cartao">Cartão</option>
                             <option value="dinheiro">Dinheiro</option>
+                            <option value="cartao">Cartão de Crédito</option>
+                            <option value="debito">Cartão de Débito</option>
+                            <option value="credito_loja">Crédito Loja (fiado)</option>
+                            <option value="vale_alimentacao">Vale Alimentação</option>
+                            <option value="vale_combustivel">Vale Combustível</option>
+                            <option value="diversos">Diversos</option>
                         </Select>
                     </div>
                 </div>
@@ -173,13 +315,37 @@ export function TransactionList({ transactions, onEdit, onDelete, viewMode = 'mo
                     {sortedGroupKeys.map(key => (
                         <div key={key} className="p-4 md:p-6">
                             <div className="flex items-center justify-between mb-4">
-                                <h4 className={cn(
-                                    "text-sm font-semibold capitalize",
-                                    getGroupLabel(key) === 'Hoje' ? "text-blue-600" : 
-                                    viewMode === 'year' ? "text-lg text-[#7E1A8B]" : "text-gray-500"
-                                )}>
-                                    {getGroupLabel(key)}
-                                </h4>
+                                <div className="flex items-center gap-3">
+                                    {isSelectionMode && (
+                                        <div 
+                                            className="flex items-center justify-center cursor-pointer"
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                toggleGroupSelection(key);
+                                            }}
+                                        >
+                                            <input 
+                                                type="checkbox"
+                                                checked={isGroupFullySelected(key)}
+                                                ref={input => {
+                                                    if (input) {
+                                                        input.indeterminate = isGroupPartiallySelected(key);
+                                                    }
+                                                }}
+                                                onChange={() => {}} // Handled by div click
+                                                className="h-5 w-5 rounded border-gray-300 text-purple-600 focus:ring-purple-500 cursor-pointer"
+                                            />
+                                        </div>
+                                    )}
+                                    <h4 className={cn(
+                                        "text-sm font-semibold capitalize transition-all",
+                                        isSelectionMode ? "ml-1" : "",
+                                        getGroupLabel(key) === 'Hoje' ? "text-blue-600" : 
+                                        viewMode === 'year' ? "text-lg text-[#7E1A8B]" : "text-gray-500"
+                                    )}>
+                                        {getGroupLabel(key)}
+                                    </h4>
+                                </div>
                                 <span className={`text-sm font-bold ${getDayTotal(groupedTransactions[key]) >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
                                     {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(getDayTotal(groupedTransactions[key]))}
                                 </span>
@@ -206,9 +372,28 @@ export function TransactionList({ transactions, onEdit, onDelete, viewMode = 'mo
                                     }).format(t.amount);
 
                                     return (
-                                        <div key={t.id} className="flex items-center justify-between p-3 rounded-xl border border-gray-100 hover:bg-gray-50 transition-colors group">
+                                        <div 
+                                            key={t.id} 
+                                            className={cn(
+                                                "flex items-center justify-between p-3 rounded-xl border transition-all group",
+                                                isSelectionMode ? "cursor-pointer" : "",
+                                                selectedIds.has(t.id) ? "border-purple-300 bg-purple-50" : "border-gray-100 hover:bg-gray-50"
+                                            )}
+                                            onClick={() => isSelectionMode && toggleSelection(t.id)}
+                                        >
                                             <div className="flex items-center gap-4">
-                                                <Avatar name={t.description} size="sm" />
+                                                {isSelectionMode ? (
+                                                    <div className="flex items-center justify-center h-10 w-10 shrink-0">
+                                                        <input 
+                                                            type="checkbox"
+                                                            checked={selectedIds.has(t.id)}
+                                                            onChange={() => {}} // Handled by parent div click
+                                                            className="h-5 w-5 rounded border-gray-300 text-purple-600 focus:ring-purple-500 pointer-events-none"
+                                                        />
+                                                    </div>
+                                                ) : (
+                                                    <Avatar name={t.description} size="sm" />
+                                                )}
                                                 <div>
                                                     <p className="font-semibold text-gray-900">{t.description}</p>
                                                     <div className="flex items-center gap-2 mt-0.5">

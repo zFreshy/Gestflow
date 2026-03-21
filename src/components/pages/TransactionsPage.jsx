@@ -13,6 +13,7 @@ export function TransactionsPage({ transactions, onEdit, onDelete, onBatchDelete
     const [importedTransactions, setImportedTransactions] = useState([]);
     const [isSaving, setIsSaving] = useState(false);
     const fileInputRef = useRef(null);
+    const [importModal, setImportModal] = useState({ isOpen: false, transactions: [], existingDates: [] });
 
     // Filter transactions by selected month or year
     const allTransactions = [...importedTransactions, ...transactions];
@@ -52,15 +53,26 @@ export function TransactionsPage({ transactions, onEdit, onDelete, onBatchDelete
             if (checkError) throw checkError;
             
             if (existingData && existingData.length > 0) {
-                const confirmSave = window.confirm(
-                    "Parece que você já importou algumas vendas para essas datas anteriormente.\n\nDeseja importar novamente? Isso pode duplicar seus registros."
-                );
-                if (!confirmSave) {
-                    setIsSaving(false);
-                    return;
-                }
+                setImportModal({
+                    isOpen: true,
+                    transactions: parsedTransactions,
+                    existingDates: existingData.map(d => d.date)
+                });
+                setIsSaving(false);
+                return;
             }
 
+            await executeImport(parsedTransactions);
+        } catch (error) {
+            console.error('Erro na validação da importação:', error);
+            alert('Erro ao validar transações importadas.');
+            setIsSaving(false);
+        }
+    };
+
+    const executeImport = async (parsedTransactions) => {
+        setIsSaving(true);
+        try {
             const transactionsToSave = parsedTransactions.map(t => {
                 const [day, month, year] = t.date.split('/');
                 const formattedDate = `${year}-${month}-${day}`;
@@ -91,6 +103,7 @@ export function TransactionsPage({ transactions, onEdit, onDelete, onBatchDelete
             alert('Erro ao salvar transações importadas.');
         } finally {
             setIsSaving(false);
+            setImportModal({ isOpen: false, transactions: [], existingDates: [] });
         }
     };
 
@@ -306,6 +319,65 @@ export function TransactionsPage({ transactions, onEdit, onDelete, onBatchDelete
                     viewMode={viewMode}
                 />
             </div>
+
+            {/* Duplicate Import Modal */}
+            {importModal.isOpen && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+                    <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-6 animate-in fade-in zoom-in duration-200">
+                        <div className="flex justify-between items-start mb-4">
+                            <h3 className="text-xl font-bold text-gray-900">Atenção: Dados Duplicados</h3>
+                            <button 
+                                onClick={() => setImportModal({ isOpen: false, transactions: [], existingDates: [] })}
+                                className="text-gray-400 hover:text-gray-600 transition-colors"
+                            >
+                                <X className="h-5 w-5" />
+                            </button>
+                        </div>
+                        
+                        <p className="text-gray-600 mb-6 leading-relaxed">
+                            Foram encontrados dados de vendas da padaria que já existem no sistema para algumas das datas do arquivo.
+                            <br /><br />
+                            Você pode optar por importar todos os dados mesmo assim (o que irá duplicar os registros existentes) ou ignorar os dias que já estão cadastrados, importando apenas os dias novos.
+                        </p>
+                        
+                        <div className="flex flex-col gap-3">
+                            <button
+                                onClick={() => executeImport(importModal.transactions)}
+                                className="w-full py-2.5 px-4 bg-purple-100 text-purple-700 hover:bg-purple-200 font-semibold rounded-lg transition-colors text-sm"
+                            >
+                                Importar Tudo (Duplicar)
+                            </button>
+                            
+                            <button
+                                onClick={() => {
+                                    const filteredTransactions = importModal.transactions.filter(t => {
+                                        const [day, month, year] = t.date.split('/');
+                                        const formattedDate = `${year}-${month}-${day}`;
+                                        return !importModal.existingDates.includes(formattedDate);
+                                    });
+                                    
+                                    if (filteredTransactions.length > 0) {
+                                        executeImport(filteredTransactions);
+                                    } else {
+                                        alert("Não há dados novos para importar após remover os duplicados.");
+                                        setImportModal({ isOpen: false, transactions: [], existingDates: [] });
+                                    }
+                                }}
+                                className="w-full py-2.5 px-4 bg-gray-900 text-white hover:bg-gray-800 font-semibold rounded-lg transition-colors text-sm"
+                            >
+                                Ignorar Duplicados (Apenas Novos)
+                            </button>
+                            
+                            <button
+                                onClick={() => setImportModal({ isOpen: false, transactions: [], existingDates: [] })}
+                                className="w-full py-2.5 px-4 bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 font-semibold rounded-lg transition-colors text-sm mt-2"
+                            >
+                                Cancelar Importação
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

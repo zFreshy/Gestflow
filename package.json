@@ -19,6 +19,8 @@
     "clsx": "^2.1.1",
     "datetimepicker": "^0.1.39",
     "expo": "^54.0.33",
+    "expo-document-picker": "~14.0.8",
+    "expo-file-system": "~19.0.21",
     "expo-linear-gradient": "~15.0.8",
     "expo-status-bar": "~3.0.9",
     "lodash": "^4.17.23",

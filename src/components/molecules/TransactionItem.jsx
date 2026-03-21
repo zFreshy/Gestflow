@@ -25,14 +25,14 @@ const METHOD_LABELS = {
     dinheiro: 'Dinheiro',
 };
 
-export function TransactionItem({ transaction, onPress, onEdit, onDelete }) {
+export function TransactionItem({ transaction, onPress, onEdit, onDelete, isSelected, isSelectionMode }) {
   const [isMenuVisible, setIsMenuVisible] = useState(false);
   const isIncome = transaction.type === 'income';
   
   const handlePress = () => {
       if (onPress) {
           onPress();
-      } else if (onEdit) {
+      } else if (onEdit && !isSelectionMode) {
           onEdit();
       }
   };
@@ -93,23 +93,33 @@ export function TransactionItem({ transaction, onPress, onEdit, onDelete }) {
     <View className="mb-1">
         <TouchableOpacity 
             onPress={handlePress}
-            onLongPress={() => setIsMenuVisible(true)}
+            onLongPress={() => !isSelectionMode && setIsMenuVisible(true)}
             activeOpacity={0.7}
             className={cn(
-                "flex-row items-center py-2",
-                isVirtual ? "opacity-70" : ""
+                "flex-row items-center py-2 px-2 rounded-xl",
+                isVirtual ? "opacity-70" : "",
+                isSelected ? "bg-purple-50 border border-purple-200" : ""
             )}
         >
-        <View className={cn(
-            "h-12 w-12 rounded-2xl items-center justify-center mr-4 shadow-sm", 
-            isIncome ? "bg-emerald-100 shadow-emerald-100" : "bg-red-50 shadow-red-100"
-        )}>
-            {isIncome ? (
-            <ArrowUpCircle size={22} color="#059669" strokeWidth={2.5} />
-            ) : (
-            <ArrowDownCircle size={22} color={isOverdue && !isPaid ? "#DC2626" : "#EF4444"} strokeWidth={2.5} />
-            )}
-        </View>
+        {isSelectionMode ? (
+            <View className={cn(
+                "h-6 w-6 rounded border mr-4 items-center justify-center",
+                isSelected ? "bg-[#7E1A8B] border-[#7E1A8B]" : "border-gray-300"
+            )}>
+                {isSelected && <Text className="text-white text-xs font-bold">✓</Text>}
+            </View>
+        ) : (
+            <View className={cn(
+                "h-12 w-12 rounded-2xl items-center justify-center mr-4 shadow-sm", 
+                isIncome ? "bg-emerald-100 shadow-emerald-100" : "bg-red-50 shadow-red-100"
+            )}>
+                {isIncome ? (
+                <ArrowUpCircle size={22} color="#059669" strokeWidth={2.5} />
+                ) : (
+                <ArrowDownCircle size={22} color={isOverdue && !isPaid ? "#DC2626" : "#EF4444"} strokeWidth={2.5} />
+                )}
+            </View>
+        )}
         
         <View className="flex-1 mr-2">
             <Text className={cn(

@@ -1,12 +1,14 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, FlatList, TextInput, TouchableOpacity, ActivityIndicator, ScrollView } from 'react-native';
+import { View, Text, FlatList, TextInput, TouchableOpacity, ActivityIndicator, ScrollView, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../contexts/AuthContext';
 import { transactionService } from '../services/transactionService';
 import { TransactionItem } from '../components/molecules/TransactionItem';
 import { MonthSelector } from '../components/molecules/MonthSelector';
-import { Search, Filter, Plus, Calendar } from 'lucide-react-native';
+import { Search, Filter, Plus, Calendar, Upload, Trash2, ListChecks } from 'lucide-react-native';
+import * as DocumentPicker from 'expo-document-picker';
+import * as FileSystem from 'expo-file-system/legacy';
 
 const formatDateISO = (date) => {
     const year = date.getFullYear();
@@ -44,6 +46,11 @@ export function TransactionsPage({ navigation }) {
   const [viewMode, setViewMode] = useState('month'); // 'month' | 'year'
   const [groupedTransactions, setGroupedTransactions] = useState({});
   const [sortedGroupKeys, setSortedGroupKeys] = useState([]);
+  
+  // Batch delete state
+  const [selectedIds, setSelectedIds] = useState(new Set());
+  const [isSelectionMode, setIsSelectionMode] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
@@ -80,7 +87,11 @@ export function TransactionsPage({ navigation }) {
     let result = transactions;
 
     if (filter !== 'all') {
-      result = result.filter(t => t.type === filter);
+      if (filter === 'bakery_income') {
+        result = result.filter(t => t.type === 'income' && t.is_bakery_income === true);
+      } else {
+        result = result.filter(t => t.type === filter);
+      }
     }
 
     if (methodFilter !== 'all') {
@@ -182,6 +193,229 @@ export function TransactionsPage({ navigation }) {
     }
   };
 
+  const toggleSelection = (id) => {
+      const newSet = new Set(selectedIds);
+      if (newSet.has(id)) newSet.delete(id);
+      else newSet.add(id);
+      setSelectedIds(newSet);
+  };
+
+  const toggleGroupSelection = (key) => {
+      const groupTransactions = groupedTransactions[key];
+      const groupIds = groupTransactions.map(t => t.id);
+      const newSet = new Set(selectedIds);
+      
+      const allSelected = groupIds.every(id => newSet.has(id));
+      
+      if (allSelected) {
+          groupIds.forEach(id => newSet.delete(id));
+      } else {
+          groupIds.forEach(id => newSet.add(id));
+      }
+      
+      setSelectedIds(newSet);
+  };
+
+  const handleBatchDelete = () => {
+      if (selectedIds.size === 0) return;
+      
+      Alert.alert(
+          "Excluir Transações",
+          `Tem certeza que deseja excluir ${selectedIds.size} transações selecionadas?`,
+          [
+              { text: "Cancelar", style: "cancel" },
+              { 
+                  text: "Excluir", 
+                  style: "destructive",
+                  onPress: async () => {
+                      try {
+                          setLoading(true);
+                          await transactionService.deleteMany(Array.from(selectedIds));
+                          setSelectedIds(new Set());
+                          setIsSelectionMode(false);
+                          await fetchTransactions();
+                      } catch (error) {
+                          console.error(error);
+                          Alert.alert("Erro", "Não foi possível excluir as transações.");
+                      } finally {
+                          setLoading(false);
+                      }
+                  }
+              }
+          ]
+      );
+  };
+
+  const handleImportFP3 = async () => {
+      try {
+          const result = await DocumentPicker.getDocumentAsync({
+              type: '*/*',
+              copyToCacheDirectory: true
+          });
+
+          if (result.canceled) return;
+
+          setIsImporting(true);
+          const file = result.assets[0];
+          
+          if (!file.name.toLowerCase().endsWith('.fp3')) {
+              Alert.alert('Erro', 'Por favor, selecione um arquivo .fp3 válido.');
+              setIsImporting(false);
+              return;
+          }
+
+          const content = await FileSystem.readAsStringAsync(file.uri);
+          
+          let startDate = null;
+          let endDate = null;
+          const periodMatch = content.match(/(\d{2}\/\d{2}\/\d{4})\s*(?:a|até|ate|-|à)\s*(\d{2}\/\d{2}\/\d{4})/i);
+          if (periodMatch) {
+              const parseDateString = (d) => { 
+                  const [day, month, year] = d.split('/'); 
+                  return new Date(year, month - 1, day).getTime(); 
+              };
+              startDate = parseDateString(periodMatch[1]);
+              endDate = parseDateString(periodMatch[2]);
+          }
+
+          const dateRegex = /<m32 l="0" t="\d+" u="(\d{2}\/\d{2}\/\d{4})"\/>/g;
+          const dates = [];
+          let dateMatch;
+          while ((dateMatch = dateRegex.exec(content)) !== null) {
+              const dateStr = dateMatch[1];
+              if (!dates.includes(dateStr)) {
+                  let isValid = true;
+                  if (startDate && endDate) {
+                      const [day, month, year] = dateStr.split('/');
+                      const dTime = new Date(year, month - 1, day).getTime();
+                      if (dTime < startDate || dTime > endDate) {
+                          isValid = false;
+                      }
+                  }
+                  if (isValid) {
+                      dates.push(dateStr);
+                  }
+              }
+          }
+
+          const positionToMethodMap = {
+              87: { name: 'Dinheiro', id: 'dinheiro' },
+              162: { name: 'Cartão de Crédito', id: 'cartao' },
+              237: { name: 'Cartão de Débito', id: 'debito' },
+              312: { name: 'Crédito Loja (fiado)', id: 'credito_loja' },
+              387: { name: 'Vale Alimentação', id: 'vale_alimentacao' },
+              462: { name: 'Vale Combustível', id: 'vale_combustivel' },
+              537: { name: 'PIX', id: 'pix' },
+          };
+
+          const rowBands = content.split('<TfrxNullBand Height="19"');
+          const dataRows = rowBands.slice(1);
+          
+          const newTransactions = [];
+          
+          for (let i = 0; i < dataRows.length && i < dates.length; i++) {
+              const rowContent = dataRows[i];
+              const valueRegex = /<m18 l="(\d+)"[^>]*u="([\d.]+,\d{2})"\/>/g;
+              let valueMatch;
+              
+              while ((valueMatch = valueRegex.exec(rowContent)) !== null) {
+                  const lPos = parseInt(valueMatch[1], 10);
+                  const valStr = valueMatch[2];
+                  
+                  const amountStr = valStr.replace(/\./g, '').replace(',', '.');
+                  const amount = parseFloat(amountStr);
+                  
+                  if (!isNaN(amount) && amount > 0) {
+                      let methodId = 'diversos';
+                      for (const [pos, methodObj] of Object.entries(positionToMethodMap)) {
+                          if (Math.abs(lPos - parseInt(pos, 10)) <= 5) {
+                              methodId = methodObj.id;
+                              break;
+                          }
+                      }
+                      
+                      const [day, month, year] = dates[i].split('/');
+                      const formattedDate = `${year}-${month}-${day}`;
+                      
+                      newTransactions.push({
+                          description: `Lucro Padaria`,
+                          amount: amount,
+                          type: 'income',
+                          date: formattedDate,
+                          status: 'Pago',
+                          expense_type: 'variable',
+                          payment_method: methodId,
+                          is_bakery_income: true,
+                          user_id: user.id
+                      });
+                  }
+              }
+          }
+
+          if (newTransactions.length > 0) {
+              const datesToImport = [...new Set(newTransactions.map(t => t.date))];
+              const existingData = await transactionService.checkExistingBakeryIncome(user.id, datesToImport);
+              
+              if (existingData && existingData.length > 0) {
+                  const existingDates = existingData.map(d => d.date);
+                  
+                  Alert.alert(
+                      "Atenção: Dados Duplicados",
+                      "Foram encontrados dados de vendas da padaria que já existem no sistema para algumas das datas do arquivo.\n\nO que deseja fazer?",
+                      [
+                          { 
+                              text: "Cancelar", 
+                              style: "cancel", 
+                              onPress: () => setIsImporting(false) 
+                          },
+                          { 
+                              text: "Ignorar Duplicados", 
+                              onPress: async () => {
+                                  const filteredTransactions = newTransactions.filter(t => !existingDates.includes(t.date));
+                                  if (filteredTransactions.length > 0) {
+                                      await saveImportedTransactions(filteredTransactions);
+                                  } else {
+                                      Alert.alert("Aviso", "Não há novos dados para importar após remover os duplicados.");
+                                      setIsImporting(false);
+                                  }
+                              }
+                          },
+                          { 
+                              text: "Importar Tudo (Duplicar)", 
+                              style: "destructive",
+                              onPress: async () => {
+                                  await saveImportedTransactions(newTransactions);
+                              }
+                          }
+                      ]
+                  );
+              } else {
+                  await saveImportedTransactions(newTransactions);
+              }
+          } else {
+              Alert.alert('Erro', 'Não foi possível identificar valores. Verifique o arquivo.');
+              setIsImporting(false);
+          }
+      } catch (error) {
+          console.error(error);
+          Alert.alert('Erro', 'Ocorreu um erro ao importar o arquivo.');
+          setIsImporting(false);
+      }
+  };
+
+  const saveImportedTransactions = async (transactionsToSave) => {
+      try {
+          await transactionService.createMany(transactionsToSave);
+          Alert.alert('Sucesso', 'Importação salva com sucesso!');
+          await fetchTransactions();
+      } catch (error) {
+          console.error(error);
+          Alert.alert('Erro', 'Erro ao salvar transações importadas.');
+      } finally {
+          setIsImporting(false);
+      }
+  };
+
   const FilterTab = ({ label, value, activeValue, onPress }) => (
     <TouchableOpacity
       onPress={() => onPress(activeValue === value ? 'all' : value)}
@@ -205,12 +439,53 @@ export function TransactionsPage({ navigation }) {
               <Text className="text-2xl font-bold text-gray-900">Transações</Text>
               <Text className="text-gray-500 text-xs">Gerencie todos os seus registros</Text>
           </View>
-          <TouchableOpacity 
-            onPress={() => navigation.navigate('AddTransaction')}
-            className="h-10 w-10 bg-[#7E1A8B] rounded-full items-center justify-center shadow-lg shadow-purple-200"
-          >
-            <Plus color="white" size={24} />
-          </TouchableOpacity>
+          <View className="flex-row items-center space-x-2">
+              {isSelectionMode ? (
+                  <>
+                      <TouchableOpacity 
+                          onPress={handleBatchDelete}
+                          disabled={selectedIds.size === 0}
+                          className={`h-10 px-4 rounded-full items-center justify-center flex-row shadow-sm ${selectedIds.size > 0 ? 'bg-red-100' : 'bg-gray-100'}`}
+                      >
+                          <Trash2 color={selectedIds.size > 0 ? "#DC2626" : "#9CA3AF"} size={18} />
+                          <Text className={`ml-2 font-bold ${selectedIds.size > 0 ? 'text-red-600' : 'text-gray-400'}`}>
+                              ({selectedIds.size}) Excluir
+                          </Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity 
+                          onPress={() => {
+                              setIsSelectionMode(false);
+                              setSelectedIds(new Set());
+                          }}
+                          className="h-10 px-4 bg-gray-200 rounded-full items-center justify-center shadow-sm ml-2"
+                      >
+                          <Text className="font-bold text-gray-700">Cancelar</Text>
+                      </TouchableOpacity>
+                  </>
+              ) : (
+                  <>
+                      <TouchableOpacity 
+                          onPress={handleImportFP3}
+                          disabled={isImporting}
+                          className="h-10 w-10 bg-purple-100 rounded-full items-center justify-center mr-2 shadow-sm"
+                      >
+                          {isImporting ? <ActivityIndicator size="small" color="#7E1A8B" /> : <Upload color="#7E1A8B" size={20} />}
+                      </TouchableOpacity>
+                      <TouchableOpacity 
+                          onPress={() => setIsSelectionMode(true)}
+                          className="h-10 w-10 bg-gray-100 rounded-full items-center justify-center mr-2 shadow-sm"
+                      >
+                          <ListChecks color="#4B5563" size={20} />
+                      </TouchableOpacity>
+                      <TouchableOpacity 
+                        onPress={() => navigation.navigate('AddTransaction')}
+                        className="h-10 w-10 bg-[#7E1A8B] rounded-full items-center justify-center shadow-lg shadow-purple-200"
+                      >
+                        <Plus color="white" size={24} />
+                      </TouchableOpacity>
+                  </>
+              )}
+          </View>
         </View>
 
         {/* View Mode Toggle */}
@@ -248,6 +523,19 @@ export function TransactionsPage({ navigation }) {
             <ScrollView horizontal showsHorizontalScrollIndicator={false} className="flex-row">
                 <FilterTab label="Todas" value="all" activeValue={filter} onPress={setFilter} />
                 <FilterTab label="Entradas" value="income" activeValue={filter} onPress={setFilter} />
+                <TouchableOpacity
+                    onPress={() => setFilter(filter === 'bakery_income' ? 'all' : 'bakery_income')}
+                    className={`px-4 py-2 rounded-full mr-2 border flex-row items-center ${
+                        filter === 'bakery_income' 
+                        ? 'bg-purple-50 border-purple-200' 
+                        : 'bg-white border-gray-200'
+                    }`}
+                >
+                    <Text className="mr-1">🍞</Text>
+                    <Text className={filter === 'bakery_income' ? 'text-purple-700 font-medium' : 'text-gray-600'}>
+                        Só Padaria
+                    </Text>
+                </TouchableOpacity>
                 <FilterTab label="Saídas" value="expense" activeValue={filter} onPress={setFilter} />
                 <View className="w-4" />
                 <FilterTab label="Pix" value="pix" activeValue={methodFilter} onPress={setMethodFilter} />
@@ -279,22 +567,42 @@ export function TransactionsPage({ navigation }) {
                         
                         return (
                             <View key={key} className="bg-white rounded-3xl p-5 shadow-sm shadow-gray-200">
-                                <View className="flex-row justify-between items-center mb-4 pb-2 border-b border-gray-50">
-                                    <Text className="text-lg font-bold text-gray-900 capitalize">
-                                        {getGroupLabel(key)}
-                                    </Text>
+                                <TouchableOpacity 
+                                    onPress={() => isSelectionMode && toggleGroupSelection(key)}
+                                    activeOpacity={isSelectionMode ? 0.7 : 1}
+                                    className="flex-row justify-between items-center mb-4 pb-2 border-b border-gray-50"
+                                >
+                                    <View className="flex-row items-center">
+                                        {isSelectionMode && (
+                                            <View className={`h-6 w-6 rounded border mr-3 items-center justify-center ${
+                                                groupTransactions.every(t => selectedIds.has(t.id))
+                                                    ? "bg-[#7E1A8B] border-[#7E1A8B]" 
+                                                    : groupTransactions.some(t => selectedIds.has(t.id))
+                                                        ? "bg-purple-100 border-[#7E1A8B]"
+                                                        : "border-gray-300"
+                                            }`}>
+                                                {groupTransactions.every(t => selectedIds.has(t.id)) && <Text className="text-white text-xs font-bold">✓</Text>}
+                                                {!groupTransactions.every(t => selectedIds.has(t.id)) && groupTransactions.some(t => selectedIds.has(t.id)) && <View className="h-3 w-3 rounded-sm bg-[#7E1A8B]" />}
+                                            </View>
+                                        )}
+                                        <Text className="text-lg font-bold text-gray-900 capitalize">
+                                            {getGroupLabel(key)}
+                                        </Text>
+                                    </View>
                                     <Text className={`text-base font-bold ${groupTotal >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
                                         {groupTotal >= 0 ? '+' : ''}{groupTotal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                                     </Text>
-                                </View>
+                                </TouchableOpacity>
                                 <View>
                                     {groupTransactions.map((item, index) => (
                                         <View key={item.id} className={index < groupTransactions.length - 1 ? "mb-4" : ""}>
                                             <TransactionItem 
                                                 transaction={item} 
-                                                onPress={() => handleEdit(item)}
+                                                onPress={() => isSelectionMode ? toggleSelection(item.id) : handleEdit(item)}
                                                 onEdit={() => handleEdit(item)}
                                                 onDelete={() => handleDelete(item)}
+                                                isSelected={selectedIds.has(item.id)}
+                                                isSelectionMode={isSelectionMode}
                                             />
                                         </View>
                                     ))}

@@ -44,6 +44,38 @@ export const transactionService = {
     return true;
   },
 
+  async deleteMany(ids) {
+    const { error } = await supabase
+      .from('transactions')
+      .delete()
+      .in('id', ids);
+    
+    if (error) throw error;
+    return true;
+  },
+
+  async createMany(transactions) {
+    const { data, error } = await supabase
+      .from('transactions')
+      .insert(transactions)
+      .select();
+    
+    if (error) throw error;
+    return data;
+  },
+
+  async checkExistingBakeryIncome(userId, dates) {
+    const { data, error } = await supabase
+        .from('transactions')
+        .select('date')
+        .eq('user_id', userId)
+        .in('date', dates)
+        .like('description', 'Lucro Padaria%');
+        
+    if (error) throw error;
+    return data;
+  },
+
   async finalizeRecurrence(userId, description, endDate) {
     // 1. Update all existing transactions with same description and type='expense'
     // to have active=false and end_date=endDate

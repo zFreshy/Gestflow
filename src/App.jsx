@@ -424,7 +424,8 @@ function AppContent() {
                     <TransactionsPage 
                       transactions={transactions} 
                       onEdit={openEditForm} 
-                      onDelete={handleDeleteTransaction} 
+                      onDelete={handleDeleteTransaction}
+                      onImportSuccess={fetchTransactions}
                     />
                   } 
                 />

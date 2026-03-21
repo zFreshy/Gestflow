@@ -31,6 +31,10 @@ function AppContent() {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [hasMore, setHasMore] = useState(true);
+  const [page, setPage] = useState(0);
+  const PAGE_SIZE = 50;
+  
   const { user } = useAuth();
   const location = useLocation();
 
@@ -39,20 +43,28 @@ function AppContent() {
 
   useEffect(() => {
     if (user) {
-      fetchTransactions();
+      setPage(0);
+      setTransactions([]);
+      setHasMore(true);
+      fetchTransactions(0, true);
     } else {
       setTransactions([]);
       setLoading(false);
     }
   }, [user]);
 
-  const fetchTransactions = async () => {
+  const fetchTransactions = async (pageToFetch = page, reset = false) => {
     try {
-      setLoading(true);
-      const { data, error } = await supabase
+      if (reset) setLoading(true);
+      
+      const start = pageToFetch * PAGE_SIZE;
+      const end = start + PAGE_SIZE - 1;
+
+      const { data, error, count } = await supabase
         .from('transactions')
-        .select('*')
-        .order('date', { ascending: false });
+        .select('*', { count: 'exact' })
+        .order('date', { ascending: false })
+        .range(start, end);
 
       if (error) throw error;
 
@@ -75,12 +87,27 @@ function AppContent() {
         };
       });
 
-      setTransactions(formattedTransactions);
+      if (reset) {
+          setTransactions(formattedTransactions);
+      } else {
+          setTransactions(prev => [...prev, ...formattedTransactions]);
+      }
+      
+      setHasMore(start + data.length < count);
+      
     } catch (error) {
       console.error('Error fetching transactions:', error);
     } finally {
       setLoading(false);
     }
+  };
+
+  const loadMoreTransactions = () => {
+      if (!loading && hasMore) {
+          const nextPage = page + 1;
+          setPage(nextPage);
+          fetchTransactions(nextPage);
+      }
   };
 
   const handleAddTransaction = async (newTransaction) => {
@@ -433,7 +460,17 @@ function AppContent() {
               hideHeader={hideHeader}
             >
               <Routes>
-                <Route path="/" element={<DashboardPage transactions={transactions} />} />
+                <Route 
+                  path="/" 
+                  element={
+                    <DashboardPage 
+                      transactions={transactions} 
+                      onLoadMore={loadMoreTransactions}
+                      hasMore={hasMore}
+                      isLoadingMore={loading && page > 0}
+                    />
+                  } 
+                />
                 <Route 
                   path="/transactions" 
                   element={
@@ -442,7 +479,10 @@ function AppContent() {
                       onEdit={openEditForm} 
                       onDelete={handleDeleteTransaction}
                       onBatchDelete={handleBatchDeleteTransactions}
-                      onImportSuccess={fetchTransactions}
+                      onImportSuccess={() => fetchTransactions(0, true)}
+                      onLoadMore={loadMoreTransactions}
+                      hasMore={hasMore}
+                      isLoadingMore={loading && page > 0}
                     />
                   } 
                 />

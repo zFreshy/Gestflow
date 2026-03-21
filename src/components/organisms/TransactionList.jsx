@@ -32,7 +32,7 @@ const RECURRENCE_MAP = {
     'biennial': 'Bienal'
 };
 
-export function TransactionList({ transactions, onEdit, onDelete, onBatchDelete, viewMode = 'month' }) {
+export function TransactionList({ transactions, onEdit, onDelete, onBatchDelete, viewMode = 'month', onLoadMore, hasMore, isLoadingMore }) {
     const [searchTerm, setSearchTerm] = useState('');
     const [filterType, setFilterType] = useState('all');
     const [filterMethod, setFilterMethod] = useState('all');
@@ -446,6 +446,25 @@ export function TransactionList({ transactions, onEdit, onDelete, onBatchDelete,
                             </div>
                         </div>
                     ))}
+                    
+                    {hasMore && (
+                        <div className="p-6 flex justify-center border-t border-gray-100">
+                            <button
+                                onClick={onLoadMore}
+                                disabled={isLoadingMore}
+                                className="px-6 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium rounded-xl transition-colors disabled:opacity-50 flex items-center gap-2"
+                            >
+                                {isLoadingMore ? (
+                                    <>
+                                        <div className="h-4 w-4 rounded-full border-2 border-gray-400 border-t-transparent animate-spin" />
+                                        Carregando...
+                                    </>
+                                ) : (
+                                    'Carregar Mais'
+                                )}
+                            </button>
+                        </div>
+                    )}
                 </div>
             )}
         </div>

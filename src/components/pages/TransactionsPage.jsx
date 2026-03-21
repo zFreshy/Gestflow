@@ -6,7 +6,7 @@ import { Upload, Save, X } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
 
-export function TransactionsPage({ transactions, onEdit, onDelete, onBatchDelete, onImportSuccess }) {
+export function TransactionsPage({ transactions, onEdit, onDelete, onBatchDelete, onImportSuccess, onLoadMore, hasMore, isLoadingMore }) {
     const { user } = useAuth();
     const [currentMonth, setCurrentMonth] = useState(new Date());
     const [viewMode, setViewMode] = useState('month'); // 'month' | 'year'
@@ -317,6 +317,9 @@ export function TransactionsPage({ transactions, onEdit, onDelete, onBatchDelete
                     onDelete={onDelete}
                     onBatchDelete={onBatchDelete}
                     viewMode={viewMode}
+                    onLoadMore={onLoadMore}
+                    hasMore={hasMore}
+                    isLoadingMore={isLoadingMore}
                 />
             </div>
 

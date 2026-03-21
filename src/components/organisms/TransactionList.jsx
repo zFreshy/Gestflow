@@ -395,7 +395,14 @@ export function TransactionList({ transactions, onEdit, onDelete, onBatchDelete,
                                                     <Avatar name={t.description} size="sm" />
                                                 )}
                                                 <div>
-                                                    <p className="font-semibold text-gray-900">{t.description}</p>
+                                                    <p className="font-semibold text-gray-900">
+                                                        {t.description}
+                                                        {t.installments && t.installments > 1 && (
+                                                            <span className="ml-2 text-sm font-normal text-gray-500">
+                                                                ({t.current_installment}/{t.installments})
+                                                            </span>
+                                                        )}
+                                                    </p>
                                                     <div className="flex items-center gap-2 mt-0.5">
                                                         <span className="text-xs text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">
                                                             {METHOD_LABELS[t.paymentMethod]}

@@ -123,7 +123,9 @@ function AppContent() {
           timestamp: new Date(year, month - 1, day).getTime(),
           active: t.active,
           end_date: t.end_date,
-          user_email: t.user_email
+          user_email: t.user_email,
+          installments: t.installments,
+          current_installment: t.current_installment
         };
       });
 
@@ -175,10 +177,60 @@ function AppContent() {
         status: newTransaction.status || 'Aguardando',
         expense_type: newTransaction.expenseType,
         user_id: user.id,
-        user_email: getEmailFromStorage()
+        user_email: getEmailFromStorage(),
+        installments: newTransaction.installments || null
       };
 
       console.log("Saving transaction with email:", transactionToSave.user_email);
+
+      // Handle Installments logic
+      if (transactionToSave.installments && transactionToSave.installments > 1) {
+          const installmentCount = transactionToSave.installments;
+          const installmentAmount = Number((transactionToSave.amount / installmentCount).toFixed(2));
+          
+          // Ajustar diferença de arredondamento na última parcela
+          const totalCalculated = installmentAmount * (installmentCount - 1);
+          const lastInstallmentAmount = Number((transactionToSave.amount - totalCalculated).toFixed(2));
+
+          const transactionsToInsert = [];
+          const [year, month, day] = transactionToSave.date.split('-');
+          let currentDate = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+
+          for (let i = 1; i <= installmentCount; i++) {
+              const currentAmount = i === installmentCount ? lastInstallmentAmount : installmentAmount;
+              
+              // Adicionar meses (recorrência mensal padrão para parcelamento)
+              const installDate = new Date(currentDate);
+              if (i > 1) {
+                  installDate.setMonth(installDate.getMonth() + (i - 1));
+              }
+
+              const formattedInstallDate = `${installDate.getFullYear()}-${String(installDate.getMonth() + 1).padStart(2, '0')}-${String(installDate.getDate()).padStart(2, '0')}`;
+
+              transactionsToInsert.push({
+                  ...transactionToSave,
+                  amount: currentAmount,
+                  date: formattedInstallDate,
+                  current_installment: i,
+                  // Quando é parcelado, a despesa não é "fixa contínua", ela tem fim, mas para seguir o padrão do Gestflow:
+                  active: i === installmentCount ? false : true,
+                  end_date: formattedInstallDate,
+                  recurrence: null // Tira a recorrência infinita para não gerar virtuais duplicadas
+              });
+          }
+
+          const { data, error } = await supabase
+            .from('transactions')
+            .insert(transactionsToInsert)
+            .select();
+
+          if (error) throw error;
+
+          // Recarregar a lista toda, pois adicionamos várias
+          await fetchTransactions(0, true);
+          setIsFormOpen(false);
+          return;
+      }
 
       const { data, error } = await supabase
         .from('transactions')
@@ -198,7 +250,9 @@ function AppContent() {
         healthPlan: data.health_plan,
         date: newTransaction.date, // Use original date string
         timestamp: newTransaction.timestamp,
-        user_email: data.user_email
+        user_email: data.user_email,
+        installments: data.installments,
+        current_installment: data.current_installment
       };
 
       setTransactions((prev) => [savedTransaction, ...prev]);
@@ -298,7 +352,9 @@ function AppContent() {
             timestamp: updatedTransaction.timestamp,
             active: data.active,
             end_date: data.end_date,
-            user_email: data.user_email
+            user_email: data.user_email,
+            installments: data.installments,
+            current_installment: data.current_installment
           };
 
           if (requiresRefetch) {
@@ -357,7 +413,9 @@ function AppContent() {
             timestamp: updatedTransaction.timestamp,
             active: data.active,
             end_date: data.end_date,
-            user_email: data.user_email
+            user_email: data.user_email,
+            installments: data.installments,
+            current_installment: data.current_installment
           };
 
           if (requiresRefetch) {
@@ -463,7 +521,9 @@ function AppContent() {
           healthPlan: data.health_plan,
           date: formattedDate,
           timestamp: new Date(year, month - 1, day).getTime(),
-          user_email: data.user_email
+          user_email: data.user_email,
+          installments: data.installments,
+          current_installment: data.current_installment
       };
 
       setTransactions(prev => prev.map(t => 

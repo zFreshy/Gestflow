@@ -19,6 +19,8 @@ create table public.transactions (
   active boolean default true, -- New field to mark if fixed expense is still active
   end_date date, -- New field to specify when the fixed expense ended
   user_email text, -- New field to track who created the transaction
+  installments integer, -- Total de parcelas
+  current_installment integer, -- Número da parcela atual (ex: 1, 2, 3)
   created_at timestamptz default now()
 );
 

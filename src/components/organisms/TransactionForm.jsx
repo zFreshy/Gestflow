@@ -31,6 +31,7 @@ export function TransactionForm({ onAddTransaction, onEditTransaction, isOpen, o
     const [interestRate, setInterestRate] = useState('');
     const [isActive, setIsActive] = useState(true);
     const [endDate, setEndDate] = useState(''); // New state for end date
+    const [installments, setInstallments] = useState(''); // New state for installments
 
     useEffect(() => {
         if (isOpen) {
@@ -55,6 +56,7 @@ export function TransactionForm({ onAddTransaction, onEditTransaction, isOpen, o
                         setInterestRate(initialData.interestRate || initialData.interest_rate || '');
                         setIsActive(initialData.active !== false); 
                         setEndDate(initialData.end_date || ''); // Populate end_date
+                        setInstallments(initialData.installments || ''); // Populate installments
                     }
                 }
             } else {
@@ -71,6 +73,7 @@ export function TransactionForm({ onAddTransaction, onEditTransaction, isOpen, o
                 setInterestRate('');
                 setIsActive(true);
                 setEndDate('');
+                setInstallments('');
             }
         }
     }, [isOpen, initialData]);
@@ -113,11 +116,15 @@ export function TransactionForm({ onAddTransaction, onEditTransaction, isOpen, o
                 } else {
                     transaction.interestRate = null;
                 }
+                if (installments && parseInt(installments) > 1 && !initialData) {
+                    transaction.installments = parseInt(installments);
+                }
             } else {
                 transaction.recurrence = null;
                 transaction.active = null;
                 transaction.end_date = null;
                 transaction.interestRate = null;
+                transaction.installments = null;
             }
         }
 
@@ -304,6 +311,21 @@ export function TransactionForm({ onAddTransaction, onEditTransaction, isOpen, o
                                             onChange={(e) => setInterestRate(e.target.value)}
                                         />
                                     </FormField>
+
+                                    {!initialData && (
+                                        <FormField label="Parcelas (Opcional)">
+                                            <Input
+                                                type="number"
+                                                min="1"
+                                                placeholder="Ex: 3"
+                                                value={installments}
+                                                onChange={(e) => setInstallments(e.target.value)}
+                                            />
+                                            <p className="text-xs text-gray-500 mt-1">
+                                                Se preenchido, o valor acima será dividido por este número de parcelas.
+                                            </p>
+                                        </FormField>
+                                    )}
 
                                     <div className="flex items-center gap-2 mt-2">
                         <input

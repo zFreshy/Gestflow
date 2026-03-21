@@ -37,7 +37,7 @@ export function TransactionsPage({ transactions, onEdit, onDelete, onBatchDelete
         if (parsedTransactions.length === 0) return;
         setIsSaving(true);
         try {
-            // Verifica se as transações que estamos tentando importar já existem para este usuário e data
+            // Verifica se as transações que estamos tentando importar já existem para esta data
             const datesToImport = [...new Set(parsedTransactions.map(t => {
                 const [day, month, year] = t.date.split('/');
                 return `${year}-${month}-${day}`;
@@ -46,7 +46,6 @@ export function TransactionsPage({ transactions, onEdit, onDelete, onBatchDelete
             const { data: existingData, error: checkError } = await supabase
                 .from('transactions')
                 .select('date')
-                .eq('user_id', user.id)
                 .in('date', datesToImport)
                 .like('description', 'Lucro Padaria%');
                 

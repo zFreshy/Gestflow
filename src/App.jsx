@@ -233,7 +233,6 @@ function AppContent() {
                         active: false,
                         end_date: transactionToUpdate.end_date
                     })
-                    .eq('user_id', user.id)
                     .eq('description', transactionToUpdate.description)
                     .eq('type', 'expense')
                     .eq('expense_type', 'fixed');
@@ -246,7 +245,6 @@ function AppContent() {
                         active: true,
                         end_date: null
                     })
-                    .eq('user_id', user.id)
                     .eq('description', transactionToUpdate.description)
                     .eq('type', 'expense')
                     .eq('expense_type', 'fixed');
@@ -293,7 +291,6 @@ function AppContent() {
                         active: false,
                         end_date: transactionToUpdate.end_date
                     })
-                    .eq('user_id', user.id)
                     .eq('description', transactionToUpdate.description)
                     .eq('type', 'expense')
                     .eq('expense_type', 'fixed');
@@ -306,7 +303,6 @@ function AppContent() {
                         active: true,
                         end_date: null
                     })
-                    .eq('user_id', user.id)
                     .eq('description', transactionToUpdate.description)
                     .eq('type', 'expense')
                     .eq('expense_type', 'fixed');

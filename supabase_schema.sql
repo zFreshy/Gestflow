@@ -25,18 +25,18 @@ create table public.transactions (
 alter table public.transactions enable row level security;
 
 -- Create policies
-create policy "Users can view their own transactions"
+create policy "Users can view all transactions"
   on public.transactions for select
-  using (auth.uid() = user_id);
+  using (true);
 
-create policy "Users can insert their own transactions"
+create policy "Users can insert transactions"
   on public.transactions for insert
-  with check (auth.uid() = user_id);
+  with check (true);
 
-create policy "Users can update their own transactions"
+create policy "Users can update transactions"
   on public.transactions for update
-  using (auth.uid() = user_id);
+  using (true);
 
-create policy "Users can delete their own transactions"
+create policy "Users can delete transactions"
   on public.transactions for delete
-  using (auth.uid() = user_id);
+  using (true);

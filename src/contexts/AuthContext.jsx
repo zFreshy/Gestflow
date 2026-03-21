@@ -59,6 +59,30 @@ export const AuthProvider = ({ children }) => {
         if (error) throw error;
     };
 
+    // Helper para pegar o email correto em qualquer momento
+    const getUserEmail = () => {
+        try {
+            if (user?.email) return user.email;
+            
+            // Fallback para localStorage
+            for (let i = 0; i < localStorage.length; i++) {
+                const key = localStorage.key(i);
+                if (key && key.startsWith('sb-') && key.endsWith('-auth-token')) {
+                    const item = localStorage.getItem(key);
+                    if (item) {
+                        const parsed = JSON.parse(item);
+                        if (parsed?.user?.email) {
+                            return parsed.user.email;
+                        }
+                    }
+                }
+            }
+        } catch (e) {
+            console.error("Erro ao buscar email", e);
+        }
+        return '';
+    };
+
     const value = {
         signIn,
         signOut,
@@ -66,7 +90,8 @@ export const AuthProvider = ({ children }) => {
         updatePassword,
         user,
         session,
-        loading
+        loading,
+        getUserEmail
     };
 
     return (

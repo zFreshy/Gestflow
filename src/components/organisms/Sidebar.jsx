@@ -15,7 +15,15 @@ const MENU_ITEMS = [
 export function Sidebar({ isOpen, onClose }) {
     const location = useLocation();
     const [isCollapsed, setIsCollapsed] = useState(false);
-    const { signOut } = useAuth();
+    const { signOut, getUserEmail } = useAuth();
+
+    const getUserName = () => {
+        const email = getUserEmail();
+        if (email === 'ecarneirodemelo@gmail.com') return 'Nal';
+        if (email === 'esthermenezes90@gmail.com') return 'Esther';
+        if (email === 'matheusv090807@gmail.com') return 'Matheus';
+        return 'Usuário';
+    };
 
     const handleLogout = async () => {
         try {
@@ -103,7 +111,7 @@ export function Sidebar({ isOpen, onClose }) {
                 <div className={cn("mt-auto transition-all", isCollapsed ? "p-4" : "p-6")}>
                     <div className={cn("flex items-center", isCollapsed ? "flex-col gap-4" : "justify-between")}>
                         <div className={cn("flex items-center gap-3", isCollapsed ? "flex-col" : "")}>
-                            <Avatar name="Nal" size="md" className="ring-2 ring-white shadow-sm" />
+                            <Avatar name={getUserName()} size="md" className="ring-2 ring-white shadow-sm" />
                             
                             {!isCollapsed && (
                                 <button 
@@ -127,8 +135,8 @@ export function Sidebar({ isOpen, onClose }) {
                         
                         {!isCollapsed && (
                             <div className="flex flex-col">
-                                <span className="text-sm font-bold text-gray-900">Nal</span>
-                                <span className="text-xs text-gray-500 font-medium">Admin</span>
+                                <span className="text-sm font-bold text-gray-900">{getUserName()}</span>
+                                <span className="text-xs text-gray-500 font-medium">Administrador</span>
                             </div>
                         )}
 

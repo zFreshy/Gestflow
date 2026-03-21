@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Typography } from '../atoms/Typography';
 import { Search, Bell, Calendar, Plus, X, Menu } from 'lucide-react';
+import { useAuth } from '../../contexts/AuthContext';
 
 const MONTHS = [
     'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
@@ -10,8 +11,17 @@ const MONTHS = [
 
 export function DashboardHeader({ selectedMonth, onOpenForm, transactions = [], onMenuClick }) {
     const navigate = useNavigate();
+    const { getUserEmail } = useAuth();
     const monthName = MONTHS[selectedMonth] || MONTHS[new Date().getMonth()];
     const [searchTerm, setSearchTerm] = useState('');
+
+    const getUserName = () => {
+        const email = getUserEmail();
+        if (email === 'ecarneirodemelo@gmail.com') return 'Nal';
+        if (email === 'esthermenezes90@gmail.com') return 'Esther';
+        if (email === 'matheusv090807@gmail.com') return 'Matheus';
+        return 'Usuário';
+    };
 
     const gotoCalendar = () => {
         navigate('/calendar');
@@ -163,7 +173,7 @@ export function DashboardHeader({ selectedMonth, onOpenForm, transactions = [], 
             <div className="flex flex-col md:flex-row md:items-center justify-between pt-2 gap-4">
                 <div>
                     <h1 className="text-2xl md:text-[28px] font-semibold text-gray-900 tracking-tight flex items-center gap-2">
-                        Bom dia, <span className="font-bold">Nal!</span> 👋🏼
+                        Bom dia, <span className="font-bold">{getUserName()}!</span> 👋🏼
                     </h1>
                     <div className="flex items-center gap-2 mt-1.5">
                         <Calendar className="h-4 w-4 text-[#7E1A8B]" />

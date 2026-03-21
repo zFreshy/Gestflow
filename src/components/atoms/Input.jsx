@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { TextInput, View, Text } from 'react-native';
 
-export function Input({ label, error, rightElement, ...props }) {
+export function Input({ label, error, rightElement, helperText, ...props }) {
     const [isFocused, setIsFocused] = useState(false);
 
     return (
@@ -36,6 +36,11 @@ export function Input({ label, error, rightElement, ...props }) {
             {error && (
                 <Text className="text-xs text-red-500 mt-1 ml-1">
                     {error}
+                </Text>
+            )}
+            {helperText && !error && (
+                <Text className="text-xs text-gray-500 mt-1 ml-1">
+                    {helperText}
                 </Text>
             )}
         </View>

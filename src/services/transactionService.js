@@ -4,7 +4,7 @@ export const transactionService = {
   async getAll(userId, page = 0, pageSize = 50, fetchAll = false) {
     let query = supabase
       .from('transactions')
-      .select('*', { count: 'exact' })
+      .select('id, description, amount, type, payment_method, date, subtitle, client_name, is_bakery_income, recurrence, exam, health_plan, status, expense_type, interest_rate, active, end_date, user_email, installments, current_installment, created_at', { count: 'exact' })
       .order('date', { ascending: false });
 
     let start = 0;
@@ -84,7 +84,6 @@ export const transactionService = {
     const { data, error } = await supabase
         .from('transactions')
         .select('date')
-        .eq('user_id', userId)
         .in('date', dates)
         .like('description', 'Lucro Padaria%');
         
@@ -101,7 +100,6 @@ export const transactionService = {
             active: false,
             end_date: endDate
         })
-        .eq('user_id', userId)
         .eq('description', description)
         .eq('type', 'expense')
         .eq('expense_type', 'fixed');
@@ -119,7 +117,6 @@ export const transactionService = {
             active: true,
             end_date: null
         })
-        .eq('user_id', userId)
         .eq('description', description)
         .eq('type', 'expense')
         .eq('expense_type', 'fixed');

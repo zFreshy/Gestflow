@@ -127,13 +127,28 @@ export function TransactionItem({ transaction, onPress, onEdit, onDelete, isSele
                 isPaid ? "text-gray-400 line-through" : "text-gray-900",
                 isOverdue && !isPaid ? "text-red-700" : ""
             )} numberOfLines={1}>
-                {transaction.description} {isVirtual && <Text className="text-amber-600 text-xs font-normal">(Prev)</Text>}
+                {transaction.description} 
+                {transaction.installments && transaction.installments > 1 && (
+                    <Text className="text-gray-500 font-normal text-xs ml-1">
+                        {' '}({transaction.current_installment}/{transaction.installments})
+                    </Text>
+                )}
+                {isVirtual && <Text className="text-amber-600 text-xs font-normal"> (Prev)</Text>}
             </Text>
             
             <View className="flex-row items-center mt-0.5">
                 <Text className={cn("text-xs font-medium", isOverdue && !isPaid ? "text-red-500" : "text-gray-500")}>
                     {METHOD_LABELS[transaction.paymentMethod] || transaction.paymentMethod}
                 </Text>
+                
+                {transaction.user_email && (
+                    <>
+                        <Text className="text-xs text-gray-300 mx-1">•</Text>
+                        <Text className="text-xs text-purple-600 font-medium">
+                            Por: {transaction.user_email === 'ecarneirodemelo@gmail.com' ? 'Nal' : transaction.user_email === 'esthermenezes90@gmail.com' ? 'Esther' : transaction.user_email === 'matheusv090807@gmail.com' ? 'Matheus' : 'Sistema'}
+                        </Text>
+                    </>
+                )}
                 
                 {transaction.expenseType === 'fixed' && (
                     <>

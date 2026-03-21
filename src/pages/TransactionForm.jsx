@@ -51,6 +51,7 @@ export function TransactionForm({ navigation, route }) {
   const [interestRate, setInterestRate] = useState(transaction?.interestRate ? transaction.interestRate.toString() : '');
   const [isActive, setIsActive] = useState(transaction?.active !== false); // Default true
   const [endDate, setEndDate] = useState(transaction?.end_date || ''); // New state for end date
+  const [installments, setInstallments] = useState(transaction?.installments ? transaction.installments.toString() : ''); // New state for installments
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showEndDatePicker, setShowEndDatePicker] = useState(false);
 
@@ -98,13 +99,15 @@ export function TransactionForm({ navigation, route }) {
         payment_method: paymentMethod,
         date: date, // Keep YYYY-MM-DD format for database
         user_id: user.id,
+        user_email: user.email, // Salvar o email no mobile também
         is_bakery_income: type === 'income' ? isBakeryIncome : false,
         client_name: type === 'income' && isBakeryIncome ? clientName : null,
         expense_type: type === 'expense' ? expenseType : null,
         recurrence: type === 'expense' && expenseType === 'fixed' ? recurrence : null,
         interest_rate: type === 'expense' && expenseType === 'fixed' && interestRate ? parseFloat(interestRate.replace(',', '.')) : null,
         active: type === 'expense' && expenseType === 'fixed' ? isActive : null,
-        end_date: type === 'expense' && expenseType === 'fixed' && !isActive ? endDate : null
+        end_date: type === 'expense' && expenseType === 'fixed' && !isActive ? endDate : null,
+        installments: type === 'expense' && expenseType === 'fixed' && installments && parseInt(installments) > 1 && !isEditing ? parseInt(installments) : null
       };
 
       if (isEditing) {
@@ -117,7 +120,8 @@ export function TransactionForm({ navigation, route }) {
                // Ensure user_id is set
                const { id, ...newTransactionData } = {
                    ...transactionData,
-                   user_id: user.id
+                   user_id: user.id,
+                   user_email: user.email
                };
                
                await transactionService.create(newTransactionData);
@@ -147,7 +151,44 @@ export function TransactionForm({ navigation, route }) {
               Alert.alert('Sucesso', 'Transação atualizada com sucesso!');
           }
       } else {
-          await transactionService.create(transactionData);
+          // Lógica de parcelamento
+          if (transactionData.installments && transactionData.installments > 1) {
+              const installmentCount = transactionData.installments;
+              const installmentAmount = Number((transactionData.amount / installmentCount).toFixed(2));
+              
+              // Ajustar diferença de arredondamento na última parcela
+              const totalCalculated = installmentAmount * (installmentCount - 1);
+              const lastInstallmentAmount = Number((transactionData.amount - totalCalculated).toFixed(2));
+
+              const transactionsToInsert = [];
+              const [y, m, d] = transactionData.date.split('-');
+              let currentDate = new Date(parseInt(y), parseInt(m) - 1, parseInt(d));
+
+              for (let i = 1; i <= installmentCount; i++) {
+                  const currentAmount = i === installmentCount ? lastInstallmentAmount : installmentAmount;
+                  
+                  const installDate = new Date(currentDate);
+                  if (i > 1) {
+                      installDate.setMonth(installDate.getMonth() + (i - 1));
+                  }
+
+                  const formattedInstallDate = `${installDate.getFullYear()}-${String(installDate.getMonth() + 1).padStart(2, '0')}-${String(installDate.getDate()).padStart(2, '0')}`;
+
+                  transactionsToInsert.push({
+                      ...transactionData,
+                      amount: currentAmount,
+                      date: formattedInstallDate,
+                      current_installment: i,
+                      active: i === installmentCount ? false : true,
+                      end_date: formattedInstallDate,
+                      recurrence: null
+                  });
+              }
+
+              await transactionService.createMany(transactionsToInsert);
+          } else {
+              await transactionService.create(transactionData);
+          }
 
           // If finalizing, propagate to related transactions
            if (type === 'expense' && expenseType === 'fixed') {
@@ -355,6 +396,17 @@ export function TransactionForm({ navigation, route }) {
                     onChangeText={setInterestRate}
                     keyboardType="numeric"
                   />
+
+                  {!isEditing && (
+                      <Input
+                        label="Parcelas (Opcional)"
+                        placeholder="Ex: 3"
+                        value={installments}
+                        onChangeText={setInstallments}
+                        keyboardType="numeric"
+                        helperText="Se preenchido, o valor acima será dividido por este número de parcelas."
+                      />
+                  )}
 
                   <View className="flex-row justify-between items-center bg-white p-3 rounded-lg border border-gray-200 mb-4">
                     <Text className="text-gray-700 font-medium">Despesa Finalizada</Text>

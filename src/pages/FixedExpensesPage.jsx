@@ -144,10 +144,17 @@ export function FixedExpensesPage({ navigation }) {
 
   const fetchTransactions = async () => {
     try {
-      const data = await transactionService.getAll(user.id);
+      const response = await transactionService.getAll(user.id, 0, 50, true);
+      
+      let dataToMap = [];
+      if (Array.isArray(response)) {
+          dataToMap = response;
+      } else if (response && Array.isArray(response.data)) {
+          dataToMap = response.data;
+      }
       
       // Map and filter ONLY fixed expenses
-      const mappedData = (data || [])
+      const mappedData = dataToMap
         .map(t => ({
             ...t,
             expenseType: t.expense_type || t.expenseType,

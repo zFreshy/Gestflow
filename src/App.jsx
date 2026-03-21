@@ -46,25 +46,35 @@ function AppContent() {
       setPage(0);
       setTransactions([]);
       setHasMore(true);
-      fetchTransactions(0, true);
+      
+      // Se estiver na página de Dashboard (raiz), busca tudo. Senão, busca paginado.
+      const isDashboard = location.pathname === '/';
+      fetchTransactions(0, true, isDashboard);
     } else {
       setTransactions([]);
       setLoading(false);
     }
-  }, [user]);
+  }, [user, location.pathname]);
 
-  const fetchTransactions = async (pageToFetch = page, reset = false) => {
+  const fetchTransactions = async (pageToFetch = page, reset = false, fetchAll = false) => {
     try {
       if (reset) setLoading(true);
       
-      const start = pageToFetch * PAGE_SIZE;
-      const end = start + PAGE_SIZE - 1;
-
-      const { data, error, count } = await supabase
+      let query = supabase
         .from('transactions')
         .select('*', { count: 'exact' })
-        .order('date', { ascending: false })
-        .range(start, end);
+        .order('date', { ascending: false });
+
+      let start = 0;
+      let end = 0;
+
+      if (!fetchAll) {
+          start = pageToFetch * PAGE_SIZE;
+          end = start + PAGE_SIZE - 1;
+          query = query.range(start, end);
+      }
+
+      const { data, error, count } = await query;
 
       if (error) throw error;
 
@@ -87,13 +97,17 @@ function AppContent() {
         };
       });
 
-      if (reset) {
+      if (reset || fetchAll) {
           setTransactions(formattedTransactions);
       } else {
           setTransactions(prev => [...prev, ...formattedTransactions]);
       }
       
-      setHasMore(start + data.length < count);
+      if (!fetchAll) {
+          setHasMore(start + data.length < count);
+      } else {
+          setHasMore(false);
+      }
       
     } catch (error) {
       console.error('Error fetching transactions:', error);

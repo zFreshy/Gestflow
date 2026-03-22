@@ -212,7 +212,8 @@ export function TransactionsPage({ navigation }) {
     try {
       setLoading(true);
       await transactionService.delete(transaction.id);
-      await fetchTransactions();
+      setPage(0);
+      await fetchTransactions(0, true);
     } catch (error) {
       console.error(error);
     } finally {
@@ -260,7 +261,8 @@ export function TransactionsPage({ navigation }) {
                           await transactionService.deleteMany(Array.from(selectedIds));
                           setSelectedIds(new Set());
                           setIsSelectionMode(false);
-                          await fetchTransactions();
+                          setPage(0);
+                          await fetchTransactions(0, true);
                       } catch (error) {
                           console.error(error);
                           Alert.alert("Erro", "Não foi possível excluir as transações.");
@@ -566,8 +568,13 @@ export function TransactionsPage({ navigation }) {
                 <FilterTab label="Saídas" value="expense" activeValue={filter} onPress={setFilter} />
                 <View className="w-4" />
                 <FilterTab label="Pix" value="pix" activeValue={methodFilter} onPress={setMethodFilter} />
-                <FilterTab label="Cartão" value="cartao" activeValue={methodFilter} onPress={setMethodFilter} />
                 <FilterTab label="Dinheiro" value="dinheiro" activeValue={methodFilter} onPress={setMethodFilter} />
+                <FilterTab label="C. Crédito" value="cartao" activeValue={methodFilter} onPress={setMethodFilter} />
+                <FilterTab label="C. Débito" value="debito" activeValue={methodFilter} onPress={setMethodFilter} />
+                <FilterTab label="Fiado" value="credito_loja" activeValue={methodFilter} onPress={setMethodFilter} />
+                <FilterTab label="V. Alimentação" value="vale_alimentacao" activeValue={methodFilter} onPress={setMethodFilter} />
+                <FilterTab label="V. Combustível" value="vale_combustivel" activeValue={methodFilter} onPress={setMethodFilter} />
+                <FilterTab label="Diversos" value="diversos" activeValue={methodFilter} onPress={setMethodFilter} />
             </ScrollView>
         </View>
       </View>

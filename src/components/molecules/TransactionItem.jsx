@@ -21,8 +21,13 @@ const RECURRENCE_MAP = {
 
 const METHOD_LABELS = {
     pix: 'Pix',
-    cartao: 'Cartão',
     dinheiro: 'Dinheiro',
+    cartao: 'Cartão de Crédito',
+    debito: 'Cartão de Débito',
+    credito_loja: 'Crédito Loja (fiado)',
+    vale_alimentacao: 'Vale Alimentação',
+    vale_combustivel: 'Vale Combustível',
+    diversos: 'Diversos',
 };
 
 export function TransactionItem({ transaction, onPress, onEdit, onDelete, isSelected, isSelectionMode }) {

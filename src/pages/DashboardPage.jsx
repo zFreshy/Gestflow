@@ -629,14 +629,12 @@ export function DashboardPage({ navigation }) {
             <View>
               <Text className="text-gray-500 text-sm">Bem-vindo de volta,</Text>
               <Text className="text-2xl font-bold text-gray-900">
-                {/* {user?.email?.split('@')[0] || 'Usuário'} */}
-                Nal
+                {user?.email === 'ecarneirodemelo@gmail.com' ? 'Nal' : user?.email === 'esthermenezes90@gmail.com' ? 'Esther' : user?.email === 'matheusv090807@gmail.com' ? 'Matheus' : user?.email?.split('@')[0] || 'Usuário'}
               </Text>
             </View>
             <View className="h-10 w-10 bg-purple-50 rounded-full items-center justify-center border border-purple-100">
               <Text className="text-purple-600 font-bold text-lg">
-                {/* {(user?.email?.[0] || 'U').toUpperCase()} */}
-                N
+                {user?.email === 'ecarneirodemelo@gmail.com' ? 'N' : user?.email === 'esthermenezes90@gmail.com' ? 'E' : user?.email === 'matheusv090807@gmail.com' ? 'M' : (user?.email?.[0] || 'U').toUpperCase()}
               </Text>
             </View>
           </View>

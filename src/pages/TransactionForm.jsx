@@ -186,6 +186,9 @@ export function TransactionForm({ navigation, route }) {
               }
 
               await transactionService.createMany(transactionsToInsert);
+              Alert.alert('Sucesso', 'Transação parcelada criada com sucesso!');
+              navigation.goBack();
+              return;
           } else {
               await transactionService.create(transactionData);
           }

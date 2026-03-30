@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text } from 'react-native';
-import Svg, { Path, G } from 'react-native-svg';
+import Svg, { Path, G, Circle } from 'react-native-svg';
 
 const COLORS = [
   '#3B82F6', // blue
@@ -13,24 +13,41 @@ const COLORS = [
 export function DonutChart({ data }) {
   if (!data || data.length === 0) {
     return (
-      <View className="items-center justify-center h-40">
-        <Text className="text-gray-400">Sem dados</Text>
+      <View className="items-center justify-center h-28">
+        <View className="flex-1 w-full justify-center">
+            <View className="flex-row items-center mb-1 opacity-50">
+              <View className="h-3 w-3 rounded-full mr-2 bg-gray-300" />
+              <Text className="text-gray-900 font-medium text-[10px] flex-1">Entradas</Text>
+              <Text className="text-gray-600 text-[10px]">R$ 0,00</Text>
+            </View>
+            <View className="flex-row items-center mb-1 opacity-50">
+              <View className="h-3 w-3 rounded-full mr-2 bg-gray-300" />
+              <Text className="text-gray-900 font-medium text-[10px] flex-1">Saídas</Text>
+              <Text className="text-gray-600 text-[10px]">R$ 0,00</Text>
+            </View>
+        </View>
+        <View className="absolute right-0 items-center justify-center relative w-[90px] h-[90px]">
+             <Svg height="90" width="90" viewBox="0 0 90 90">
+                <Circle cx="45" cy="45" r="30" stroke="#f3f4f6" strokeWidth="15" fill="none" />
+             </Svg>
+        </View>
       </View>
     );
   }
 
+  const formatValue = (val) => {
+    return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
+  };
+
   const total = data.reduce((sum, item) => sum + item.value, 0);
   let startAngle = 0;
-  const radius = 60;
-  const innerRadius = 40;
-  const centerX = 70;
-  const centerY = 70;
+  const radius = 45;
+  const innerRadius = 30;
+  const centerX = 45;
+  const centerY = 45;
 
   const createArc = (start, end, r, innerR) => {
-    // Prevent drawing error if start and end are same
     if (start === end) return '';
-    
-    // Handle full circle case
     if (end - start === 360) {
         return `
             M ${centerX} ${centerY - r}
@@ -62,8 +79,8 @@ export function DonutChart({ data }) {
   };
 
   return (
-    <View className="flex-row items-center justify-between h-40">
-      <View className="flex-1 mr-4">
+    <View className="flex-row items-center justify-between h-28 w-full">
+      <View className="flex-1 mr-2">
         <View className="flex-col gap-2">
           {data.map((entry, idx) => (
             <View key={entry.name} className="flex-row items-center mb-1">
@@ -71,29 +88,27 @@ export function DonutChart({ data }) {
                 className="h-3 w-3 rounded-full mr-2"
                 style={{ backgroundColor: COLORS[idx % COLORS.length] }}
               />
-              <Text className="text-gray-900 font-medium text-xs flex-1">{entry.name}</Text>
-              <Text className="text-gray-600 text-xs">{entry.value}</Text>
+              <Text className="text-gray-900 font-medium text-[10px] flex-1" numberOfLines={1}>{entry.name}</Text>
+              <Text className="text-gray-600 text-[10px]">{formatValue(entry.value)}</Text>
             </View>
           ))}
         </View>
       </View>
 
-      <View className="items-center justify-center relative w-[140px] h-[140px]">
-        <Svg height="140" width="140" viewBox="0 0 140 140">
+      <View className="items-center justify-center relative w-[90px] h-[90px]">
+        <Svg height="90" width="90" viewBox="0 0 90 90">
           <G>
-            {data.map((entry, idx) => {
+            {total === 0 ? (
+                <Circle cx="45" cy="45" r="30" stroke="#f3f4f6" strokeWidth="15" fill="none" />
+            ) : data.map((entry, idx) => {
               const angle = (entry.value / total) * 360;
               const path = createArc(startAngle, startAngle + angle, radius, innerRadius);
               const fill = COLORS[idx % COLORS.length];
-              const currentStartAngle = startAngle;
               startAngle += angle;
               return <Path key={idx} d={path} fill={fill} />;
             })}
           </G>
         </Svg>
-        <View className="absolute top-0 left-0 right-0 bottom-0 items-center justify-center">
-             <Text className="text-xl font-bold text-gray-900">{total}</Text>
-        </View>
       </View>
     </View>
   );

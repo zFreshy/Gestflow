@@ -46,7 +46,7 @@ export function TransactionForm({ navigation, route }) {
   const [clientName, setClientName] = useState(transaction?.clientName || transaction?.client_name || '');
 
   // Expense specific
-  const [expenseType, setExpenseType] = useState(transaction?.expenseType || transaction?.expense_type || initialExpenseType || 'fixed'); // fixed, variable
+  const [expenseType, setExpenseType] = useState(transaction?.expenseType || transaction?.expense_type || initialExpenseType || 'fixed'); // fixed, variable, planned
   const [recurrence, setRecurrence] = useState(transaction?.recurrence || 'monthly');
   const [interestRate, setInterestRate] = useState(transaction?.interestRate ? transaction.interestRate.toString() : '');
   const [isActive, setIsActive] = useState(transaction?.active !== false); // Default true
@@ -54,6 +54,10 @@ export function TransactionForm({ navigation, route }) {
   const [installments, setInstallments] = useState(transaction?.installments ? transaction.installments.toString() : ''); // New state for installments
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showEndDatePicker, setShowEndDatePicker] = useState(false);
+  
+  // Planned Expenses
+  const [plannedEntries, setPlannedEntries] = useState([{ dateStr: '', amount: '' }]);
+  const [activeDateIndex, setActiveDateIndex] = useState(null);
 
   const onDateChange = (event, selectedDate) => {
     setShowDatePicker(false);
@@ -75,6 +79,36 @@ export function TransactionForm({ navigation, route }) {
     }
   };
 
+  const onPlannedDateChange = (event, selectedDate) => {
+    setShowDatePicker(false);
+    if (selectedDate && activeDateIndex !== null) {
+      const d = String(selectedDate.getDate()).padStart(2, '0');
+      const m = String(selectedDate.getMonth() + 1).padStart(2, '0');
+      const y = selectedDate.getFullYear();
+      const newEntries = [...plannedEntries];
+      newEntries[activeDateIndex].dateStr = `${y}-${m}-${d}`;
+      setPlannedEntries(newEntries);
+      setActiveDateIndex(null);
+    }
+  };
+
+  const updatePlannedEntry = (index, field, value) => {
+      const newEntries = [...plannedEntries];
+      newEntries[index][field] = value;
+      setPlannedEntries(newEntries);
+  };
+
+  const addPlannedEntry = () => {
+      setPlannedEntries([...plannedEntries, { dateStr: '', amount: '' }]);
+  };
+
+  const removePlannedEntry = (index) => {
+      if (plannedEntries.length > 1) {
+          const newEntries = plannedEntries.filter((_, i) => i !== index);
+          setPlannedEntries(newEntries);
+      }
+  };
+
   const formatDateDisplay = (isoDate) => {
     if (!isoDate) return '';
     const [year, month, day] = isoDate.split('-');
@@ -82,13 +116,52 @@ export function TransactionForm({ navigation, route }) {
   };
 
   const handleSubmit = async () => {
-    if (!description || !amount || !date) {
-      Alert.alert('Erro', 'Preencha os campos obrigatórios');
-      return;
+    if (type === 'expense' && expenseType === 'planned' && !isEditing) {
+      if (!description || plannedEntries.length === 0) {
+          Alert.alert('Erro', 'Preencha a descrição e as datas.');
+          return;
+      }
+      const isValid = plannedEntries.every(e => e.dateStr && e.amount);
+      if (!isValid) {
+          Alert.alert('Erro', 'Preencha todas as datas e valores planejados.');
+          return;
+      }
+    } else {
+      if (!description || !amount || !date) {
+        Alert.alert('Erro', 'Preencha os campos obrigatórios');
+        return;
+      }
     }
 
     setLoading(true);
     try {
+      if (type === 'expense' && expenseType === 'planned' && !isEditing) {
+          const transactionsToInsert = plannedEntries.map((entry, index) => {
+              const [y, m, d] = entry.dateStr.split('-');
+              return {
+                  description,
+                  amount: parseFloat(entry.amount.replace(',', '.')),
+                  type: 'expense',
+                  payment_method: paymentMethod,
+                  date: entry.dateStr,
+                  status: 'Aguardando',
+                  expense_type: 'fixed',
+                  recurrence: null,
+                  active: true,
+                  end_date: entry.dateStr,
+                  user_id: user.id,
+                  user_email: user.email,
+                  installments: plannedEntries.length,
+                  current_installment: index + 1
+              };
+          });
+
+          await transactionService.createMany(transactionsToInsert);
+          Alert.alert('Sucesso', 'Despesas planejadas criadas com sucesso!');
+          navigation.goBack();
+          return;
+      }
+
       const [year, month, day] = date.split('-');
       const timestamp = new Date(year, month - 1, day).getTime();
 
@@ -267,33 +340,37 @@ export function TransactionForm({ navigation, route }) {
             onChangeText={setDescription}
           />
 
-          <Input
-            label="Valor (R$)"
-            placeholder="0,00"
-            value={amount}
-            onChangeText={setAmount}
-            keyboardType="numeric"
-          />
-
-          <TouchableOpacity onPress={() => setShowDatePicker(true)} className="mb-4">
-            <View pointerEvents="none">
+          {!(type === 'expense' && expenseType === 'planned' && !isEditing) && (
+            <>
               <Input
-                label="Data"
-                placeholder="DD/MM/AAAA"
-                value={formatDateDisplay(date)}
-                editable={false}
-                rightElement={<Calendar size={20} color="#9CA3AF" />}
+                label="Valor (R$)"
+                placeholder="0,00"
+                value={amount}
+                onChangeText={setAmount}
+                keyboardType="numeric"
               />
-            </View>
-          </TouchableOpacity>
 
-          {showDatePicker && (
-            <DateTimePicker
-              value={new Date(date.split('-')[0], date.split('-')[1] - 1, date.split('-')[2])}
-              mode="date"
-              display="default"
-              onChange={onDateChange}
-            />
+              <TouchableOpacity onPress={() => setShowDatePicker(true)} className="mb-4">
+                <View pointerEvents="none">
+                  <Input
+                    label="Data"
+                    placeholder="DD/MM/AAAA"
+                    value={formatDateDisplay(date)}
+                    editable={false}
+                    rightElement={<Calendar size={20} color="#9CA3AF" />}
+                  />
+                </View>
+              </TouchableOpacity>
+
+              {showDatePicker && activeDateIndex === null && (
+                <DateTimePicker
+                  value={new Date(date.split('-')[0], date.split('-')[1] - 1, date.split('-')[2])}
+                  mode="date"
+                  display="default"
+                  onChange={onDateChange}
+                />
+              )}
+            </>
           )}
 
           {/* Payment Method */}
@@ -361,7 +438,68 @@ export function TransactionForm({ navigation, route }) {
                 >
                   <Text>Variável</Text>
                 </TouchableOpacity>
+                {!isEditing && (
+                  <TouchableOpacity
+                    onPress={() => setExpenseType('planned')}
+                    className={`flex-1 py-2 items-center rounded-lg border ${
+                      expenseType === 'planned' ? 'bg-white border-[#7E1A8B]' : 'bg-transparent border-gray-200'
+                    }`}
+                  >
+                    <Text>Planejada</Text>
+                  </TouchableOpacity>
+                )}
               </View>
+
+              {expenseType === 'planned' && !isEditing && (
+                <View className="mb-4">
+                  <Text className="text-sm font-medium text-gray-700 mb-2">Datas e Valores</Text>
+                  {plannedEntries.map((entry, idx) => (
+                    <View key={idx} className="flex-row items-center gap-2 mb-2">
+                      <TouchableOpacity 
+                        onPress={() => {
+                          setActiveDateIndex(idx);
+                          setShowDatePicker(true);
+                        }} 
+                        className="flex-1"
+                      >
+                        <View pointerEvents="none">
+                          <Input
+                            placeholder="Data"
+                            value={formatDateDisplay(entry.dateStr)}
+                            editable={false}
+                          />
+                        </View>
+                      </TouchableOpacity>
+                      <View className="flex-1">
+                        <Input
+                          placeholder="Valor"
+                          value={entry.amount}
+                          onChangeText={(val) => updatePlannedEntry(idx, 'amount', val)}
+                          keyboardType="numeric"
+                        />
+                      </View>
+                      {plannedEntries.length > 1 && (
+                        <TouchableOpacity onPress={() => removePlannedEntry(idx)} className="p-2 bg-red-50 rounded-lg mb-4">
+                          <X size={20} color="#EF4444" />
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                  ))}
+                  
+                  {showDatePicker && activeDateIndex !== null && (
+                    <DateTimePicker
+                      value={plannedEntries[activeDateIndex]?.dateStr ? new Date(plannedEntries[activeDateIndex].dateStr.split('-')[0], plannedEntries[activeDateIndex].dateStr.split('-')[1] - 1, plannedEntries[activeDateIndex].dateStr.split('-')[2]) : new Date()}
+                      mode="date"
+                      display="default"
+                      onChange={onPlannedDateChange}
+                    />
+                  )}
+
+                  <TouchableOpacity onPress={addPlannedEntry} className="mt-2 py-2 items-center rounded-lg bg-blue-50">
+                    <Text className="text-blue-600 font-medium">+ Adicionar nova data</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
 
               {expenseType === 'fixed' && (
                 <>

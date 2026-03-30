@@ -15,9 +15,13 @@ import {
   AlertCircle, 
   CheckCircle, 
   Users, 
-  Activity
+  Activity,
+  TrendingUp,
+  FileText
 } from 'lucide-react-native';
 import { formatCurrency } from '../utils';
+import { DonutChart } from '../components/molecules/DonutChart';
+import { FixedExpensesSummaryModal } from '../components/organisms/FixedExpensesSummaryModal';
 
 const screenWidth = Dimensions.get('window').width;
 
@@ -181,6 +185,7 @@ export function DashboardPage({ navigation }) {
   const [refreshing, setRefreshing] = useState(false);
   const [transactions, setTransactions] = useState([]);
   const [viewMode, setViewMode] = useState('weekly'); // weekly, monthly, quarterly
+  const [isSummaryModalOpen, setIsSummaryModalOpen] = useState(false);
   const [stats, setStats] = useState({
     totalIncome: 0,
     totalExpense: 0,
@@ -353,16 +358,22 @@ export function DashboardPage({ navigation }) {
     
     const projectedBalance = totalIncome - totalExpense - filteredUpcomingTotal - overdueTotal;
 
-    // 5. Chart Data (Replacing Categories with Income/Expense types)
-    // "quero que ele mostre os lucros, as despesas, as despesas por vir e as despesass atrasadas"
-    const finalPieData = [
-        { value: totalIncome, color: '#34D399', text: 'Receitas', focused: true }, // Emerald-400
-        { value: totalExpense, color: '#F87171', text: 'Pagas' }, // Red-400
-        { value: filteredUpcomingTotal, color: '#FBBF24', text: 'A Vencer' }, // Amber-400
-        { value: overdueTotal, color: '#EF4444', text: 'Atrasadas' } // Red-500
-    ].filter(d => d.value > 0);
+    // 5. Chart Data (Saldo Real e Previsto)
+    const realSaidas = data.filter(t => t.type === 'expense' && (t.expenseType === 'variable' || isPaid(t.status))).reduce((acc, t) => acc + t.amount, 0);
+    const realBalanceData = [
+        { name: 'Entradas', value: totalIncome },
+        { name: 'Saídas', value: realSaidas }
+    ];
 
-    // 6. Period Totals (User requested "Totals" for these periods, despite "Média" label)
+    const forecastSaidas = data.filter(t => t.type === 'expense').reduce((acc, t) => acc + t.amount, 0) + 
+                           virtualUpcoming.reduce((acc, t) => acc + t.amount, 0) + 
+                           virtualOverdue.reduce((acc, t) => acc + t.amount, 0);
+    const forecastBalanceData = [
+        { name: 'Entradas', value: totalIncome },
+        { name: 'Saídas', value: forecastSaidas }
+    ];
+
+    // 6. Period Totals
     const todayStr = today.toLocaleDateString('pt-BR');
     const currentMonthStr = `${today.getMonth() + 1}/${today.getFullYear()}`;
     const currentYear = today.getFullYear();
@@ -400,7 +411,8 @@ export function DashboardPage({ navigation }) {
       totalExpense,
       netProfit,
       projectedBalance,
-      categories: finalPieData,
+      realBalanceData,
+      forecastBalanceData,
       upcomingTotal,
       upcomingCount: upcomingExpenses.length,
       overdueTotal,
@@ -643,72 +655,28 @@ export function DashboardPage({ navigation }) {
         </View>
 
         <View className="px-6 space-y-8">
-            {/* Donut Chart Section */}
-            <View className="items-center">
-                <View className="w-full flex-row justify-between items-center mb-4">
-                    <Text className="text-xl font-bold text-gray-900">Visão Geral</Text>
-                    <TouchableOpacity className="bg-gray-100 p-2 rounded-full">
-                        <ArrowUpRight size={20} color="#374151" />
-                    </TouchableOpacity>
-                </View>
-                
-                <View className="items-center justify-center relative py-6">
-                    <PieChart
-                        data={stats.categories}
-                        donut
-                        radius={120}
-                        innerRadius={104}
-                        centerLabelComponent={() => {
-                            return (
-                                <View className="items-center justify-center">
-                                    <Text className="text-gray-400 text-xs font-medium mb-1">Saldo Previsto</Text>
-                                    <Text className="text-gray-900 text-2xl font-bold tracking-tight">
-                                        {formatCurrency(stats.projectedBalance || 0)}
-                                    </Text>
-                                </View>
-                            );
-                        }}
-                        roundedCorners
-                        showValuesAsLabels={false}
-                        showText={false}
-                        strokeColor="#f9fafb"
-                        strokeWidth={6}
-                        focusOnPress
-                        toggleFocusOnPress
-                        shadow
-                        shadowColor="rgba(0,0,0,0.1)"
-                        shadowWidth={10}
-                    />
+            {/* Top Stats Row - Financial Overview (Donuts) */}
+            <View className="flex-row gap-3">
+                {/* Saldo Real */}
+                <View className="flex-1 bg-white p-4 rounded-2xl border border-gray-100 shadow-sm">
+                    <View className="flex-row items-center gap-2 mb-4">
+                        <View className="bg-emerald-50 p-1.5 rounded-full">
+                            <DollarSign size={16} color="#10B981" />
+                        </View>
+                        <Text className="text-gray-900 font-bold">Saldo Real</Text>
+                    </View>
+                    <DonutChart data={stats.realBalanceData} />
                 </View>
 
-                {/* Legend */}
-                <View className="flex-row justify-between w-full px-2 mt-8">
-                    {stats.categories.map((cat, idx) => {
-                        const total = stats.categories.reduce((sum, c) => sum + c.value, 0);
-                        const percentage = total > 0 ? Math.round((cat.value / total) * 100) : 0;
-                        
-                        return (
-                            <View key={idx} className="flex-col items-center flex-1">
-                                <Text className="text-gray-500 text-[10px] mb-1 text-center" numberOfLines={1}>
-                                    {cat.text}
-                                </Text>
-                                <Text className="text-gray-900 font-bold text-lg mb-1">
-                                    {percentage}%
-                                </Text>
-                                {/* Progress bar */}
-                                <View className="w-12 h-1 bg-gray-200 rounded-full overflow-hidden">
-                                    <View 
-                                        style={{ 
-                                            backgroundColor: cat.color, 
-                                            height: '100%', 
-                                            width: `${percentage}%`,
-                                            borderRadius: 9999
-                                        }} 
-                                    />
-                                </View>
-                            </View>
-                        );
-                    })}
+                {/* Saldo Previsto */}
+                <View className="flex-1 bg-white p-4 rounded-2xl border border-gray-100 shadow-sm">
+                    <View className="flex-row items-center gap-2 mb-4">
+                        <View className="bg-blue-50 p-1.5 rounded-full">
+                            <TrendingUp size={16} color="#3B82F6" />
+                        </View>
+                        <Text className="text-gray-900 font-bold">Saldo Previsto</Text>
+                    </View>
+                    <DonutChart data={stats.forecastBalanceData} />
                 </View>
             </View>
 
@@ -914,38 +882,21 @@ export function DashboardPage({ navigation }) {
                         </View>
                     </View>
 
-                    {/* Statement Types */}
-                    <View className="flex-1 bg-white p-4 rounded-2xl border border-gray-100 shadow-sm relative">
-                         <View className="flex-row justify-between items-start mb-2">
-                            <Text className="text-gray-500 text-xs font-medium">Tipos de Extratos</Text>
-                            <View className="bg-blue-50 p-1.5 rounded-full">
-                                <Activity size={16} color="#3B82F6" />
-                            </View>
+                    {/* Statement Types replaced by Fixed Expenses Summary */}
+                    <TouchableOpacity 
+                        onPress={() => setIsSummaryModalOpen(true)}
+                        className="flex-1 bg-white p-4 rounded-2xl border border-gray-100 shadow-sm relative justify-center items-center"
+                    >
+                        <View className="bg-purple-50 p-3 rounded-full mb-2">
+                            <FileText size={24} color="#7E1A8B" />
                         </View>
-                        <View className="flex-row justify-between mt-2">
-                             <View className="items-center">
-                                <Activity size={12} color="#3B82F6" className="mb-1" />
-                                <Text className="text-gray-900 font-bold text-lg">
-                                    {stats.paidFixedCount}
-                                </Text>
-                                <Text className="text-gray-400 text-[8px]">Obrigatórios</Text>
-                                <Text className="text-gray-500 text-[8px] font-bold mt-1">
-                                    {formatCurrency(stats.paidFixedTotal)}
-                                </Text>
-                             </View>
-                             <View className="w-px bg-gray-100 h-full mx-1" />
-                             <View className="items-center">
-                                <Clock size={12} color="#F59E0B" className="mb-1" />
-                                <Text className="text-gray-900 font-bold text-lg">
-                                    {transactions.filter(t => t.type === 'expense' && t.expenseType === 'variable').length}
-                                </Text>
-                                <Text className="text-gray-400 text-[8px]">Variáveis</Text>
-                                <Text className="text-gray-500 text-[8px] font-bold mt-1">
-                                    {formatCurrency(transactions.filter(t => t.type === 'expense' && t.expenseType === 'variable').reduce((acc, t) => acc + t.amount, 0))}
-                                </Text>
-                             </View>
-                        </View>
-                    </View>
+                        <Text className="text-gray-900 font-bold text-center mb-1">
+                            Despesas Fixas e Planejadas
+                        </Text>
+                        <Text className="text-gray-500 text-[10px] text-center">
+                            Ver resumo detalhado de pagamentos
+                        </Text>
+                    </TouchableOpacity>
                 </View>
 
                  {/* Exams (Payment Methods) */}
@@ -1067,6 +1018,12 @@ export function DashboardPage({ navigation }) {
             </View>
         </View>
       </ScrollView>
+
+      <FixedExpensesSummaryModal 
+        isOpen={isSummaryModalOpen} 
+        onClose={() => setIsSummaryModalOpen(false)} 
+        transactions={transactions} 
+      />
     </SafeAreaView>
   );
 }

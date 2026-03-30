@@ -183,6 +183,39 @@ function AppContent() {
 
       console.log("Saving transaction with email:", transactionToSave.user_email);
 
+      // Handle Planned Expenses logic
+      if (newTransaction.expenseType === 'planned' && newTransaction.plannedEntries) {
+          const transactionsToInsert = newTransaction.plannedEntries.map((entry, index) => {
+              const [year, month, day] = entry.dateStr.split('-');
+              const formattedDate = `${year}-${month}-${day}`;
+              
+              return {
+                  description: newTransaction.description,
+                  amount: parseFloat(entry.amount),
+                  type: 'expense',
+                  payment_method: newTransaction.paymentMethod,
+                  date: formattedDate,
+                  status: newTransaction.status || 'Aguardando',
+                  expense_type: 'variable', // Save as variable to avoid DB constraint issues
+                  subtitle: newTransaction.subtitle || 'Despesa Planejada',
+                  user_id: user.id,
+                  user_email: getEmailFromStorage(),
+              };
+          });
+
+          const { data, error } = await supabase
+            .from('transactions')
+            .insert(transactionsToInsert)
+            .select();
+
+          if (error) throw error;
+
+          // Recarregar a lista toda, pois adicionamos várias
+          await fetchTransactions(0, true);
+          setIsFormOpen(false);
+          return;
+      }
+
       // Handle Installments logic
       if (transactionToSave.installments && transactionToSave.installments > 1) {
           const installmentCount = transactionToSave.installments;
@@ -475,12 +508,14 @@ function AppContent() {
       // If paying, we might update date and amount
       if (newStatus === 'Pago') {
           if (paymentDate) {
-            // Only update date if NOT a fixed expense
-            // Fixed expenses should keep their original due date to maintain recurrence order/history
-            if (transaction && transaction.expenseType !== 'fixed') {
-                // Convert DD/MM/YYYY to YYYY-MM-DD
+            // Update date regardless of expense type. 
+            // Previous logic prevented fixed expenses from updating their date, causing UI confusion.
+            // Check if paymentDate is already DD/MM/YYYY or YYYY-MM-DD
+            if (paymentDate.includes('/')) {
                 const [day, month, year] = paymentDate.split('/');
                 updates.date = `${year}-${month}-${day}`; 
+            } else {
+                updates.date = paymentDate; // Already YYYY-MM-DD
             }
           }
 

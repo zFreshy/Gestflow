@@ -32,6 +32,23 @@ export function TransactionForm({ onAddTransaction, onEditTransaction, isOpen, o
     const [isActive, setIsActive] = useState(true);
     const [endDate, setEndDate] = useState(''); // New state for end date
     const [installments, setInstallments] = useState(''); // New state for installments
+    
+    // Planned specific states
+    const [plannedEntries, setPlannedEntries] = useState([{ dateStr: '', amount: '' }]);
+
+    const addPlannedEntry = () => {
+        setPlannedEntries([...plannedEntries, { dateStr: '', amount: '' }]);
+    };
+
+    const removePlannedEntry = (index) => {
+        setPlannedEntries(plannedEntries.filter((_, i) => i !== index));
+    };
+
+    const updatePlannedEntry = (index, field, value) => {
+        const newEntries = [...plannedEntries];
+        newEntries[index][field] = value;
+        setPlannedEntries(newEntries);
+    };
 
     useEffect(() => {
         if (isOpen) {
@@ -80,7 +97,17 @@ export function TransactionForm({ onAddTransaction, onEditTransaction, isOpen, o
 
     const handleSubmit = (e) => {
         e.preventDefault();
-        if (!description || !amount || !date) return;
+        
+        if (activeTab === 'expense' && expenseType === 'planned' && !initialData) {
+            if (!description || plannedEntries.length === 0) return;
+            const isValid = plannedEntries.every(e => e.dateStr && e.amount);
+            if (!isValid) {
+                alert('Preencha todas as datas e valores planejados.');
+                return;
+            }
+        } else {
+            if (!description || !amount || !date) return;
+        }
 
         // Convert YYYY-MM-DD to DD/MM/YYYY
         const [year, month, day] = date.split('-');
@@ -90,7 +117,7 @@ export function TransactionForm({ onAddTransaction, onEditTransaction, isOpen, o
         const transaction = {
             id: initialData ? initialData.id : crypto.randomUUID(),
             description,
-            amount: parseFloat(amount),
+            amount: parseFloat(amount || 0),
             type: activeTab, // 'income' or 'expense'
             paymentMethod,
             date: formattedDate,
@@ -110,7 +137,7 @@ export function TransactionForm({ onAddTransaction, onEditTransaction, isOpen, o
             if (expenseType === 'fixed') {
                 transaction.recurrence = recurrence;
                 transaction.active = isActive;
-                transaction.end_date = !isActive && endDate ? endDate : null; // Save end_date if inactive
+                transaction.end_date = !isActive && endDate ? endDate : null;
                 if (interestRate) {
                     transaction.interestRate = parseFloat(interestRate);
                 } else {
@@ -119,6 +146,8 @@ export function TransactionForm({ onAddTransaction, onEditTransaction, isOpen, o
                 if (installments && parseInt(installments) > 1 && !initialData) {
                     transaction.installments = parseInt(installments);
                 }
+            } else if (expenseType === 'planned' && !initialData) {
+                transaction.plannedEntries = plannedEntries;
             } else {
                 transaction.recurrence = null;
                 transaction.active = null;
@@ -193,28 +222,30 @@ export function TransactionForm({ onAddTransaction, onEditTransaction, isOpen, o
                         />
                     </FormField>
 
-                    <div className="grid grid-cols-2 gap-4">
-                        <FormField label="Valor (R$)">
-                            <Input
-                                type="number"
-                                step="0.01"
-                                min="0.01"
-                                placeholder="0.00"
-                                value={amount}
-                                onChange={(e) => setAmount(e.target.value)}
-                                required
-                            />
-                        </FormField>
+                    {!(activeTab === 'expense' && expenseType === 'planned' && !initialData) && (
+                        <div className="grid grid-cols-2 gap-4">
+                            <FormField label="Valor (R$)">
+                                <Input
+                                    type="number"
+                                    step="0.01"
+                                    min="0.01"
+                                    placeholder="0.00"
+                                    value={amount}
+                                    onChange={(e) => setAmount(e.target.value)}
+                                    required
+                                />
+                            </FormField>
 
-                        <FormField label="Data">
-                            <Input
-                                type="date"
-                                value={date}
-                                onChange={(e) => setDate(e.target.value)}
-                                required
-                            />
-                        </FormField>
-                    </div>
+                            <FormField label="Data">
+                                <Input
+                                    type="date"
+                                    value={date}
+                                    onChange={(e) => setDate(e.target.value)}
+                                    required
+                                />
+                            </FormField>
+                        </div>
+                    )}
 
                     <FormField label="Método de Pagamento">
                         <Select value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)}>
@@ -284,8 +315,69 @@ export function TransactionForm({ onAddTransaction, onEditTransaction, isOpen, o
                                         />
                                         <span className="text-sm">Variável</span>
                                     </label>
+                                    {!initialData && (
+                                        <label className="flex items-center space-x-2 cursor-pointer">
+                                            <input
+                                                type="radio"
+                                                name="expenseType"
+                                                value="planned"
+                                                checked={expenseType === 'planned'}
+                                                onChange={(e) => setExpenseType(e.target.value)}
+                                                className="h-4 w-4 border-gray-300 text-red-600 focus:ring-red-500"
+                                            />
+                                            <span className="text-sm">Planejada</span>
+                                        </label>
+                                    )}
                                 </div>
                             </FormField>
+
+                            {expenseType === 'planned' && !initialData && (
+                                <div className="space-y-4 pt-2 border-t border-gray-100">
+                                    <div className="space-y-3">
+                                        <label className="text-sm font-medium text-gray-700">Datas e Valores</label>
+                                        {plannedEntries.map((entry, idx) => (
+                                            <div key={idx} className="flex items-center gap-2">
+                                                <Input 
+                                                    type="date" 
+                                                    value={entry.dateStr} 
+                                                    onChange={(e) => updatePlannedEntry(idx, 'dateStr', e.target.value)} 
+                                                    required 
+                                                    className="flex-1"
+                                                />
+                                                <div className="relative flex-1">
+                                                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm">R$</span>
+                                                    <Input 
+                                                        type="number" 
+                                                        step="0.01"
+                                                        min="0.01"
+                                                        placeholder="0.00" 
+                                                        value={entry.amount} 
+                                                        onChange={(e) => updatePlannedEntry(idx, 'amount', e.target.value)} 
+                                                        required 
+                                                        className="pl-8"
+                                                    />
+                                                </div>
+                                                {plannedEntries.length > 1 && (
+                                                    <button 
+                                                        type="button" 
+                                                        onClick={() => removePlannedEntry(idx)} 
+                                                        className="text-red-500 hover:bg-red-50 p-2 rounded-lg transition-colors shrink-0"
+                                                    >
+                                                        <X className="w-4 h-4" />
+                                                    </button>
+                                                )}
+                                            </div>
+                                        ))}
+                                        <button 
+                                            type="button" 
+                                            onClick={addPlannedEntry} 
+                                            className="text-sm text-blue-600 font-medium hover:text-blue-700 hover:bg-blue-50 px-3 py-1.5 rounded-lg transition-colors inline-block"
+                                        >
+                                            + Adicionar nova data
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
 
                             {expenseType === 'fixed' && (
                                 <>

@@ -99,13 +99,21 @@ export function FixedExpensesPage({ transactions, onUpdateStatus, onAddTransacti
     const confirmPayment = (id, status, date, interest) => {
         if (selectedPayment?.isVirtual) {
             // Create new transaction for virtual expense
-            // We use the virtual expense date as the transaction date to maintain recurrence consistency
+            // We use the payment date selected in the modal as the transaction date
+            
+            // Format date to YYYY-MM-DD for DB insertion if it comes as DD/MM/YYYY
+            let formattedDate = date;
+            if (date && date.includes('/')) {
+                const [day, month, year] = date.split('/');
+                formattedDate = `${year}-${month}-${day}`;
+            }
+
             const newTransaction = {
                 description: selectedPayment.description,
                 amount: selectedPayment.amount + (interest || 0),
                 type: 'expense',
                 paymentMethod: selectedPayment.payment_method || selectedPayment.paymentMethod || 'pix',
-                date: selectedPayment.date, // Use the Due Date, ignore the date from modal to preserve recurrence
+                date: formattedDate, // Ensure it's in YYYY-MM-DD for DB
                 clientName: selectedPayment.client_name,
                 isBakeryIncome: false,
                 recurrence: selectedPayment.recurrence,

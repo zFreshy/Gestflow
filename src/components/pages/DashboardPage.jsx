@@ -199,55 +199,26 @@ export function DashboardPage({ transactions }) {
     return (
         <div className="space-y-6">
             {/* Top Stats Row - Financial Overview */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                {/* Card 1 — Lucro Total */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Card 1 — Saldo Real (Donut) */}
                 <StatCard
-                    title="Lucro Total"
+                    title="Saldo Real"
                     icon={DollarSign}
                     accent="green"
                 >
-                    <div className="flex flex-col items-center justify-center py-2 h-full">
-                        <span className="text-3xl font-bold tracking-tight text-emerald-600">
-                            {formatCurrency(totalIncome)}
-                        </span>
-                        <div className="flex items-center gap-1 text-xs text-emerald-600 font-medium mt-1 bg-emerald-50 px-2 py-0.5 rounded-full">
-                            <ArrowUp className="h-3 w-3" />
-                            <span>Receitas</span>
-                        </div>
+                    <div className="mt-2 h-28 w-full">
+                        <DonutChart transactions={transactions} type="real_balance" />
                     </div>
                 </StatCard>
 
-                {/* Card 2 — Despesas Totais */}
+                {/* Card 2 — Saldo Previsto (Donut) */}
                 <StatCard
-                    title="Despesas Totais"
-                    icon={DollarSign}
-                    accent="red"
-                >
-                    <div className="flex flex-col items-center justify-center py-2 h-full">
-                        <span className="text-3xl font-bold tracking-tight text-red-600">
-                            {formatCurrency(totalExpense)}
-                        </span>
-                        <div className="flex items-center gap-1 text-xs text-red-600 font-medium mt-1 bg-red-50 px-2 py-0.5 rounded-full">
-                            <ArrowDown className="h-3 w-3" />
-                            <span>Gastos</span>
-                        </div>
-                    </div>
-                </StatCard>
-
-                {/* Card 3 — Lucro Líquido */}
-                <StatCard
-                    title="Lucro Líquido"
+                    title="Saldo Previsto"
                     icon={TrendingUp}
                     accent="blue"
                 >
-                    <div className="flex flex-col items-center justify-center py-2 h-full">
-                        <span className={cn(
-                            "text-3xl font-bold tracking-tight",
-                            netProfit >= 0 ? "text-blue-600" : "text-red-600"
-                        )}>
-                            {formatCurrency(netProfit)}
-                        </span>
-                        <p className="text-xs text-muted-foreground mt-1">Saldo Atual</p>
+                    <div className="mt-2 h-28 w-full">
+                        <DonutChart transactions={[...transactions, ...virtualExpenses]} type="forecast_balance" />
                     </div>
                 </StatCard>
             </div>
@@ -384,7 +355,7 @@ export function DashboardPage({ transactions }) {
             </div>
 
             {/* Bottom Stats Row - Secondary Info */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 {/* Card 1 — Pacientes (Total) */}
                 <StatCard
                     title="Pacientes"
@@ -401,41 +372,20 @@ export function DashboardPage({ transactions }) {
                     </div>
                 </StatCard>
 
-                {/* Card 2 — Tipos de Extratos */}
+                {/* Card 2 — Saldo Total (Donut) */}
                 <StatCard
-                    title="Tipos de Extratos"
-                    icon={Activity}
-                    accent="yellow"
+                    title="Saldo Total"
+                    icon={DollarSign}
+                    accent="green"
                 >
-                    <div className="flex items-center justify-around mt-4 h-full pb-2">
-                        <div className="flex flex-col items-center">
-                            <div className="flex items-center gap-2">
-                                <Activity className="h-4 w-4 text-blue-500" />
-                                <span className="text-2xl font-bold text-gray-900">{fixedExpenses.length}</span>
-                            </div>
-                            <p className="text-[11px] text-muted-foreground mt-1 font-medium">Obrigatórios</p>
-                            <span className="text-[10px] text-gray-500 font-semibold mt-1">{formatCurrency(fixedTotal)}</span>
-                        </div>
-                        <div className="h-10 w-px bg-gray-200"></div>
-                        <div className="flex flex-col items-center">
-                            <div className="flex items-center gap-2">
-                                <Clock className="h-4 w-4 text-amber-500" />
-                                <span className="text-2xl font-bold text-gray-900">{variableExpenses.length}</span>
-                            </div>
-                            <p className="text-[11px] text-muted-foreground mt-1 font-medium">Variáveis</p>
-                            <span className="text-[10px] text-gray-500 font-semibold mt-1">{formatCurrency(variableTotal)}</span>
-                        </div>
-                    </div>
-                </StatCard>
-
-                {/* Card 3 — Donut chart */}
-                <StatCard
-                    title="Vendas por Convênios"
-                    icon={Users}
-                    accent="purple"
-                >
-                    <div className="mt-2 h-24">
-                        <DonutChart transactions={transactions} />
+                    <div className="flex flex-col items-center justify-center py-2 h-full">
+                        <span className={cn(
+                            "text-3xl font-bold tracking-tight",
+                            netProfit >= 0 ? "text-blue-600" : "text-red-600"
+                        )}>
+                            {formatCurrency(netProfit)}
+                        </span>
+                        <p className="text-xs text-muted-foreground mt-1">Saldo Atual</p>
                     </div>
                 </StatCard>
             </div>

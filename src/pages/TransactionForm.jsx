@@ -259,6 +259,9 @@ export function TransactionForm({ navigation, route }) {
               }
 
               await transactionService.createMany(transactionsToInsert);
+              Alert.alert('Sucesso', 'Transação parcelada criada com sucesso!');
+              navigation.goBack();
+              return;
           } else {
               await transactionService.create(transactionData);
           }
@@ -376,19 +379,28 @@ export function TransactionForm({ navigation, route }) {
           {/* Payment Method */}
           <View className="mb-4">
             <Text className="text-sm font-medium text-gray-700 mb-2">Método de Pagamento</Text>
-            <View className="flex-row gap-2">
-              {['pix', 'cartao', 'dinheiro'].map((method) => (
+            <View className="flex-row flex-wrap gap-2">
+              {[
+                  { id: 'pix', label: 'Pix' },
+                  { id: 'dinheiro', label: 'Dinheiro' },
+                  { id: 'cartao', label: 'Cartão de Crédito' },
+                  { id: 'debito', label: 'Cartão de Débito' },
+                  { id: 'credito_loja', label: 'Crédito Loja' },
+                  { id: 'vale_alimentacao', label: 'V. Alimentação' },
+                  { id: 'vale_combustivel', label: 'V. Combustível' },
+                  { id: 'diversos', label: 'Diversos' }
+              ].map((method) => (
                 <TouchableOpacity
-                  key={method}
-                  onPress={() => setPaymentMethod(method)}
-                  className={`px-4 py-2 rounded-lg border ${
-                    paymentMethod === method 
+                  key={method.id}
+                  onPress={() => setPaymentMethod(method.id)}
+                  className={`px-3 py-1.5 rounded-lg border ${
+                    paymentMethod === method.id 
                       ? 'bg-purple-50 border-[#7E1A8B]' 
                       : 'bg-white border-gray-200'
                   }`}
                 >
-                  <Text className={paymentMethod === method ? 'text-[#7E1A8B] font-medium' : 'text-gray-600'}>
-                    {method === 'pix' ? 'Pix' : method === 'cartao' ? 'Cartão' : 'Dinheiro'}
+                  <Text className={paymentMethod === method.id ? 'text-[#7E1A8B] font-medium' : 'text-gray-600'}>
+                    {method.label}
                   </Text>
                 </TouchableOpacity>
               ))}

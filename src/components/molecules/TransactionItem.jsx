@@ -21,8 +21,13 @@ const RECURRENCE_MAP = {
 
 const METHOD_LABELS = {
     pix: 'Pix',
-    cartao: 'Cartão',
     dinheiro: 'Dinheiro',
+    cartao: 'Cartão de Crédito',
+    debito: 'Cartão de Débito',
+    credito_loja: 'Crédito Loja (fiado)',
+    vale_alimentacao: 'Vale Alimentação',
+    vale_combustivel: 'Vale Combustível',
+    diversos: 'Diversos',
 };
 
 export function TransactionItem({ transaction, onPress, onEdit, onDelete, isSelected, isSelectionMode }) {
@@ -103,30 +108,30 @@ export function TransactionItem({ transaction, onPress, onEdit, onDelete, isSele
         >
         {isSelectionMode ? (
             <View className={cn(
-                "h-6 w-6 rounded border mr-4 items-center justify-center",
+                "h-6 w-6 rounded border mr-3 items-center justify-center shrink-0",
                 isSelected ? "bg-[#7E1A8B] border-[#7E1A8B]" : "border-gray-300"
             )}>
                 {isSelected && <Text className="text-white text-xs font-bold">✓</Text>}
             </View>
         ) : (
             <View className={cn(
-                "h-12 w-12 rounded-2xl items-center justify-center mr-4 shadow-sm", 
+                "h-10 w-10 rounded-2xl items-center justify-center mr-3 shadow-sm shrink-0", 
                 isIncome ? "bg-emerald-100 shadow-emerald-100" : "bg-red-50 shadow-red-100"
             )}>
                 {isIncome ? (
-                <ArrowUpCircle size={22} color="#059669" strokeWidth={2.5} />
+                <ArrowUpCircle size={20} color="#059669" strokeWidth={2.5} />
                 ) : (
-                <ArrowDownCircle size={22} color={isOverdue && !isPaid ? "#DC2626" : "#EF4444"} strokeWidth={2.5} />
+                <ArrowDownCircle size={20} color={isOverdue && !isPaid ? "#DC2626" : "#EF4444"} strokeWidth={2.5} />
                 )}
             </View>
         )}
         
-        <View className="flex-1 mr-2">
+        <View className="flex-1 mr-2 justify-center">
             <Text className={cn(
                 "font-bold text-base text-gray-900",
                 isPaid ? "text-gray-400 line-through" : "text-gray-900",
                 isOverdue && !isPaid ? "text-red-700" : ""
-            )} numberOfLines={1}>
+            )} numberOfLines={2}>
                 {transaction.description} 
                 {transaction.installments && transaction.installments > 1 && (
                     <Text className="text-gray-500 font-normal text-xs ml-1">
@@ -136,15 +141,15 @@ export function TransactionItem({ transaction, onPress, onEdit, onDelete, isSele
                 {isVirtual && <Text className="text-amber-600 text-xs font-normal"> (Prev)</Text>}
             </Text>
             
-            <View className="flex-row items-center mt-0.5">
-                <Text className={cn("text-xs font-medium", isOverdue && !isPaid ? "text-red-500" : "text-gray-500")}>
+            <View className="flex-row items-center mt-0.5 flex-wrap">
+                <Text className={cn("text-[10px] font-medium", isOverdue && !isPaid ? "text-red-500" : "text-gray-500")}>
                     {METHOD_LABELS[transaction.paymentMethod] || transaction.paymentMethod}
                 </Text>
                 
                 {transaction.user_email && (
                     <>
-                        <Text className="text-xs text-gray-300 mx-1">•</Text>
-                        <Text className="text-xs text-purple-600 font-medium">
+                        <Text className="text-[10px] text-gray-300 mx-1">•</Text>
+                        <Text className="text-[10px] text-purple-600 font-medium">
                             Por: {transaction.user_email === 'ecarneirodemelo@gmail.com' ? 'Nal' : transaction.user_email === 'esthermenezes90@gmail.com' ? 'Esther' : transaction.user_email === 'matheusv090807@gmail.com' ? 'Matheus' : 'Sistema'}
                         </Text>
                     </>
@@ -152,15 +157,15 @@ export function TransactionItem({ transaction, onPress, onEdit, onDelete, isSele
                 
                 {transaction.expenseType === 'fixed' && (
                     <>
-                        <Text className="text-xs text-gray-300 mx-1">•</Text>
-                        <Text className="text-xs text-purple-600 font-medium">
+                        <Text className="text-[10px] text-gray-300 mx-1">•</Text>
+                        <Text className="text-[10px] text-purple-600 font-medium">
                             {RECURRENCE_MAP[transaction.recurrence?.toLowerCase()] || transaction.recurrence || 'Fixa'}
                         </Text>
                         
                         {/* Finalized Indicator */}
                         {transaction.active === false && transaction.end_date && (
-                            <View className="ml-2 bg-orange-100 px-1.5 py-0.5 rounded border border-orange-200">
-                                <Text className="text-[10px] text-orange-700 font-medium">
+                            <View className="ml-1 bg-orange-100 px-1 py-0.5 rounded border border-orange-200">
+                                <Text className="text-[9px] text-orange-700 font-medium">
                                     Fim: {formatDate(transaction.end_date)}
                                 </Text>
                             </View>
@@ -170,15 +175,15 @@ export function TransactionItem({ transaction, onPress, onEdit, onDelete, isSele
             </View>
         </View>
         
-        <View className="items-end">
-            <Text className={cn("font-bold text-base", isIncome ? "text-emerald-600" : "text-gray-900")}>
+        <View className="items-end justify-center shrink-0">
+            <Text className={cn("font-bold text-sm", isIncome ? "text-emerald-600" : "text-gray-900")}>
                 {isIncome ? "+" : "-"} {formatCurrency(transaction.amount)}
             </Text>
             
-            <View className="flex-row items-center gap-2">
+            <View className="flex-row items-center gap-1">
                 {(statusLabel !== 'Processado' && statusLabel !== 'Pendente') && (
-                    <View className={cn("px-2 py-0.5 rounded-full mt-1", statusBg)}>
-                        <Text className={cn("text-[10px] font-bold", statusColor)}>
+                    <View className={cn("px-1.5 py-0.5 rounded-full mt-1", statusBg)}>
+                        <Text className={cn("text-[9px] font-bold", statusColor)}>
                             {statusLabel}
                         </Text>
                     </View>
@@ -189,9 +194,9 @@ export function TransactionItem({ transaction, onPress, onEdit, onDelete, isSele
         {(onEdit || onDelete) && (
             <TouchableOpacity 
                 onPress={() => setIsMenuVisible(true)}
-                className="p-2 ml-1 -mr-2 rounded-full active:bg-gray-100"
+                className="p-1 ml-1 -mr-2 rounded-full active:bg-gray-100 shrink-0"
             >
-                <MoreVertical size={20} color="#9CA3AF" />
+                <MoreVertical size={18} color="#9CA3AF" />
             </TouchableOpacity>
         )}
         </TouchableOpacity>

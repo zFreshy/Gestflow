@@ -196,10 +196,15 @@ function AppContent() {
                   payment_method: newTransaction.paymentMethod,
                   date: formattedDate,
                   status: newTransaction.status || 'Aguardando',
-                  expense_type: 'variable', // Save as variable to avoid DB constraint issues
+                  expense_type: 'fixed', // Salvar como fixa para aparecer na aba de despesas fixas
+                  recurrence: null, // Sem recorrência, pois cada mês já é uma entrada independente
+                  active: true, // Necessário para a tela de despesas fixas funcionar corretamente
+                  end_date: formattedDate, // Definir o end_date para a própria data, assim não gera projeções virtuais duplicadas
                   subtitle: newTransaction.subtitle || 'Despesa Planejada',
                   user_id: user.id,
                   user_email: getEmailFromStorage(),
+                  installments: newTransaction.plannedEntries.length,
+                  current_installment: index + 1
               };
           });
 

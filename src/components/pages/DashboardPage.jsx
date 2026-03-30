@@ -1,11 +1,13 @@
-import React from 'react';
-import { ArrowUp, ArrowDown, DollarSign, TrendingUp, Users, Activity, XCircle, Clock, CheckCircle, Calendar as CalendarIcon } from 'lucide-react';
+import React, { useState } from 'react';
+import { ArrowUp, ArrowDown, DollarSign, TrendingUp, Users, Activity, XCircle, Clock, CheckCircle, Calendar as CalendarIcon, FileText } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { StatCard } from '../molecules/StatCard';
 import { DonutChart } from '../molecules/DonutChart';
 import { FinancesChart } from '../organisms/FinancesChart';
+import { FixedExpensesSummaryModal } from '../organisms/FixedExpensesSummaryModal';
 
 export function DashboardPage({ transactions }) {
+    const [isSummaryModalOpen, setIsSummaryModalOpen] = useState(false);
     const totalCount = transactions.length;
     
     // Helper to normalize status
@@ -355,7 +357,7 @@ export function DashboardPage({ transactions }) {
             </div>
 
             {/* Bottom Stats Row - Secondary Info */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 {/* Card 1 — Pacientes (Total) */}
                 <StatCard
                     title="Pacientes"
@@ -372,7 +374,7 @@ export function DashboardPage({ transactions }) {
                     </div>
                 </StatCard>
 
-                {/* Card 2 — Saldo Total (Donut) */}
+                {/* Card 2 — Saldo Total */}
                 <StatCard
                     title="Saldo Total"
                     icon={DollarSign}
@@ -388,7 +390,34 @@ export function DashboardPage({ transactions }) {
                         <p className="text-xs text-muted-foreground mt-1">Saldo Atual</p>
                     </div>
                 </StatCard>
+
+                {/* Card 3 — Resumo Despesas Fixas */}
+                <div 
+                    onClick={() => setIsSummaryModalOpen(true)}
+                    className="cursor-pointer transition-transform hover:scale-[1.02] active:scale-[0.98]"
+                >
+                    <StatCard
+                        title="Despesas Fixas e Planejadas"
+                        icon={FileText}
+                        accent="purple"
+                    >
+                        <div className="flex flex-col items-center justify-center py-2 h-full gap-3">
+                            <div className="h-12 w-12 bg-purple-50 rounded-full flex items-center justify-center text-purple-500">
+                                <FileText className="h-6 w-6" />
+                            </div>
+                            <span className="text-sm font-medium text-gray-600 text-center">
+                                Ver resumo detalhado de pagamentos
+                            </span>
+                        </div>
+                    </StatCard>
+                </div>
             </div>
+
+            <FixedExpensesSummaryModal 
+                isOpen={isSummaryModalOpen} 
+                onClose={() => setIsSummaryModalOpen(false)} 
+                transactions={transactions} 
+            />
         </div>
     );
 }

@@ -28,4 +28,6 @@ dist-ssr
 
 dist/*
 
+supabase/*
+
 mobile

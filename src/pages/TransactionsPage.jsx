@@ -448,13 +448,13 @@ export function TransactionsPage({ navigation }) {
   const FilterTab = ({ label, value, activeValue, onPress }) => (
     <TouchableOpacity
       onPress={() => onPress(activeValue === value ? 'all' : value)}
-      className={`px-4 py-2 rounded-full mr-2 border ${
+      className={`px-5 py-2.5 rounded-full mr-2 border shadow-sm ${
         activeValue === value 
-          ? 'bg-[#7E1A8B] border-[#7E1A8B]' 
-          : 'bg-white border-gray-200'
+          ? 'bg-[#7E1A8B] border-[#7E1A8B] shadow-purple-200' 
+          : 'bg-white border-gray-100 shadow-gray-100'
       }`}
     >
-      <Text className={activeValue === value ? 'text-white font-medium' : 'text-gray-600'}>
+      <Text className={activeValue === value ? 'text-white font-bold' : 'text-gray-600 font-medium'}>
         {label}
       </Text>
     </TouchableOpacity>
@@ -462,11 +462,11 @@ export function TransactionsPage({ navigation }) {
 
   return (
     <SafeAreaView className="flex-1 bg-gray-50">
-      <View className="px-6 py-4 bg-white border-b border-gray-100">
-        <View className="flex-row justify-between items-center mb-4">
+      <View className="px-6 py-6 bg-white rounded-b-[40px] shadow-sm shadow-gray-200 z-10">
+        <View className="flex-row justify-between items-center mb-6">
           <View>
-              <Text className="text-2xl font-bold text-gray-900">Transações</Text>
-              <Text className="text-gray-500 text-xs">Gerencie todos os seus registros</Text>
+              <Text className="text-3xl font-extrabold text-gray-900 tracking-tight">Transações</Text>
+              <Text className="text-gray-500 text-sm font-medium mt-1">Gerencie todos os seus registros</Text>
           </View>
           <View className="flex-row items-center space-x-2">
               {isSelectionMode ? (
@@ -474,10 +474,10 @@ export function TransactionsPage({ navigation }) {
                       <TouchableOpacity 
                           onPress={handleBatchDelete}
                           disabled={selectedIds.size === 0}
-                          className={`h-10 px-4 rounded-full items-center justify-center flex-row shadow-sm ${selectedIds.size > 0 ? 'bg-red-100' : 'bg-gray-100'}`}
+                          className={`h-12 px-5 rounded-full items-center justify-center flex-row shadow-sm ${selectedIds.size > 0 ? 'bg-red-50' : 'bg-gray-50'}`}
                       >
-                          <Trash2 color={selectedIds.size > 0 ? "#DC2626" : "#9CA3AF"} size={18} />
-                          <Text className={`ml-2 font-bold ${selectedIds.size > 0 ? 'text-red-600' : 'text-gray-400'}`}>
+                          <Trash2 color={selectedIds.size > 0 ? "#EF4444" : "#9CA3AF"} size={20} />
+                          <Text className={`ml-2 font-bold ${selectedIds.size > 0 ? 'text-red-500' : 'text-gray-400'}`}>
                               ({selectedIds.size}) Excluir
                           </Text>
                       </TouchableOpacity>
@@ -486,7 +486,7 @@ export function TransactionsPage({ navigation }) {
                               setIsSelectionMode(false);
                               setSelectedIds(new Set());
                           }}
-                          className="h-10 px-4 bg-gray-200 rounded-full items-center justify-center shadow-sm ml-2"
+                          className="h-12 px-5 bg-gray-100 rounded-full items-center justify-center shadow-sm ml-2"
                       >
                           <Text className="font-bold text-gray-700">Cancelar</Text>
                       </TouchableOpacity>
@@ -496,21 +496,21 @@ export function TransactionsPage({ navigation }) {
                       <TouchableOpacity 
                           onPress={handleImportFP3}
                           disabled={isImporting}
-                          className="h-10 w-10 bg-purple-100 rounded-full items-center justify-center mr-2 shadow-sm"
+                          className="h-12 w-12 bg-purple-50 rounded-full items-center justify-center mr-2 shadow-sm"
                       >
-                          {isImporting ? <ActivityIndicator size="small" color="#7E1A8B" /> : <Upload color="#7E1A8B" size={20} />}
+                          {isImporting ? <ActivityIndicator size="small" color="#7E1A8B" /> : <Upload color="#7E1A8B" size={22} />}
                       </TouchableOpacity>
                       <TouchableOpacity 
                           onPress={() => setIsSelectionMode(true)}
-                          className="h-10 w-10 bg-gray-100 rounded-full items-center justify-center mr-2 shadow-sm"
+                          className="h-12 w-12 bg-gray-50 rounded-full items-center justify-center mr-2 shadow-sm"
                       >
-                          <ListChecks color="#4B5563" size={20} />
+                          <ListChecks color="#4B5563" size={22} />
                       </TouchableOpacity>
                       <TouchableOpacity 
                         onPress={() => navigation.navigate('AddTransaction')}
-                        className="h-10 w-10 bg-[#7E1A8B] rounded-full items-center justify-center shadow-lg shadow-purple-200"
+                        className="h-12 w-12 bg-[#7E1A8B] rounded-full items-center justify-center shadow-lg shadow-purple-300"
                       >
-                        <Plus color="white" size={24} />
+                        <Plus color="white" size={26} />
                       </TouchableOpacity>
                   </>
               )}
@@ -518,55 +518,57 @@ export function TransactionsPage({ navigation }) {
         </View>
 
         {/* View Mode Toggle */}
-        <View className="flex-row bg-gray-100 p-1 rounded-lg mb-4 self-start">
+        <View className="flex-row bg-gray-100/80 p-1.5 rounded-2xl mb-5 self-start">
             <TouchableOpacity 
                 onPress={() => setViewMode('month')}
-                className={`px-3 py-1.5 rounded-md ${viewMode === 'month' ? 'bg-white shadow-sm' : ''}`}
+                className={`px-4 py-2 rounded-xl ${viewMode === 'month' ? 'bg-white shadow-sm' : ''}`}
             >
-                <Text className={`text-xs font-bold ${viewMode === 'month' ? 'text-gray-900' : 'text-gray-500'}`}>Mensal</Text>
+                <Text className={`text-sm font-bold ${viewMode === 'month' ? 'text-[#7E1A8B]' : 'text-gray-500'}`}>Mensal</Text>
             </TouchableOpacity>
             <TouchableOpacity 
                 onPress={() => setViewMode('year')}
-                className={`px-3 py-1.5 rounded-md ${viewMode === 'year' ? 'bg-white shadow-sm' : ''}`}
+                className={`px-4 py-2 rounded-xl ${viewMode === 'year' ? 'bg-white shadow-sm' : ''}`}
             >
-                <Text className={`text-xs font-bold ${viewMode === 'year' ? 'text-gray-900' : 'text-gray-500'}`}>Anual</Text>
+                <Text className={`text-sm font-bold ${viewMode === 'year' ? 'text-[#7E1A8B]' : 'text-gray-500'}`}>Anual</Text>
             </TouchableOpacity>
         </View>
 
-        <MonthSelector currentDate={currentMonth} onMonthChange={setCurrentMonth} viewMode={viewMode} />
+        <View className="mb-2">
+            <MonthSelector currentDate={currentMonth} onMonthChange={setCurrentMonth} viewMode={viewMode} />
+        </View>
 
         {/* Search */}
-        <View className="flex-row items-center bg-gray-100 rounded-xl px-4 h-12 mb-4">
-          <Search color="#9CA3AF" size={20} />
+        <View className="flex-row items-center bg-gray-50 rounded-2xl px-5 h-14 mb-5 border border-gray-100">
+          <Search color="#9CA3AF" size={22} />
           <TextInput
             placeholder="Buscar transações..."
             value={search}
             onChangeText={setSearch}
-            className="flex-1 ml-3 text-base text-gray-900"
+            className="flex-1 ml-3 text-base text-gray-900 font-medium"
             placeholderTextColor="#9CA3AF"
           />
         </View>
 
         {/* Filters */}
         <View>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} className="flex-row">
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} className="flex-row pb-2">
                 <FilterTab label="Todas" value="all" activeValue={filter} onPress={setFilter} />
                 <FilterTab label="Entradas" value="income" activeValue={filter} onPress={setFilter} />
                 <TouchableOpacity
                     onPress={() => setFilter(filter === 'bakery_income' ? 'all' : 'bakery_income')}
-                    className={`px-4 py-2 rounded-full mr-2 border flex-row items-center ${
+                    className={`px-5 py-2.5 rounded-full mr-2 border flex-row items-center ${
                         filter === 'bakery_income' 
-                        ? 'bg-purple-50 border-purple-200' 
-                        : 'bg-white border-gray-200'
+                        ? 'bg-purple-50 border-purple-200 shadow-sm shadow-purple-100' 
+                        : 'bg-white border-gray-100 shadow-sm shadow-gray-100'
                     }`}
                 >
-                    <Text className="mr-1">🍞</Text>
-                    <Text className={filter === 'bakery_income' ? 'text-purple-700 font-medium' : 'text-gray-600'}>
+                    <Text className="mr-1.5 text-base">🍞</Text>
+                    <Text className={filter === 'bakery_income' ? 'text-[#7E1A8B] font-bold' : 'text-gray-600 font-medium'}>
                         Só Padaria
                     </Text>
                 </TouchableOpacity>
                 <FilterTab label="Saídas" value="expense" activeValue={filter} onPress={setFilter} />
-                <View className="w-4" />
+                <View className="w-4 border-l border-gray-200 mx-2 my-2" />
                 <FilterTab label="Pix" value="pix" activeValue={methodFilter} onPress={setMethodFilter} />
                 <FilterTab label="Dinheiro" value="dinheiro" activeValue={methodFilter} onPress={setMethodFilter} />
                 <FilterTab label="C. Crédito" value="cartao" activeValue={methodFilter} onPress={setMethodFilter} />
@@ -580,18 +582,22 @@ export function TransactionsPage({ navigation }) {
       </View>
 
       {loading ? (
-        <View className="flex-1 justify-center items-center">
+        <View className="flex-1 justify-center items-center bg-gray-50">
           <ActivityIndicator size="large" color="#7E1A8B" />
         </View>
       ) : (
         <ScrollView 
             contentContainerStyle={{ padding: 24, paddingBottom: 100 }}
             showsVerticalScrollIndicator={false}
+            className="flex-1"
         >
             {sortedGroupKeys.length === 0 ? (
-                <View className="items-center py-8">
-                    <Calendar color="#D1D5DB" size={40} />
-                    <Text className="text-gray-500 font-medium mt-3">Nenhuma transação encontrada.</Text>
+                <View className="items-center justify-center py-16">
+                    <View className="bg-gray-100 p-6 rounded-full mb-4">
+                        <Calendar color="#9CA3AF" size={48} />
+                    </View>
+                    <Text className="text-gray-900 text-lg font-bold">Nenhuma transação</Text>
+                    <Text className="text-gray-500 font-medium mt-1 text-center">Tente mudar os filtros ou o período{'\n'}para ver mais resultados.</Text>
                 </View>
             ) : (
                 <View className="space-y-6">
@@ -600,34 +606,36 @@ export function TransactionsPage({ navigation }) {
                         const groupTotal = calculateGroupTotal(groupTransactions);
                         
                         return (
-                            <View key={key} className="bg-white rounded-3xl p-5 shadow-sm shadow-gray-200">
+                            <View key={key} className="bg-white rounded-[32px] p-6 shadow-sm shadow-gray-200/50">
                                 <TouchableOpacity 
                                     onPress={() => isSelectionMode && toggleGroupSelection(key)}
                                     activeOpacity={isSelectionMode ? 0.7 : 1}
-                                    className="flex-row justify-between items-center mb-4 pb-2 border-b border-gray-50"
+                                    className="flex-row justify-between items-center mb-5 pb-4 border-b border-gray-100"
                                 >
                                     <View className="flex-row items-center">
                                         {isSelectionMode && (
-                                            <View className={`h-6 w-6 rounded border mr-3 items-center justify-center ${
+                                            <View className={`h-7 w-7 rounded-xl border-2 mr-4 items-center justify-center ${
                                                 groupTransactions.every(t => selectedIds.has(t.id))
                                                     ? "bg-[#7E1A8B] border-[#7E1A8B]" 
                                                     : groupTransactions.some(t => selectedIds.has(t.id))
-                                                        ? "bg-purple-100 border-[#7E1A8B]"
-                                                        : "border-gray-300"
+                                                        ? "bg-purple-50 border-[#7E1A8B]"
+                                                        : "bg-gray-50 border-gray-300"
                                             }`}>
-                                                {groupTransactions.every(t => selectedIds.has(t.id)) && <Text className="text-white text-xs font-bold">✓</Text>}
-                                                {!groupTransactions.every(t => selectedIds.has(t.id)) && groupTransactions.some(t => selectedIds.has(t.id)) && <View className="h-3 w-3 rounded-sm bg-[#7E1A8B]" />}
+                                                {groupTransactions.every(t => selectedIds.has(t.id)) && <Text className="text-white text-sm font-bold">✓</Text>}
+                                                {!groupTransactions.every(t => selectedIds.has(t.id)) && groupTransactions.some(t => selectedIds.has(t.id)) && <View className="h-3 w-3 rounded-md bg-[#7E1A8B]" />}
                                             </View>
                                         )}
-                                        <Text className="text-lg font-bold text-gray-900 capitalize">
+                                        <Text className="text-lg font-extrabold text-gray-900 capitalize">
                                             {getGroupLabel(key)}
                                         </Text>
                                     </View>
-                                    <Text className={`text-base font-bold ${groupTotal >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-                                        {groupTotal >= 0 ? '+' : ''}{groupTotal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                                    </Text>
+                                    <View className={`px-3 py-1.5 rounded-xl ${groupTotal >= 0 ? 'bg-emerald-50' : 'bg-red-50'}`}>
+                                        <Text className={`text-sm font-bold ${groupTotal >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                                            {groupTotal >= 0 ? '+' : ''}{groupTotal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                                        </Text>
+                                    </View>
                                 </TouchableOpacity>
-                                <View>
+                                <View className="space-y-4">
                                     {groupTransactions.map((item, index) => (
                                         <View key={item.id} className={index < groupTransactions.length - 1 ? "mb-4" : ""}>
                                             <TransactionItem 
@@ -649,7 +657,7 @@ export function TransactionsPage({ navigation }) {
                         <TouchableOpacity 
                             onPress={loadMore}
                             disabled={loadingMore}
-                            className="bg-white py-4 rounded-2xl items-center justify-center border border-gray-100 mt-2 mb-6"
+                            className="bg-purple-50 py-4 rounded-2xl items-center justify-center mt-4 mb-6"
                         >
                             {loadingMore ? (
                                 <ActivityIndicator size="small" color="#7E1A8B" />

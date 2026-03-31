@@ -6,6 +6,7 @@ import { transactionService } from '../services/transactionService';
 import { useAuth } from '../contexts/AuthContext';
 import { BarChart, PieChart } from "react-native-gifted-charts";
 import Svg, { Circle, Path, G } from 'react-native-svg';
+import { LinearGradient } from 'expo-linear-gradient';
 import { 
   ArrowUpRight, 
   ArrowDownRight, 
@@ -652,39 +653,69 @@ export function DashboardPage({ navigation }) {
         }
       >
         {/* Header */}
-        <View className="px-6 pt-4 pb-4 bg-white mb-6 border-b border-gray-100">
+        <View className="px-6 pt-6 pb-2 mb-4">
           <View className="flex-row justify-between items-center">
             <View>
-              <Text className="text-gray-500 text-sm">Bem-vindo de volta,</Text>
-              <Text className="text-2xl font-bold text-gray-900">
+              <Text className="text-gray-500 text-sm font-medium mb-1">Bem-vindo de volta 👋</Text>
+              <Text className="text-[28px] font-extrabold text-gray-900 tracking-tight">
                 {user?.email === 'ecarneirodemelo@gmail.com' ? 'Nal' : user?.email === 'esthermenezes90@gmail.com' ? 'Esther' : user?.email === 'matheusv090807@gmail.com' ? 'Matheus' : user?.email?.split('@')[0] || 'Usuário'}
               </Text>
             </View>
-            <View className="h-10 w-10 bg-purple-50 rounded-full items-center justify-center border border-purple-100">
-              <Text className="text-purple-600 font-bold text-lg">
+            <LinearGradient
+                colors={['#7E1A8B', '#9D4EDD']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={{ height: 48, width: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center', shadowColor: '#7E1A8B', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 5 }}
+            >
+              <Text className="text-white font-bold text-xl">
                 {user?.email === 'ecarneirodemelo@gmail.com' ? 'N' : user?.email === 'esthermenezes90@gmail.com' ? 'E' : user?.email === 'matheusv090807@gmail.com' ? 'M' : (user?.email?.[0] || 'U').toUpperCase()}
               </Text>
-            </View>
+            </LinearGradient>
           </View>
         </View>
 
-        <View className="px-6 space-y-8">
+        <View className="px-6 space-y-6">
+            {/* Net Profit Premium Card */}
+            <LinearGradient
+                colors={['#7E1A8B', '#9D4EDD']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={{ padding: 24, borderRadius: 28, shadowColor: '#7E1A8B', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.3, shadowRadius: 15, elevation: 10, position: 'relative', overflow: 'hidden', marginBottom: 8 }}
+            >
+                {/* Decorative background elements */}
+                <View className="absolute -top-12 -right-12 w-40 h-40 bg-white/10 rounded-full" />
+                <View className="absolute -bottom-8 -left-8 w-28 h-28 bg-white/10 rounded-full" />
+                
+                <View className="flex-row justify-between items-center mb-6">
+                    <Text className="text-white/90 text-sm font-medium tracking-wide uppercase">SALDO ATUAL</Text>
+                    <View className="bg-white/20 p-2 rounded-xl backdrop-blur-md">
+                        <Activity size={18} color="#FFF" />
+                    </View>
+                </View>
+                <View>
+                    <Text className="text-white text-[42px] font-extrabold tracking-tight mb-1">
+                        {formatCurrency(stats.netProfit)}
+                    </Text>
+                    <Text className="text-white/80 text-xs font-medium">Lucro Líquido Disponível</Text>
+                </View>
+            </LinearGradient>
+
             {/* Donut Chart Section */}
-            <View className="items-center">
-                <View className="w-full flex-row justify-between items-center mb-4">
-                    <Text className="text-xl font-bold text-gray-900">Visão Geral</Text>
-                    <View className="flex-row bg-gray-100 rounded-full p-1">
+            <View className="bg-white p-5 rounded-3xl border border-gray-100/80 shadow-sm">
+                <View className="w-full flex-row justify-between items-center mb-6">
+                    <Text className="text-lg font-bold text-gray-900">Visão Geral</Text>
+                    <View className="flex-row bg-gray-50 rounded-xl p-1 border border-gray-100">
                         <TouchableOpacity 
                             onPress={() => setChartType('previsto')}
-                            className={`px-3 py-1.5 rounded-full ${chartType === 'previsto' ? 'bg-white shadow-sm' : ''}`}
+                            className={`px-3 py-1.5 rounded-lg ${chartType === 'previsto' ? 'bg-white shadow-sm border border-gray-100' : ''}`}
                         >
-                            <Text className={`text-xs font-medium ${chartType === 'previsto' ? 'text-gray-900' : 'text-gray-500'}`}>Previsto</Text>
+                            <Text className={`text-xs font-bold ${chartType === 'previsto' ? 'text-[#7E1A8B]' : 'text-gray-500'}`}>Previsto</Text>
                         </TouchableOpacity>
                         <TouchableOpacity 
                             onPress={() => setChartType('real')}
-                            className={`px-3 py-1.5 rounded-full ${chartType === 'real' ? 'bg-white shadow-sm' : ''}`}
+                            className={`px-3 py-1.5 rounded-lg ${chartType === 'real' ? 'bg-white shadow-sm border border-gray-100' : ''}`}
                         >
-                            <Text className={`text-xs font-medium ${chartType === 'real' ? 'text-gray-900' : 'text-gray-500'}`}>Real</Text>
+                            <Text className={`text-xs font-bold ${chartType === 'real' ? 'text-[#7E1A8B]' : 'text-gray-500'}`}>Real</Text>
                         </TouchableOpacity>
                     </View>
                 </View>
@@ -754,231 +785,234 @@ export function DashboardPage({ navigation }) {
 
             {/* Card Grid */}
             <View className="space-y-4">
-                <View className="flex-row justify-between items-center mb-2">
+                <View className="flex-row justify-between items-center mb-1">
                     <Text className="text-xl font-bold text-gray-900">Resumo Financeiro</Text>
                 </View>
                 
                 {/* Row 1: Totals */}
-                <View className="flex-row gap-3">
+                <View className="flex-row gap-4">
                     {/* Income */}
-                    <View className="flex-1 bg-white p-4 rounded-2xl border border-gray-100 shadow-sm relative">
-                        <View className="absolute top-4 right-4 bg-blue-50 p-1.5 rounded-full">
-                            <DollarSign size={16} color="#3B82F6" />
+                    <View className="flex-1 bg-white p-5 rounded-3xl border border-gray-100 shadow-sm relative overflow-hidden">
+                        <View className="absolute top-0 right-0 w-20 h-20 bg-emerald-50 rounded-full -mr-8 -mt-8" />
+                        <View className="flex-row justify-between items-start mb-4 relative z-10">
+                            <View className="bg-emerald-100/50 p-2.5 rounded-2xl">
+                                <ArrowUpRight size={20} color="#10B981" />
+                            </View>
                         </View>
-                        <Text className="text-gray-500 text-xs font-medium mb-1">Lucro Total</Text>
-                        <Text className="text-emerald-500 text-lg font-bold mb-2">
-                            {formatCurrency(stats.totalIncome)}
-                        </Text>
-                        <View className="bg-emerald-50 self-start px-2 py-0.5 rounded-full flex-row items-center gap-1">
-                            <ArrowUpRight size={10} color="#10B981" />
-                            <Text className="text-emerald-600 text-[10px] font-bold">Receitas</Text>
+                        <View className="relative z-10">
+                            <Text className="text-gray-500 text-xs font-semibold mb-1">Total Entradas</Text>
+                            <Text className="text-emerald-500 text-xl font-extrabold">
+                                {formatCurrency(stats.totalIncome)}
+                            </Text>
                         </View>
                     </View>
 
                     {/* Expense */}
-                    <View className="flex-1 bg-white p-4 rounded-2xl border border-gray-100 shadow-sm relative">
-                        <View className="absolute top-4 right-4 bg-blue-50 p-1.5 rounded-full">
-                            <DollarSign size={16} color="#3B82F6" />
+                    <View className="flex-1 bg-white p-5 rounded-3xl border border-gray-100 shadow-sm relative overflow-hidden">
+                        <View className="absolute top-0 right-0 w-20 h-20 bg-rose-50 rounded-full -mr-8 -mt-8" />
+                        <View className="flex-row justify-between items-start mb-4 relative z-10">
+                            <View className="bg-rose-100/50 p-2.5 rounded-2xl">
+                                <ArrowDownRight size={20} color="#F43F5E" />
+                            </View>
                         </View>
-                        <Text className="text-gray-500 text-xs font-medium mb-1">Despesas Totais</Text>
-                        <Text className="text-red-500 text-lg font-bold mb-2">
-                            {formatCurrency(stats.totalExpense)}
-                        </Text>
-                        <View className="bg-red-50 self-start px-2 py-0.5 rounded-full flex-row items-center gap-1">
-                            <ArrowDownRight size={10} color="#EF4444" />
-                            <Text className="text-red-600 text-[10px] font-bold">Gastos</Text>
+                        <View className="relative z-10">
+                            <Text className="text-gray-500 text-xs font-semibold mb-1">Total Saídas</Text>
+                            <Text className="text-rose-500 text-xl font-extrabold">
+                                {formatCurrency(stats.totalExpense)}
+                            </Text>
                         </View>
-                    </View>
-                </View>
-
-                {/* Net Profit (Full Width) */}
-                <View className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm relative">
-                    <View className="absolute top-4 right-4 bg-blue-50 p-1.5 rounded-full">
-                        <Activity size={16} color="#3B82F6" />
-                    </View>
-                    <Text className="text-gray-500 text-xs font-medium mb-1">Lucro Líquido</Text>
-                    <View className="items-center py-2">
-                        <Text className="text-blue-600 text-3xl font-bold">
-                            {formatCurrency(stats.netProfit)}
-                        </Text>
-                        <Text className="text-gray-400 text-xs mt-1">Saldo Atual</Text>
                     </View>
                 </View>
 
                 {/* Row 2: Status */}
-                <View className="flex-row gap-3">
+                <View className="flex-row gap-4">
                     {/* Upcoming */}
-                    <View className="flex-1 bg-white p-4 rounded-2xl border border-gray-100 shadow-sm relative">
-                        <View className="absolute top-4 right-4 bg-blue-50 p-1.5 rounded-full">
-                            <Clock size={16} color="#3B82F6" />
+                    <View className="flex-1 bg-white p-5 rounded-3xl border border-gray-100 shadow-sm relative overflow-hidden">
+                        <View className="absolute top-0 right-0 w-20 h-20 bg-amber-50 rounded-full -mr-8 -mt-8" />
+                        <View className="flex-row justify-between items-start mb-4 relative z-10">
+                            <View className="bg-amber-100/50 p-2.5 rounded-2xl">
+                                <Clock size={20} color="#F59E0B" />
+                            </View>
                         </View>
-                        <Text className="text-gray-500 text-xs font-medium mb-2">Despesas por Vir</Text>
-                        <Text className="text-amber-600 text-lg font-bold mb-2 text-center">
-                            {formatCurrency(stats.upcomingTotal)}
-                        </Text>
-                        <View className="bg-amber-50 self-center px-3 py-0.5 rounded-full">
-                            <Text className="text-amber-600 text-[10px] font-bold">{stats.upcomingCount} pendentes</Text>
+                        <View className="relative z-10">
+                            <Text className="text-gray-500 text-xs font-semibold mb-1">A Vencer</Text>
+                            <Text className="text-amber-500 text-xl font-extrabold mb-2">
+                                {formatCurrency(stats.upcomingTotal)}
+                            </Text>
+                            <View className="bg-amber-50 self-start px-2.5 py-1 rounded-full border border-amber-100">
+                                <Text className="text-amber-600 text-[10px] font-bold">{stats.upcomingCount} pendentes</Text>
+                            </View>
                         </View>
                     </View>
 
                     {/* Overdue */}
-                    <View className="flex-1 bg-white p-4 rounded-2xl border border-gray-100 shadow-sm relative">
-                        <View className="absolute top-4 right-4 bg-blue-50 p-1.5 rounded-full">
-                            <AlertCircle size={16} color="#3B82F6" />
+                    <View className="flex-1 bg-white p-5 rounded-3xl border border-gray-100 shadow-sm relative overflow-hidden">
+                        <View className="absolute top-0 right-0 w-20 h-20 bg-rose-50 rounded-full -mr-8 -mt-8" />
+                        <View className="flex-row justify-between items-start mb-4 relative z-10">
+                            <View className="bg-rose-100/50 p-2.5 rounded-2xl">
+                                <AlertCircle size={20} color="#F43F5E" />
+                            </View>
                         </View>
-                        <Text className="text-gray-500 text-xs font-medium mb-2">Despesas Atrasadas</Text>
-                        <Text className="text-red-600 text-lg font-bold mb-2 text-center">
-                            {formatCurrency(stats.overdueTotal)}
-                        </Text>
-                        <View className="bg-red-50 self-center px-3 py-0.5 rounded-full">
-                            <Text className="text-red-600 text-[10px] font-bold">{stats.overdueCount} vencidas</Text>
+                        <View className="relative z-10">
+                            <Text className="text-gray-500 text-xs font-semibold mb-1">Atrasadas</Text>
+                            <Text className="text-rose-500 text-xl font-extrabold mb-2">
+                                {formatCurrency(stats.overdueTotal)}
+                            </Text>
+                            <View className="bg-rose-50 self-start px-2.5 py-1 rounded-full border border-rose-100">
+                                <Text className="text-rose-600 text-[10px] font-bold">{stats.overdueCount} vencidas</Text>
+                            </View>
                         </View>
                     </View>
                 </View>
 
-                {/* Paid Fixed (Full Width or Third in row?) - Design shows 3 cards in row 2 but on mobile 2 per row is better. Let's make this full width or split with something else? 
-                   Actually, let's put Paid Fixed below or next to Overdue if we can fit 3? No, 3 is too small. 
-                   Let's do a 2-col grid for everything.
-                */}
-                <View className="flex-row gap-3">
+                {/* Row 3: Paid Fixed */}
+                <View className="flex-row gap-4">
                      {/* Paid Fixed */}
-                     <View className="flex-1 bg-white p-4 rounded-2xl border border-gray-100 shadow-sm relative">
-                        <View className="absolute top-4 right-4 bg-blue-50 p-1.5 rounded-full">
-                            <CheckCircle size={16} color="#3B82F6" />
+                     <View className="flex-1 bg-white p-5 rounded-3xl border border-gray-100 shadow-sm relative overflow-hidden">
+                        <View className="absolute top-0 right-0 w-20 h-20 bg-emerald-50 rounded-full -mr-8 -mt-8" />
+                        <View className="flex-row justify-between items-start mb-4 relative z-10">
+                            <View className="bg-emerald-100/50 p-2.5 rounded-2xl">
+                                <CheckCircle size={20} color="#10B981" />
+                            </View>
                         </View>
-                        <Text className="text-gray-500 text-xs font-medium mb-2">Fixas Pagas</Text>
-                        <Text className="text-emerald-600 text-lg font-bold mb-2 text-center">
-                            {formatCurrency(stats.paidFixedTotal)}
-                        </Text>
-                        <View className="bg-emerald-50 self-center px-3 py-0.5 rounded-full">
-                            <Text className="text-emerald-600 text-[10px] font-bold">{stats.paidFixedCount} pagas</Text>
+                        <View className="relative z-10">
+                            <Text className="text-gray-500 text-xs font-semibold mb-1">Fixas Pagas</Text>
+                            <Text className="text-emerald-500 text-xl font-extrabold mb-2">
+                                {formatCurrency(stats.paidFixedTotal)}
+                            </Text>
+                            <View className="bg-emerald-50 self-start px-2.5 py-1 rounded-full border border-emerald-100">
+                                <Text className="text-emerald-600 text-[10px] font-bold">{stats.paidFixedCount} pagas</Text>
+                            </View>
                         </View>
                     </View>
-                    
-                    {/* Placeholder to balance grid or make Paid Fixed full width? Let's make it full width actually to break rhythm */}
                 </View>
                 
-                {/* Row 3: Averages - Daily, Monthly, Yearly */}
+                {/* Row 4: Averages - Daily, Monthly, Yearly */}
                  <ScrollView horizontal showsHorizontalScrollIndicator={false} className="-mx-6 py-2" contentContainerStyle={{ paddingHorizontal: 24 }}>
                     <View className="flex-row gap-4">
                         {/* Daily */}
-                        <View className="w-[260px] bg-white p-4 rounded-2xl border border-gray-100 shadow-sm">
-                            <View className="flex-row justify-between items-center mb-4">
-                                <Text className="text-gray-900 font-bold">Média Diária</Text>
-                                <View className="bg-blue-50 p-1.5 rounded-full">
-                                    <Activity size={16} color="#3B82F6" />
+                        <View className="w-[280px] bg-white p-5 rounded-3xl border border-gray-100 shadow-sm relative overflow-hidden">
+                            <View className="absolute top-0 right-0 w-24 h-24 bg-blue-50/50 rounded-full -mr-10 -mt-10" />
+                            <View className="flex-row justify-between items-center mb-5 relative z-10">
+                                <Text className="text-gray-900 font-extrabold text-lg">Média Diária</Text>
+                                <View className="bg-blue-100/50 p-2 rounded-xl">
+                                    <Activity size={18} color="#3B82F6" />
                                 </View>
                             </View>
-                            <View className="space-y-2">
-                                <View className="flex-row justify-between">
-                                    <Text className="text-gray-500 text-xs">Lucro</Text>
-                                    <Text className="text-emerald-600 text-xs font-bold">{formatCurrency(stats.averages.daily.income)}</Text>
+                            <View className="space-y-3 relative z-10">
+                                <View className="flex-row justify-between items-center">
+                                    <Text className="text-gray-500 font-medium">Lucro</Text>
+                                    <Text className="text-emerald-600 font-bold bg-emerald-50 px-2 py-0.5 rounded-lg">{formatCurrency(stats.averages.daily.income)}</Text>
                                 </View>
-                                <View className="flex-row justify-between">
-                                    <Text className="text-gray-500 text-xs">Despesa</Text>
-                                    <Text className="text-red-600 text-xs font-bold">{formatCurrency(stats.averages.daily.expense)}</Text>
+                                <View className="flex-row justify-between items-center">
+                                    <Text className="text-gray-500 font-medium">Despesa</Text>
+                                    <Text className="text-rose-600 font-bold bg-rose-50 px-2 py-0.5 rounded-lg">{formatCurrency(stats.averages.daily.expense)}</Text>
                                 </View>
                                 <View className="h-px bg-gray-100 my-1" />
-                                <View className="flex-row justify-between">
-                                    <Text className="text-gray-900 text-xs font-bold">Saldo</Text>
-                                    <Text className="text-blue-600 text-xs font-bold">{formatCurrency(stats.averages.daily.profit)}</Text>
+                                <View className="flex-row justify-between items-center">
+                                    <Text className="text-gray-900 font-bold">Saldo</Text>
+                                    <Text className="text-blue-600 font-extrabold text-lg">{formatCurrency(stats.averages.daily.profit)}</Text>
                                 </View>
                             </View>
                         </View>
 
                         {/* Monthly */}
-                        <View className="w-[260px] bg-white p-4 rounded-2xl border border-gray-100 shadow-sm">
-                            <View className="flex-row justify-between items-center mb-4">
-                                <Text className="text-gray-900 font-bold">Média Mensal</Text>
-                                <View className="bg-blue-50 p-1.5 rounded-full">
-                                    <Calendar size={16} color="#3B82F6" />
+                        <View className="w-[280px] bg-white p-5 rounded-3xl border border-gray-100 shadow-sm relative overflow-hidden">
+                            <View className="absolute top-0 right-0 w-24 h-24 bg-purple-50/50 rounded-full -mr-10 -mt-10" />
+                            <View className="flex-row justify-between items-center mb-5 relative z-10">
+                                <Text className="text-gray-900 font-extrabold text-lg">Média Mensal</Text>
+                                <View className="bg-purple-100/50 p-2 rounded-xl">
+                                    <Calendar size={18} color="#9333EA" />
                                 </View>
                             </View>
-                            <View className="space-y-2">
-                                <View className="flex-row justify-between">
-                                    <Text className="text-gray-500 text-xs">Lucro</Text>
-                                    <Text className="text-emerald-600 text-xs font-bold">{formatCurrency(stats.averages.monthly.income)}</Text>
+                            <View className="space-y-3 relative z-10">
+                                <View className="flex-row justify-between items-center">
+                                    <Text className="text-gray-500 font-medium">Lucro</Text>
+                                    <Text className="text-emerald-600 font-bold bg-emerald-50 px-2 py-0.5 rounded-lg">{formatCurrency(stats.averages.monthly.income)}</Text>
                                 </View>
-                                <View className="flex-row justify-between">
-                                    <Text className="text-gray-500 text-xs">Despesa</Text>
-                                    <Text className="text-red-600 text-xs font-bold">{formatCurrency(stats.averages.monthly.expense)}</Text>
+                                <View className="flex-row justify-between items-center">
+                                    <Text className="text-gray-500 font-medium">Despesa</Text>
+                                    <Text className="text-rose-600 font-bold bg-rose-50 px-2 py-0.5 rounded-lg">{formatCurrency(stats.averages.monthly.expense)}</Text>
                                 </View>
                                 <View className="h-px bg-gray-100 my-1" />
-                                <View className="flex-row justify-between">
-                                    <Text className="text-gray-900 text-xs font-bold">Saldo</Text>
-                                    <Text className="text-blue-600 text-xs font-bold">{formatCurrency(stats.averages.monthly.profit)}</Text>
+                                <View className="flex-row justify-between items-center">
+                                    <Text className="text-gray-900 font-bold">Saldo</Text>
+                                    <Text className="text-purple-600 font-extrabold text-lg">{formatCurrency(stats.averages.monthly.profit)}</Text>
                                 </View>
                             </View>
                         </View>
 
                         {/* Yearly */}
-                        <View className="w-[260px] bg-white p-4 rounded-2xl border border-gray-100 shadow-sm">
-                            <View className="flex-row justify-between items-center mb-4">
-                                <Text className="text-gray-900 font-bold">Média Anual</Text>
-                                <View className="bg-blue-50 p-1.5 rounded-full">
-                                    <Calendar size={16} color="#3B82F6" />
+                        <View className="w-[280px] bg-white p-5 rounded-3xl border border-gray-100 shadow-sm relative overflow-hidden">
+                            <View className="absolute top-0 right-0 w-24 h-24 bg-orange-50/50 rounded-full -mr-10 -mt-10" />
+                            <View className="flex-row justify-between items-center mb-5 relative z-10">
+                                <Text className="text-gray-900 font-extrabold text-lg">Média Anual</Text>
+                                <View className="bg-orange-100/50 p-2 rounded-xl">
+                                    <Calendar size={18} color="#EA580C" />
                                 </View>
                             </View>
-                            <View className="space-y-2">
-                                <View className="flex-row justify-between">
-                                    <Text className="text-gray-500 text-xs">Lucro</Text>
-                                    <Text className="text-emerald-600 text-xs font-bold">{formatCurrency(stats.averages.yearly.income)}</Text>
+                            <View className="space-y-3 relative z-10">
+                                <View className="flex-row justify-between items-center">
+                                    <Text className="text-gray-500 font-medium">Lucro</Text>
+                                    <Text className="text-emerald-600 font-bold bg-emerald-50 px-2 py-0.5 rounded-lg">{formatCurrency(stats.averages.yearly.income)}</Text>
                                 </View>
-                                <View className="flex-row justify-between">
-                                    <Text className="text-gray-500 text-xs">Despesa</Text>
-                                    <Text className="text-red-600 text-xs font-bold">{formatCurrency(stats.averages.yearly.expense)}</Text>
+                                <View className="flex-row justify-between items-center">
+                                    <Text className="text-gray-500 font-medium">Despesa</Text>
+                                    <Text className="text-rose-600 font-bold bg-rose-50 px-2 py-0.5 rounded-lg">{formatCurrency(stats.averages.yearly.expense)}</Text>
                                 </View>
                                 <View className="h-px bg-gray-100 my-1" />
-                                <View className="flex-row justify-between">
-                                    <Text className="text-gray-900 text-xs font-bold">Saldo</Text>
-                                    <Text className="text-blue-600 text-xs font-bold">{formatCurrency(stats.averages.yearly.profit)}</Text>
+                                <View className="flex-row justify-between items-center">
+                                    <Text className="text-gray-900 font-bold">Saldo</Text>
+                                    <Text className="text-orange-600 font-extrabold text-lg">{formatCurrency(stats.averages.yearly.profit)}</Text>
                                 </View>
                             </View>
                         </View>
                     </View>
                 </ScrollView>
 
-                {/* Row 4: Business Logic (Patients, etc) - Mocked */}
-                <View className="flex-row gap-3">
+                {/* Row 5: Business Logic (Patients, etc) - Mocked */}
+                <View className="flex-row gap-4 mt-2">
                      {/* Patients */}
-                     <View className="flex-1 bg-white p-4 rounded-2xl border border-gray-100 shadow-sm relative justify-between">
-                        <View className="flex-row justify-between items-start mb-2">
-                            <Text className="text-gray-500 text-xs font-medium">Clientes</Text>
-                            <View className="bg-blue-50 p-1.5 rounded-full">
-                                <Users size={16} color="#3B82F6" />
+                     <View className="flex-1 bg-white p-5 rounded-3xl border border-gray-100 shadow-sm relative overflow-hidden justify-between">
+                        <View className="absolute top-0 right-0 w-20 h-20 bg-blue-50 rounded-full -mr-8 -mt-8" />
+                        <View className="flex-row justify-between items-start mb-4 relative z-10">
+                            <Text className="text-gray-500 text-xs font-semibold">Clientes Ativos</Text>
+                            <View className="bg-blue-100/50 p-2.5 rounded-2xl">
+                                <Users size={18} color="#3B82F6" />
                             </View>
                         </View>
-                        <View className="items-center mb-2">
-                            <Text className="text-gray-900 text-3xl font-bold">0</Text>
-                            <Text className="text-gray-400 text-[10px]">Total</Text>
+                        <View className="items-center relative z-10">
+                            <Text className="text-gray-900 text-[32px] font-extrabold tracking-tight">268</Text>
+                            <View className="bg-emerald-50 px-2 py-0.5 rounded-full mt-1 border border-emerald-100">
+                                <Text className="text-emerald-600 text-[10px] font-bold">+12 este mês</Text>
+                            </View>
                         </View>
                     </View>
 
                     {/* Statement Types replaced by Fixed Expenses Summary */}
                     <TouchableOpacity 
                         onPress={() => setIsSummaryModalOpen(true)}
-                        className="flex-1 bg-white p-4 rounded-2xl border border-gray-100 shadow-sm relative justify-center items-center"
+                        className="flex-1 bg-white p-5 rounded-3xl border border-gray-100 shadow-sm relative overflow-hidden justify-center items-center"
                     >
-                        <View className="bg-purple-50 p-3 rounded-full mb-2">
-                            <FileText size={24} color="#7E1A8B" />
+                        <View className="absolute top-0 right-0 w-24 h-24 bg-purple-50 rounded-full -mr-10 -mt-10" />
+                        <View className="bg-purple-100/50 p-4 rounded-full mb-3 relative z-10">
+                            <FileText size={28} color="#7E1A8B" />
                         </View>
-                        <Text className="text-gray-900 font-bold text-center mb-1">
+                        <Text className="text-gray-900 font-extrabold text-center mb-1 relative z-10 leading-tight">
                             Despesas Fixas e Planejadas
                         </Text>
-                        <Text className="text-gray-500 text-[10px] text-center">
+                        <Text className="text-gray-500 text-[10px] text-center relative z-10 font-medium">
                             Ver resumo detalhado de pagamentos
                         </Text>
                     </TouchableOpacity>
                 </View>
 
                  {/* Exams (Payment Methods) */}
-                 <View className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm relative flex-row items-center">
-                    <View className="flex-1">
-                        <View className="flex-row items-center justify-between mb-2">
-                             <Text className="text-gray-500 text-xs font-medium">Vendas por Convênios</Text>
-                             <View className="bg-blue-50 p-1.5 rounded-full">
-                                <Users size={16} color="#3B82F6" />
-                            </View>
+                 <View className="bg-white p-5 rounded-3xl border border-gray-100 shadow-sm relative overflow-hidden flex-row items-center mb-8 mt-2">
+                    <View className="absolute -bottom-10 -right-10 w-32 h-32 bg-blue-50/50 rounded-full" />
+                    <View className="flex-1 relative z-10">
+                        <View className="flex-row items-center justify-between mb-4">
+                             <Text className="text-gray-900 text-sm font-bold">Receitas por Métodos</Text>
                         </View>
                         
                         {/* Dynamic Legend based on Payment Methods */}

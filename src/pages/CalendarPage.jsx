@@ -294,7 +294,7 @@ export function CalendarPage({ navigation }) {
 
   if (loading) {
     return (
-      <View className="flex-1 items-center justify-center bg-white">
+      <View className="flex-1 items-center justify-center bg-gray-50">
         <ActivityIndicator size="large" color="#7E1A8B" />
       </View>
     );
@@ -302,69 +302,98 @@ export function CalendarPage({ navigation }) {
 
   return (
     <SafeAreaView className="flex-1 bg-gray-50">
-      <View className="bg-white pb-4 shadow-sm z-10">
-        <View className="flex-row items-center justify-between px-4 py-3">
+      <View className="bg-white rounded-b-[40px] pb-6 shadow-sm shadow-gray-200 z-10">
+        <View className="flex-row items-center justify-between px-6 py-4">
           <TouchableOpacity 
             onPress={() => navigation.goBack()}
-            className="p-2 -ml-2 rounded-full active:bg-gray-100"
+            className="h-12 w-12 bg-gray-50 rounded-full items-center justify-center active:bg-gray-100"
           >
             <ChevronLeft size={24} color="#374151" />
           </TouchableOpacity>
-          <Text className="text-lg font-bold text-gray-900">Calendário</Text>
-          <View className="w-10" />
+          <View className="items-center">
+              <Text className="text-xl font-extrabold text-gray-900 tracking-tight">Calendário</Text>
+              <Text className="text-gray-500 text-xs font-medium">Visão mensal</Text>
+          </View>
+          <View className="w-12" />
         </View>
 
-        <Calendar
-          current={selectedDate}
-          onDayPress={handleDayPress}
-          onMonthChange={handleMonthChange}
-          markedDates={markedDates}
-          markingType={'multi-dot'}
-          theme={{
-            backgroundColor: '#ffffff',
-            calendarBackground: '#ffffff',
-            textSectionTitleColor: '#b6c1cd',
-            selectedDayBackgroundColor: '#7E1A8B',
-            selectedDayTextColor: '#ffffff',
-            todayTextColor: '#7E1A8B',
-            dayTextColor: '#2d4150',
-            textDisabledColor: '#d9e1e8',
-            dotColor: '#00adf5',
-            selectedDotColor: '#ffffff',
-            arrowColor: '#7E1A8B',
-            monthTextColor: '#7E1A8B',
-            indicatorColor: '#7E1A8B',
-            textDayFontWeight: '300',
-            textMonthFontWeight: 'bold',
-            textDayHeaderFontWeight: '300',
-            textDayFontSize: 16,
-            textMonthFontSize: 16,
-            textDayHeaderFontSize: 14
-          }}
-        />
+        <View className="px-4">
+            <View className="bg-gray-50/50 rounded-3xl p-2 border border-gray-100">
+                <Calendar
+                current={selectedDate}
+                onDayPress={handleDayPress}
+                onMonthChange={handleMonthChange}
+                markedDates={markedDates}
+                markingType={'multi-dot'}
+                theme={{
+                    backgroundColor: 'transparent',
+                    calendarBackground: 'transparent',
+                    textSectionTitleColor: '#6B7280',
+                    selectedDayBackgroundColor: '#7E1A8B',
+                    selectedDayTextColor: '#ffffff',
+                    todayTextColor: '#7E1A8B',
+                    dayTextColor: '#1F2937',
+                    textDisabledColor: '#D1D5DB',
+                    dotColor: '#7E1A8B',
+                    selectedDotColor: '#ffffff',
+                    arrowColor: '#7E1A8B',
+                    monthTextColor: '#111827',
+                    indicatorColor: '#7E1A8B',
+                    textDayFontWeight: '600',
+                    textMonthFontWeight: '800',
+                    textDayHeaderFontWeight: '600',
+                    textDayFontSize: 16,
+                    textMonthFontSize: 18,
+                    textDayHeaderFontSize: 13,
+                    'stylesheet.calendar.header': {
+                        header: {
+                            flexDirection: 'row',
+                            justifyContent: 'space-between',
+                            paddingLeft: 10,
+                            paddingRight: 10,
+                            marginTop: 6,
+                            alignItems: 'center',
+                            marginBottom: 10
+                        }
+                    }
+                }}
+                />
+            </View>
+        </View>
       </View>
 
-      <View className="flex-1 px-4 pt-4">
-        <Text className="text-base font-semibold text-gray-900 mb-3">
-            Transações em {formatDateForDisplay(selectedDate)}
-        </Text>
+      <View className="flex-1 px-6 pt-6">
+        <View className="flex-row items-center justify-between mb-4">
+            <Text className="text-lg font-extrabold text-gray-900 tracking-tight">
+                Transações do Dia
+            </Text>
+            <View className="bg-purple-100 px-3 py-1 rounded-full">
+                <Text className="text-[#7E1A8B] font-bold text-xs">{formatDateForDisplay(selectedDate)}</Text>
+            </View>
+        </View>
         
         {selectedDateTransactions.length === 0 ? (
-            <View className="flex-1 items-center justify-center opacity-50">
-                <Text className="text-gray-500">Nenhuma transação neste dia</Text>
+            <View className="flex-1 items-center justify-center pb-10">
+                <View className="bg-white p-6 rounded-full shadow-sm shadow-gray-200 mb-4 border border-gray-100">
+                    <Text className="text-4xl">🗓️</Text>
+                </View>
+                <Text className="text-gray-900 font-bold text-lg">Dia livre</Text>
+                <Text className="text-gray-500 font-medium mt-1">Nenhuma transação registrada</Text>
             </View>
         ) : (
             <FlatList
                 data={selectedDateTransactions}
-                keyExtractor={(item) => item.id.toString()}
-                renderItem={({ item }) => (
-                    <TransactionItem 
-                        transaction={item} 
-                        onEdit={() => navigation.navigate('AddTransaction', { transaction: item })}
-                        onDelete={() => handleDelete(item)}
-                    />
+                keyExtractor={(item, index) => `${item.id}-${index}`}
+                renderItem={({ item, index }) => (
+                    <View className={index < selectedDateTransactions.length - 1 ? "mb-4" : "mb-4"}>
+                        <TransactionItem 
+                            transaction={item} 
+                            onEdit={() => navigation.navigate('AddTransaction', { transaction: item })}
+                            onDelete={() => handleDelete(item)}
+                        />
+                    </View>
                 )}
-                contentContainerStyle={{ paddingBottom: 20 }}
+                contentContainerStyle={{ paddingBottom: 40 }}
                 showsVerticalScrollIndicator={false}
             />
         )}

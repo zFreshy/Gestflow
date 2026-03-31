@@ -377,13 +377,13 @@ export function FixedExpensesPage({ navigation }) {
   const FilterTab = ({ label, value, activeValue, onPress }) => (
     <TouchableOpacity
       onPress={() => onPress(activeValue === value ? 'all' : value)}
-      className={`px-4 py-2 rounded-full mr-2 border ${
+      className={`px-5 py-2.5 rounded-full mr-2 border shadow-sm ${
         activeValue === value 
-          ? 'bg-[#7E1A8B] border-[#7E1A8B]' 
-          : 'bg-white border-gray-200'
+          ? 'bg-[#7E1A8B] border-[#7E1A8B] shadow-purple-200' 
+          : 'bg-white border-gray-100 shadow-gray-100'
       }`}
     >
-      <Text className={activeValue === value ? 'text-white font-medium' : 'text-gray-600'}>
+      <Text className={activeValue === value ? 'text-white font-bold' : 'text-gray-600 font-medium'}>
         {label}
       </Text>
     </TouchableOpacity>
@@ -398,53 +398,55 @@ export function FixedExpensesPage({ navigation }) {
           onConfirm={handleConfirmPayment}
       />
       
-      <View className="px-6 pt-6 pb-4 bg-white border-b border-gray-100 rounded-b-3xl shadow-sm z-10">
-        <View className="flex-row justify-between items-start mb-6">
+      <View className="px-6 py-6 bg-white rounded-b-[40px] shadow-sm shadow-gray-200 z-10">
+        <View className="flex-row justify-between items-center mb-6">
           <View>
              <Text className="text-3xl font-extrabold text-gray-900 tracking-tight">Despesas Fixas</Text>
-             <Text className="text-gray-500 text-sm mt-1">Gerencie suas contas recorrentes</Text>
+             <Text className="text-gray-500 text-sm font-medium mt-1">Gerencie suas contas recorrentes</Text>
           </View>
           <TouchableOpacity 
             onPress={() => navigation.navigate('AddTransaction', { initialType: 'expense', initialExpenseType: 'fixed' })}
-            className="h-12 w-12 bg-[#7E1A8B] rounded-2xl items-center justify-center shadow-lg shadow-purple-200 active:scale-95 transition-transform"
+            className="h-12 w-12 bg-[#7E1A8B] rounded-full items-center justify-center shadow-lg shadow-purple-300"
           >
-            <Plus color="white" size={24} strokeWidth={2.5} />
+            <Plus color="white" size={26} />
           </TouchableOpacity>
         </View>
 
         {/* View Mode Toggle */}
-        <View className="flex-row bg-gray-100 p-1.5 rounded-xl mb-6 self-start">
+        <View className="flex-row bg-gray-100/80 p-1.5 rounded-2xl mb-5 self-start">
             <TouchableOpacity 
                 onPress={() => setViewMode('month')}
-                className={`px-4 py-2 rounded-lg ${viewMode === 'month' ? 'bg-white shadow-sm' : ''}`}
+                className={`px-4 py-2 rounded-xl ${viewMode === 'month' ? 'bg-white shadow-sm' : ''}`}
             >
-                <Text className={`text-xs font-bold ${viewMode === 'month' ? 'text-gray-900' : 'text-gray-500'}`}>Mensal</Text>
+                <Text className={`text-sm font-bold ${viewMode === 'month' ? 'text-[#7E1A8B]' : 'text-gray-500'}`}>Mensal</Text>
             </TouchableOpacity>
             <TouchableOpacity 
                 onPress={() => setViewMode('year')}
-                className={`px-4 py-2 rounded-lg ${viewMode === 'year' ? 'bg-white shadow-sm' : ''}`}
+                className={`px-4 py-2 rounded-xl ${viewMode === 'year' ? 'bg-white shadow-sm' : ''}`}
             >
-                <Text className={`text-xs font-bold ${viewMode === 'year' ? 'text-gray-900' : 'text-gray-500'}`}>Anual</Text>
+                <Text className={`text-sm font-bold ${viewMode === 'year' ? 'text-[#7E1A8B]' : 'text-gray-500'}`}>Anual</Text>
             </TouchableOpacity>
         </View>
 
-        <MonthSelector currentDate={currentMonth} onMonthChange={setCurrentMonth} viewMode={viewMode} />
+        <View className="mb-2">
+            <MonthSelector currentDate={currentMonth} onMonthChange={setCurrentMonth} viewMode={viewMode} />
+        </View>
 
         {/* Search */}
-        <View className="flex-row items-center bg-gray-50 border border-gray-200 rounded-2xl px-4 h-12 mb-4 mt-2">
-          <Search color="#9CA3AF" size={20} />
+        <View className="flex-row items-center bg-gray-50 rounded-2xl px-5 h-14 mb-5 border border-gray-100">
+          <Search color="#9CA3AF" size={22} />
           <TextInput
             placeholder="Buscar despesas..."
             value={search}
             onChangeText={setSearch}
-            className="flex-1 ml-3 text-base text-gray-900"
+            className="flex-1 ml-3 text-base text-gray-900 font-medium"
             placeholderTextColor="#9CA3AF"
           />
         </View>
 
         {/* Filters */}
         <View>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} className="flex-row" contentContainerStyle={{ paddingRight: 20 }}>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} className="flex-row pb-2">
                 <FilterTab label="Todas" value="all" activeValue={statusFilter} onPress={setStatusFilter} />
                 <FilterTab label="Pagas" value="paid" activeValue={statusFilter} onPress={setStatusFilter} />
                 <FilterTab label="Pendentes" value="pending" activeValue={statusFilter} onPress={setStatusFilter} />
@@ -453,22 +455,23 @@ export function FixedExpensesPage({ navigation }) {
       </View>
 
       {loading ? (
-        <View className="flex-1 justify-center items-center">
+        <View className="flex-1 justify-center items-center bg-gray-50">
           <ActivityIndicator size="large" color="#7E1A8B" />
         </View>
       ) : (
         <ScrollView 
             contentContainerStyle={{ padding: 24, paddingBottom: 100 }}
-            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#7E1A8B" />}
             showsVerticalScrollIndicator={false}
+            className="flex-1"
         >
             {sortedGroupKeys.length === 0 ? (
-                <View className="items-center justify-center py-20 opacity-50">
+                <View className="items-center justify-center py-16">
                     <View className="bg-gray-100 p-6 rounded-full mb-4">
-                        <Calendar color="#9CA3AF" size={40} />
+                        <Calendar color="#9CA3AF" size={48} />
                     </View>
-                    <Text className="text-gray-500 font-bold text-lg mt-2">Nada por aqui</Text>
-                    <Text className="text-sm text-gray-400 mt-1 text-center">Nenhuma despesa encontrada para este {viewMode === 'year' ? 'ano' : 'mês'}.</Text>
+                    <Text className="text-gray-900 text-lg font-bold">Nada por aqui</Text>
+                    <Text className="text-gray-500 font-medium mt-1 text-center">Nenhuma despesa encontrada para{'\n'}este {viewMode === 'year' ? 'ano' : 'mês'}.</Text>
                 </View>
             ) : (
                 <View className="space-y-6">
@@ -477,16 +480,18 @@ export function FixedExpensesPage({ navigation }) {
                         const groupTotal = calculateGroupTotal(groupTransactions);
                         
                         return (
-                            <View key={key} className="bg-white rounded-3xl p-5 shadow-sm shadow-gray-200">
-                                <View className="flex-row justify-between items-center mb-4 pb-2 border-b border-gray-50">
-                                    <Text className="text-lg font-bold text-gray-900 capitalize">
+                            <View key={key} className="bg-white rounded-[32px] p-6 shadow-sm shadow-gray-200/50">
+                                <View className="flex-row justify-between items-center mb-5 pb-4 border-b border-gray-100">
+                                    <Text className="text-lg font-extrabold text-gray-900 capitalize">
                                         {getGroupLabel(key)}
                                     </Text>
-                                    <Text className={`text-base font-bold ${groupTotal >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-                                        {groupTotal >= 0 ? '+' : ''}{groupTotal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                                    </Text>
+                                    <View className={`px-3 py-1.5 rounded-xl ${groupTotal >= 0 ? 'bg-emerald-50' : 'bg-red-50'}`}>
+                                        <Text className={`text-sm font-bold ${groupTotal >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                                            {groupTotal >= 0 ? '+' : ''}{groupTotal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                                        </Text>
+                                    </View>
                                 </View>
-                                <View>
+                                <View className="space-y-4">
                                     {groupedExpenses[key].map((item, index) => (
                                         <View key={item.id} className={index < groupedExpenses[key].length - 1 ? "mb-4" : ""}>
                                             <TransactionItem 

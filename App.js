@@ -108,17 +108,21 @@ function TabNavigator({ navigation }) {
           tabBarActiveTintColor: '#7E1A8B',
           tabBarInactiveTintColor: '#9CA3AF',
           tabBarStyle: {
-            borderTopWidth: 1,
-            borderTopColor: '#F3F4F6',
-            paddingBottom: insets.bottom > 0 ? insets.bottom + 5 : 5,
-            paddingTop: 5,
-            height: insets.bottom > 0 ? 60 + insets.bottom : 60,
+            borderTopWidth: 0,
+            paddingBottom: insets.bottom > 0 ? insets.bottom + 5 : 10,
+            paddingTop: 10,
+            height: insets.bottom > 0 ? 65 + insets.bottom : 70,
             backgroundColor: '#FFFFFF',
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: -4 },
+            shadowOpacity: 0.05,
+            shadowRadius: 8,
+            elevation: 10,
           },
           tabBarLabelStyle: {
             fontSize: 10,
-            fontWeight: '500',
-            marginTop: -4,
+            fontWeight: '600',
+            marginTop: 2,
           }
         }}
       >
@@ -126,7 +130,11 @@ function TabNavigator({ navigation }) {
           name="Dashboard" 
           component={DashboardPage} 
           options={{
-            tabBarIcon: ({ color }) => <LayoutDashboard color={color} size={24} />,
+            tabBarIcon: ({ color, focused }) => (
+              <View className={`p-2 rounded-xl ${focused ? 'bg-purple-50' : 'bg-transparent'}`}>
+                <LayoutDashboard color={color} size={24} />
+              </View>
+            ),
             tabBarLabel: 'Início'
           }}
         />
@@ -134,7 +142,11 @@ function TabNavigator({ navigation }) {
           name="Transactions" 
           component={TransactionsPage} 
           options={{
-            tabBarIcon: ({ color }) => <Receipt color={color} size={24} />,
+            tabBarIcon: ({ color, focused }) => (
+              <View className={`p-2 rounded-xl ${focused ? 'bg-purple-50' : 'bg-transparent'}`}>
+                <Receipt color={color} size={24} />
+              </View>
+            ),
             tabBarLabel: 'Transações'
           }}
         />
@@ -151,8 +163,8 @@ function TabNavigator({ navigation }) {
           })}
           options={{
             tabBarIcon: () => (
-              <View className="bg-[#7E1A8B] h-14 w-14 rounded-full items-center justify-center -mt-8 shadow-lg shadow-purple-200 border-4 border-white">
-                <Plus color="white" size={28} />
+              <View className="bg-[#7E1A8B] h-16 w-16 rounded-full items-center justify-center -mt-10 shadow-lg shadow-purple-500/40 border-[6px] border-white">
+                <Plus color="white" size={32} />
               </View>
             ),
             tabBarLabel: ''
@@ -163,7 +175,11 @@ function TabNavigator({ navigation }) {
           name="FixedExpenses" 
           component={FixedExpensesPage} 
           options={{
-            tabBarIcon: ({ color }) => <FileText color={color} size={24} />,
+            tabBarIcon: ({ color, focused }) => (
+              <View className={`p-2 rounded-xl ${focused ? 'bg-purple-50' : 'bg-transparent'}`}>
+                <FileText color={color} size={24} />
+              </View>
+            ),
             tabBarLabel: 'Despesas'
           }}
         />
@@ -178,7 +194,11 @@ function TabNavigator({ navigation }) {
             },
           })}
           options={{
-            tabBarIcon: ({ color }) => <MoreHorizontal color={color} size={24} />,
+            tabBarIcon: ({ color, focused }) => (
+              <View className={`p-2 rounded-xl ${focused ? 'bg-purple-50' : 'bg-transparent'}`}>
+                <MoreHorizontal color={color} size={24} />
+              </View>
+            ),
             tabBarLabel: 'Mais'
           }}
         />

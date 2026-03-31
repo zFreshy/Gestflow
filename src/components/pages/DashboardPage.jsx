@@ -199,7 +199,7 @@ export function DashboardPage({ transactions }) {
     const yearlyStats = calculateStats(yearlyTxs);
 
     return (
-        <div className="space-y-6">
+        <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
             {/* Top Stats Row - Financial Overview */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 {/* Card 1 — Saldo Real (Donut) */}
@@ -208,7 +208,7 @@ export function DashboardPage({ transactions }) {
                     icon={DollarSign}
                     accent="green"
                 >
-                    <div className="mt-2 h-28 w-full">
+                    <div className="mt-2 h-28 w-full relative z-10">
                         <DonutChart transactions={transactions} type="real_balance" />
                     </div>
                 </StatCard>
@@ -219,7 +219,7 @@ export function DashboardPage({ transactions }) {
                     icon={TrendingUp}
                     accent="blue"
                 >
-                    <div className="mt-2 h-28 w-full">
+                    <div className="mt-2 h-28 w-full relative z-10">
                         <DonutChart transactions={[...transactions, ...virtualExpenses]} type="forecast_balance" />
                     </div>
                 </StatCard>
@@ -233,12 +233,13 @@ export function DashboardPage({ transactions }) {
                     icon={Clock}
                     accent="yellow"
                 >
-                    <div className="flex flex-col items-center justify-center py-2 h-full">
-                        <span className="text-2xl font-bold tracking-tight text-amber-600">
+                    <div className="flex flex-col items-center justify-center py-4 h-full relative z-10">
+                        <span className="text-3xl font-extrabold tracking-tight text-amber-600 mb-2">
                             {formatCurrency(upcomingTotal)}
                         </span>
-                        <div className="flex items-center gap-1 text-xs text-amber-600 font-medium mt-1 bg-amber-50 px-2 py-0.5 rounded-full">
-                            <span>{upcomingExpenses.length} pendentes</span>
+                        <div className="flex items-center gap-1.5 text-xs text-amber-700 font-bold mt-1 bg-amber-100/50 px-3 py-1 rounded-full border border-amber-200/50">
+                            <span className="flex h-2 w-2 rounded-full bg-amber-500 animate-pulse" />
+                            {upcomingExpenses.length} pendentes
                         </div>
                     </div>
                 </StatCard>
@@ -249,12 +250,13 @@ export function DashboardPage({ transactions }) {
                     icon={XCircle}
                     accent="red"
                 >
-                    <div className="flex flex-col items-center justify-center py-2 h-full">
-                        <span className="text-2xl font-bold tracking-tight text-red-600">
+                    <div className="flex flex-col items-center justify-center py-4 h-full relative z-10">
+                        <span className="text-3xl font-extrabold tracking-tight text-rose-600 mb-2">
                             {formatCurrency(overdueTotal)}
                         </span>
-                        <div className="flex items-center gap-1 text-xs text-red-600 font-medium mt-1 bg-red-50 px-2 py-0.5 rounded-full">
-                            <span>{overdueExpenses.length} vencidas</span>
+                        <div className="flex items-center gap-1.5 text-xs text-rose-700 font-bold mt-1 bg-rose-100/50 px-3 py-1 rounded-full border border-rose-200/50">
+                            <span className="flex h-2 w-2 rounded-full bg-rose-500" />
+                            {overdueExpenses.length} vencidas
                         </div>
                     </div>
                 </StatCard>
@@ -265,20 +267,24 @@ export function DashboardPage({ transactions }) {
                     icon={CheckCircle}
                     accent="green"
                 >
-                    <div className="flex flex-col items-center justify-center py-2 h-full">
-                        <span className="text-2xl font-bold tracking-tight text-emerald-600">
+                    <div className="flex flex-col items-center justify-center py-4 h-full relative z-10">
+                        <span className="text-3xl font-extrabold tracking-tight text-emerald-600 mb-2">
                             {formatCurrency(paidFixedTotal)}
                         </span>
-                        <div className="flex items-center gap-1 text-xs text-emerald-600 font-medium mt-1 bg-emerald-50 px-2 py-0.5 rounded-full">
-                            <span>{paidFixedExpenses.length} pagas</span>
+                        <div className="flex items-center gap-1.5 text-xs text-emerald-700 font-bold mt-1 bg-emerald-100/50 px-3 py-1 rounded-full border border-emerald-200/50">
+                            <span className="flex h-2 w-2 rounded-full bg-emerald-500" />
+                            {paidFixedExpenses.length} pagas
                         </div>
                     </div>
                 </StatCard>
             </div>
 
             {/* Chart Full Width */}
-            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-                <FinancesChart transactions={transactions} />
+            <div className="bg-white rounded-3xl shadow-[0_2px_10px_-3px_rgba(6,81,237,0.05)] border border-gray-100/80 p-2 overflow-hidden relative group">
+                <div className="absolute inset-0 bg-gradient-to-br from-white via-gray-50/30 to-white opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+                <div className="relative z-10">
+                    <FinancesChart transactions={transactions} />
+                </div>
             </div>
 
             {/* Averages Row */}
@@ -289,18 +295,18 @@ export function DashboardPage({ transactions }) {
                     icon={Activity}
                     accent="blue"
                 >
-                    <div className="flex flex-col gap-2 mt-2">
-                        <div className="flex justify-between items-center text-sm">
-                            <span className="text-muted-foreground">Lucro</span>
-                            <span className="font-medium text-emerald-600">{formatCurrency(dailyStats.income)}</span>
+                    <div className="flex flex-col gap-3 mt-4 relative z-10">
+                        <div className="flex justify-between items-center text-[15px]">
+                            <span className="text-gray-500 font-medium">Lucro</span>
+                            <span className="font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md">{formatCurrency(dailyStats.income)}</span>
                         </div>
-                        <div className="flex justify-between items-center text-sm">
-                            <span className="text-muted-foreground">Despesa</span>
-                            <span className="font-medium text-red-600">{formatCurrency(dailyStats.expense)}</span>
+                        <div className="flex justify-between items-center text-[15px]">
+                            <span className="text-gray-500 font-medium">Despesa</span>
+                            <span className="font-bold text-rose-600 bg-rose-50 px-2 py-0.5 rounded-md">{formatCurrency(dailyStats.expense)}</span>
                         </div>
-                        <div className="flex justify-between items-center text-sm pt-2 border-t">
-                            <span className="font-medium text-gray-700">Saldo</span>
-                            <span className={cn("font-bold", dailyStats.profit >= 0 ? "text-blue-600" : "text-red-600")}>
+                        <div className="flex justify-between items-center text-[15px] pt-3 border-t border-gray-100/80">
+                            <span className="font-bold text-gray-800">Saldo</span>
+                            <span className={cn("font-extrabold text-lg", dailyStats.profit >= 0 ? "text-blue-600" : "text-rose-600")}>
                                 {formatCurrency(dailyStats.profit)}
                             </span>
                         </div>
@@ -313,18 +319,18 @@ export function DashboardPage({ transactions }) {
                     icon={CalendarIcon}
                     accent="purple"
                 >
-                    <div className="flex flex-col gap-2 mt-2">
-                        <div className="flex justify-between items-center text-sm">
-                            <span className="text-muted-foreground">Lucro</span>
-                            <span className="font-medium text-emerald-600">{formatCurrency(monthlyStats.income)}</span>
+                    <div className="flex flex-col gap-3 mt-4 relative z-10">
+                        <div className="flex justify-between items-center text-[15px]">
+                            <span className="text-gray-500 font-medium">Lucro</span>
+                            <span className="font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md">{formatCurrency(monthlyStats.income)}</span>
                         </div>
-                        <div className="flex justify-between items-center text-sm">
-                            <span className="text-muted-foreground">Despesa</span>
-                            <span className="font-medium text-red-600">{formatCurrency(monthlyStats.expense)}</span>
+                        <div className="flex justify-between items-center text-[15px]">
+                            <span className="text-gray-500 font-medium">Despesa</span>
+                            <span className="font-bold text-rose-600 bg-rose-50 px-2 py-0.5 rounded-md">{formatCurrency(monthlyStats.expense)}</span>
                         </div>
-                        <div className="flex justify-between items-center text-sm pt-2 border-t">
-                            <span className="font-medium text-gray-700">Saldo</span>
-                            <span className={cn("font-bold", monthlyStats.profit >= 0 ? "text-blue-600" : "text-red-600")}>
+                        <div className="flex justify-between items-center text-[15px] pt-3 border-t border-gray-100/80">
+                            <span className="font-bold text-gray-800">Saldo</span>
+                            <span className={cn("font-extrabold text-lg", monthlyStats.profit >= 0 ? "text-blue-600" : "text-rose-600")}>
                                 {formatCurrency(monthlyStats.profit)}
                             </span>
                         </div>
@@ -337,18 +343,18 @@ export function DashboardPage({ transactions }) {
                     icon={CalendarIcon}
                     accent="orange"
                 >
-                    <div className="flex flex-col gap-2 mt-2">
-                        <div className="flex justify-between items-center text-sm">
-                            <span className="text-muted-foreground">Lucro</span>
-                            <span className="font-medium text-emerald-600">{formatCurrency(yearlyStats.income)}</span>
+                    <div className="flex flex-col gap-3 mt-4 relative z-10">
+                        <div className="flex justify-between items-center text-[15px]">
+                            <span className="text-gray-500 font-medium">Lucro</span>
+                            <span className="font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md">{formatCurrency(yearlyStats.income)}</span>
                         </div>
-                        <div className="flex justify-between items-center text-sm">
-                            <span className="text-muted-foreground">Despesa</span>
-                            <span className="font-medium text-red-600">{formatCurrency(yearlyStats.expense)}</span>
+                        <div className="flex justify-between items-center text-[15px]">
+                            <span className="text-gray-500 font-medium">Despesa</span>
+                            <span className="font-bold text-rose-600 bg-rose-50 px-2 py-0.5 rounded-md">{formatCurrency(yearlyStats.expense)}</span>
                         </div>
-                        <div className="flex justify-between items-center text-sm pt-2 border-t">
-                            <span className="font-medium text-gray-700">Saldo</span>
-                            <span className={cn("font-bold", yearlyStats.profit >= 0 ? "text-blue-600" : "text-red-600")}>
+                        <div className="flex justify-between items-center text-[15px] pt-3 border-t border-gray-100/80">
+                            <span className="font-bold text-gray-800">Saldo</span>
+                            <span className={cn("font-extrabold text-lg", yearlyStats.profit >= 0 ? "text-blue-600" : "text-rose-600")}>
                                 {formatCurrency(yearlyStats.profit)}
                             </span>
                         </div>
@@ -357,20 +363,20 @@ export function DashboardPage({ transactions }) {
             </div>
 
             {/* Bottom Stats Row - Secondary Info */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 pb-10">
                 {/* Card 1 — Pacientes (Total) */}
                 <StatCard
-                    title="Pacientes"
+                    title="Clientes"
                     icon={Users}
                     accent="blue"
                 >
-                    <div className="flex flex-col items-center justify-center py-2 h-full">
-                        <span className="text-4xl font-bold tracking-tight text-gray-900">268</span>
-                        <p className="text-xs text-muted-foreground mt-1">Total</p>
+                    <div className="flex flex-col items-center justify-center py-2 h-full relative z-10">
+                        <span className="text-4xl font-extrabold tracking-tight text-gray-900">268</span>
+                        <p className="text-xs text-gray-500 font-medium mt-1">Total Ativos</p>
                     </div>
-                    <div className="flex items-center justify-between text-xs mt-4 pt-4 border-t border-gray-100">
-                        <span className="text-emerald-500 font-medium">+12 clientes novos</span>
-                        <span className="text-emerald-500 font-medium flex items-center gap-0.5"><TrendingUp className="h-3 w-3" /> 43%</span>
+                    <div className="flex items-center justify-between text-xs mt-4 pt-4 border-t border-gray-100/80 relative z-10">
+                        <span className="text-emerald-500 font-semibold bg-emerald-50 px-2 py-0.5 rounded-md">+12 novos</span>
+                        <span className="text-emerald-500 font-bold flex items-center gap-0.5"><TrendingUp className="h-3 w-3" /> 43%</span>
                     </div>
                 </StatCard>
 
@@ -380,32 +386,33 @@ export function DashboardPage({ transactions }) {
                     icon={DollarSign}
                     accent="green"
                 >
-                    <div className="flex flex-col items-center justify-center py-2 h-full">
+                    <div className="flex flex-col items-center justify-center py-2 h-full relative z-10">
                         <span className={cn(
-                            "text-3xl font-bold tracking-tight",
-                            netProfit >= 0 ? "text-blue-600" : "text-red-600"
+                            "text-4xl font-extrabold tracking-tight",
+                            netProfit >= 0 ? "text-emerald-600" : "text-rose-600"
                         )}>
                             {formatCurrency(netProfit)}
                         </span>
-                        <p className="text-xs text-muted-foreground mt-1">Saldo Atual</p>
+                        <p className="text-xs text-gray-500 font-medium mt-1">Saldo Atual</p>
                     </div>
                 </StatCard>
 
                 {/* Card 3 — Resumo Despesas Fixas */}
                 <div 
                     onClick={() => setIsSummaryModalOpen(true)}
-                    className="cursor-pointer transition-transform hover:scale-[1.02] active:scale-[0.98]"
+                    className="cursor-pointer group h-full"
                 >
                     <StatCard
                         title="Despesas Fixas e Planejadas"
                         icon={FileText}
                         accent="purple"
+                        className="h-full"
                     >
-                        <div className="flex flex-col items-center justify-center py-2 h-full gap-3">
-                            <div className="h-12 w-12 bg-purple-50 rounded-full flex items-center justify-center text-purple-500">
-                                <FileText className="h-6 w-6" />
+                        <div className="flex flex-col items-center justify-center py-4 h-full gap-4 relative z-10">
+                            <div className="h-16 w-16 bg-purple-50 group-hover:bg-purple-100 rounded-full flex items-center justify-center text-purple-600 transition-colors shadow-sm border border-purple-100/50">
+                                <FileText className="h-8 w-8 group-hover:scale-110 transition-transform" />
                             </div>
-                            <span className="text-sm font-medium text-gray-600 text-center">
+                            <span className="text-sm font-semibold text-gray-600 group-hover:text-gray-900 text-center transition-colors">
                                 Ver resumo detalhado de pagamentos
                             </span>
                         </div>

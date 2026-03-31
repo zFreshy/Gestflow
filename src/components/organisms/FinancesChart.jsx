@@ -1,5 +1,4 @@
 import React, { useMemo, useState } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '../atoms/Card';
 import { Select } from '../atoms/Select';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 
@@ -84,13 +83,21 @@ export function FinancesChart({ transactions }) {
     const CustomTooltip = ({ active, payload, label }) => {
         if (active && payload && payload.length) {
             return (
-                <div className="bg-card border rounded-xl shadow-lg p-3 text-sm">
-                    <p className="font-medium mb-1">{label}</p>
-                    {payload.map((item, idx) => (
-                        <p key={idx} style={{ color: item.color }} className="text-xs">
-                            {item.name}: R$ {item.value.toFixed(2)}
-                        </p>
-                    ))}
+                <div className="bg-white/90 backdrop-blur-md border border-gray-100/50 rounded-2xl shadow-[0_8px_30px_-4px_rgba(0,0,0,0.1)] p-4 text-sm min-w-[150px]">
+                    <p className="font-bold text-gray-800 mb-3 pb-2 border-b border-gray-100">{label}</p>
+                    <div className="space-y-2">
+                        {payload.map((item, idx) => (
+                            <div key={idx} className="flex items-center justify-between gap-4">
+                                <div className="flex items-center gap-2">
+                                    <div className="w-2 h-2 rounded-full" style={{ backgroundColor: item.color }} />
+                                    <span className="text-gray-600 font-medium">{item.name}</span>
+                                </div>
+                                <span className="font-bold text-gray-900">
+                                    {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(item.value)}
+                                </span>
+                            </div>
+                        ))}
+                    </div>
                 </div>
             );
         }
@@ -98,67 +105,77 @@ export function FinancesChart({ transactions }) {
     };
 
     return (
-        <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardTitle className="text-lg">Visão Geral</CardTitle>
-                <div className="w-[120px]">
+        <div className="p-2">
+            <div className="flex flex-row items-center justify-between pb-6 px-4 pt-4">
+                <h3 className="text-xl font-bold text-gray-900">Visão Geral de Fluxo</h3>
+                <div className="w-[140px]">
                     <Select
                         value={viewMode}
                         onChange={(e) => setViewMode(e.target.value)}
+                        className="bg-gray-50 border-transparent hover:bg-gray-100 transition-colors font-medium rounded-xl"
                     >
-                        <option value="week">Semana</option>
-                        <option value="month">Mês</option>
-                        <option value="year">Ano</option>
+                        <option value="week">Última Semana</option>
+                        <option value="month">Último Mês</option>
+                        <option value="year">Este Ano</option>
                     </Select>
                 </div>
-            </CardHeader>
-            <CardContent>
-                <div className="h-[280px] w-full">
+            </div>
+            <div className="px-2">
+                <div className="h-[320px] w-full">
                     {data.length === 0 ? (
-                        <div className="h-full flex items-center justify-center text-muted-foreground text-sm">
+                        <div className="h-full flex items-center justify-center text-gray-400 font-medium text-sm bg-gray-50/50 rounded-2xl border border-dashed border-gray-200">
                             Adicione transações para ver o gráfico.
                         </div>
                     ) : (
                         <ResponsiveContainer width="100%" height="100%">
                             <BarChart data={data} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(214, 32%, 91%)" />
+                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                                 <XAxis
                                     dataKey="displayDate"
-                                    stroke="hsl(215, 16%, 47%)"
+                                    stroke="#94a3b8"
                                     fontSize={12}
+                                    fontWeight={500}
                                     tickLine={false}
                                     axisLine={false}
+                                    dy={10}
                                 />
                                 <YAxis
-                                    stroke="hsl(215, 16%, 47%)"
+                                    stroke="#94a3b8"
                                     fontSize={12}
+                                    fontWeight={500}
                                     tickLine={false}
                                     axisLine={false}
-                                    tickFormatter={(value) => `R$${value}`}
+                                    tickFormatter={(value) => {
+                                        if (value >= 1000) return `R$${(value/1000).toFixed(1)}k`;
+                                        return `R$${value}`;
+                                    }}
+                                    dx={-10}
                                 />
-                                <Tooltip content={<CustomTooltip />} cursor={{ fill: 'hsl(210, 40%, 96%, 0.5)' }} />
+                                <Tooltip content={<CustomTooltip />} cursor={{ fill: '#f8fafc' }} />
                                 <Legend
                                     iconType="circle"
                                     iconSize={8}
-                                    wrapperStyle={{ fontSize: '12px', paddingTop: '8px' }}
+                                    wrapperStyle={{ fontSize: '13px', fontWeight: 500, paddingTop: '20px' }}
                                 />
                                 <Bar
                                     dataKey="ganhos"
-                                    name="Ganhos"
-                                    fill="hsl(142, 71%, 45%)"
-                                    radius={[6, 6, 0, 0]}
+                                    name="Receitas"
+                                    fill="#10B981"
+                                    radius={[6, 6, 6, 6]}
+                                    barSize={12}
                                 />
                                 <Bar
                                     dataKey="gastos"
-                                    name="Gastos"
-                                    fill="hsl(0, 84%, 60%)"
-                                    radius={[6, 6, 0, 0]}
+                                    name="Despesas"
+                                    fill="#F43F5E"
+                                    radius={[6, 6, 6, 6]}
+                                    barSize={12}
                                 />
                             </BarChart>
                         </ResponsiveContainer>
                     )}
                 </div>
-            </CardContent>
-        </Card>
+            </div>
+        </div>
     );
 }

@@ -170,24 +170,30 @@ export function DashboardHeader({ selectedMonth, onOpenForm, transactions = [], 
             </header>
 
             {/* Welcome Banner */}
-            <div className="flex flex-col md:flex-row md:items-center justify-between pt-2 gap-4">
-                <div>
-                    <h1 className="text-2xl md:text-[28px] font-semibold text-gray-900 tracking-tight flex items-center gap-2">
-                        Bom dia, <span className="font-bold">{getUserName()}!</span> 👋🏼
+            <div className="flex flex-col md:flex-row md:items-center justify-between p-6 rounded-3xl bg-gradient-to-br from-[#7E1A8B]/5 via-[#7E1A8B]/[0.02] to-transparent border border-[#7E1A8B]/10 gap-4 shadow-sm relative overflow-hidden">
+                <div className="absolute top-0 right-0 -mt-4 -mr-4 w-32 h-32 bg-gradient-to-br from-[#7E1A8B]/20 to-[#7E1A8B]/5 rounded-full blur-3xl" />
+                <div className="absolute bottom-0 left-10 -mb-4 w-24 h-24 bg-gradient-to-tr from-blue-500/10 to-transparent rounded-full blur-2xl" />
+                
+                <div className="relative z-10">
+                    <h1 className="text-2xl md:text-[32px] font-bold text-gray-900 tracking-tight flex items-center gap-2 mb-1">
+                        Bom dia, <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#7E1A8B] to-purple-500">{getUserName()}!</span> 👋🏼
                     </h1>
-                    <div className="flex items-center gap-2 mt-1.5">
-                        <Calendar className="h-4 w-4 text-[#7E1A8B]" />
-                        <p className="text-sm md:text-[15px] font-medium text-gray-500">
-                            Confira sua agenda de <span onClick={gotoCalendar} className="text-[#7E1A8B] cursor-pointer hover:underline">{monthName}</span>.
+                    <div className="flex items-center gap-2 mt-2">
+                        <div className="flex items-center justify-center w-6 h-6 rounded-full bg-[#7E1A8B]/10">
+                            <Calendar className="h-3.5 w-3.5 text-[#7E1A8B]" />
+                        </div>
+                        <p className="text-sm md:text-[15px] font-medium text-gray-600">
+                            Confira sua agenda de <span onClick={gotoCalendar} className="text-[#7E1A8B] font-semibold cursor-pointer hover:text-purple-700 transition-colors underline decoration-[#7E1A8B]/30 underline-offset-2">{monthName}</span>.
                         </p>
                     </div>
                 </div>
                 <button
                     onClick={onOpenForm}
-                    className="w-full md:w-auto flex items-center justify-center gap-2 bg-blue-500 text-white px-6 py-2.5 rounded-xl font-medium text-sm hover:bg-blue-600 transition-all shadow-md active:scale-[0.98]"
+                    className="relative z-10 w-full md:w-auto flex items-center justify-center gap-2 bg-gradient-to-r from-[#7E1A8B] to-purple-600 text-white px-8 py-3.5 rounded-2xl font-semibold text-[15px] hover:shadow-lg hover:shadow-purple-500/25 transition-all duration-300 active:scale-[0.98] group overflow-hidden"
                 >
-                    <Plus className="h-4 w-4" />
-                    Adicionar Transação
+                    <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300 ease-in-out" />
+                    <Plus className="h-5 w-5 relative z-10" />
+                    <span className="relative z-10">Adicionar Transação</span>
                 </button>
             </div>
         </div>

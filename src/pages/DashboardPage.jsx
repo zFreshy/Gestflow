@@ -185,12 +185,14 @@ export function DashboardPage({ navigation }) {
   const [refreshing, setRefreshing] = useState(false);
   const [transactions, setTransactions] = useState([]);
   const [viewMode, setViewMode] = useState('weekly'); // weekly, monthly, quarterly
+  const [chartType, setChartType] = useState('previsto'); // 'previsto' or 'real'
   const [isSummaryModalOpen, setIsSummaryModalOpen] = useState(false);
   const [stats, setStats] = useState({
     totalIncome: 0,
     totalExpense: 0,
     netProfit: 0,
     categories: [], // For donut chart
+    realCategories: [],
     upcomingTotal: 0,
     upcomingCount: 0,
     overdueTotal: 0,
@@ -366,6 +368,11 @@ export function DashboardPage({ navigation }) {
         { value: overdueTotal, color: '#EF4444', text: 'Atrasadas' } // Red-500
     ].filter(d => d.value > 0);
 
+    const realPieData = [
+        { value: totalIncome, color: '#34D399', text: 'Receitas', focused: true },
+        { value: totalExpense, color: '#F87171', text: 'Pagas' }
+    ].filter(d => d.value > 0);
+
     const realSaidas = data.filter(t => t.type === 'expense' && (t.expenseType === 'variable' || isPaid(t.status))).reduce((acc, t) => acc + t.amount, 0);
     const realBalanceData = [
         { name: 'Entradas', value: totalIncome },
@@ -419,6 +426,7 @@ export function DashboardPage({ navigation }) {
       netProfit,
       projectedBalance,
       categories: finalPieData,
+      realCategories: realPieData,
       realBalanceData,
       forecastBalanceData,
       upcomingTotal,
@@ -665,23 +673,36 @@ export function DashboardPage({ navigation }) {
             <View className="items-center">
                 <View className="w-full flex-row justify-between items-center mb-4">
                     <Text className="text-xl font-bold text-gray-900">Visão Geral</Text>
-                    <TouchableOpacity className="bg-gray-100 p-2 rounded-full">
-                        <ArrowUpRight size={20} color="#374151" />
-                    </TouchableOpacity>
+                    <View className="flex-row bg-gray-100 rounded-full p-1">
+                        <TouchableOpacity 
+                            onPress={() => setChartType('previsto')}
+                            className={`px-3 py-1.5 rounded-full ${chartType === 'previsto' ? 'bg-white shadow-sm' : ''}`}
+                        >
+                            <Text className={`text-xs font-medium ${chartType === 'previsto' ? 'text-gray-900' : 'text-gray-500'}`}>Previsto</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity 
+                            onPress={() => setChartType('real')}
+                            className={`px-3 py-1.5 rounded-full ${chartType === 'real' ? 'bg-white shadow-sm' : ''}`}
+                        >
+                            <Text className={`text-xs font-medium ${chartType === 'real' ? 'text-gray-900' : 'text-gray-500'}`}>Real</Text>
+                        </TouchableOpacity>
+                    </View>
                 </View>
                 
                 <View className="items-center justify-center relative py-6">
                     <PieChart
-                        data={stats.categories}
+                        data={chartType === 'previsto' ? stats.categories : stats.realCategories}
                         donut
                         radius={120}
                         innerRadius={104}
                         centerLabelComponent={() => {
                             return (
                                 <View className="items-center justify-center">
-                                    <Text className="text-gray-400 text-xs font-medium mb-1">Saldo Previsto</Text>
+                                    <Text className="text-gray-400 text-xs font-medium mb-1">
+                                        {chartType === 'previsto' ? 'Saldo Previsto' : 'Lucro Real'}
+                                    </Text>
                                     <Text className="text-gray-900 text-2xl font-bold tracking-tight">
-                                        {formatCurrency(stats.projectedBalance || 0)}
+                                        {formatCurrency(chartType === 'previsto' ? (stats.projectedBalance || 0) : (stats.netProfit || 0))}
                                     </Text>
                                 </View>
                             );
@@ -701,8 +722,9 @@ export function DashboardPage({ navigation }) {
 
                 {/* Legend */}
                 <View className="flex-row justify-between w-full px-2 mt-8">
-                    {stats.categories?.map((cat, idx) => {
-                        const total = stats.categories.reduce((sum, c) => sum + c.value, 0);
+                    {(chartType === 'previsto' ? stats.categories : stats.realCategories)?.map((cat, idx) => {
+                        const currentData = chartType === 'previsto' ? stats.categories : stats.realCategories;
+                        const total = currentData.reduce((sum, c) => sum + c.value, 0);
                         const percentage = total > 0 ? Math.round((cat.value / total) * 100) : 0;
                         
                         return (

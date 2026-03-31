@@ -359,6 +359,13 @@ export function DashboardPage({ navigation }) {
     const projectedBalance = totalIncome - totalExpense - filteredUpcomingTotal - overdueTotal;
 
     // 5. Chart Data (Saldo Real e Previsto)
+    const finalPieData = [
+        { value: totalIncome, color: '#34D399', text: 'Receitas', focused: true }, // Emerald-400
+        { value: totalExpense, color: '#F87171', text: 'Pagas' }, // Red-400
+        { value: filteredUpcomingTotal, color: '#FBBF24', text: 'A Vencer' }, // Amber-400
+        { value: overdueTotal, color: '#EF4444', text: 'Atrasadas' } // Red-500
+    ].filter(d => d.value > 0);
+
     const realSaidas = data.filter(t => t.type === 'expense' && (t.expenseType === 'variable' || isPaid(t.status))).reduce((acc, t) => acc + t.amount, 0);
     const realBalanceData = [
         { name: 'Entradas', value: totalIncome },
@@ -411,6 +418,7 @@ export function DashboardPage({ navigation }) {
       totalExpense,
       netProfit,
       projectedBalance,
+      categories: finalPieData,
       realBalanceData,
       forecastBalanceData,
       upcomingTotal,
@@ -653,28 +661,72 @@ export function DashboardPage({ navigation }) {
         </View>
 
         <View className="px-6 space-y-8">
-            {/* Top Stats Row - Financial Overview (Donuts) */}
-            <View className="flex-row gap-3">
-                {/* Saldo Real */}
-                <View className="flex-1 bg-white p-4 rounded-2xl border border-gray-100 shadow-sm">
-                    <View className="flex-row items-center gap-2 mb-4">
-                        <View className="bg-emerald-50 p-1.5 rounded-full">
-                            <DollarSign size={16} color="#10B981" />
-                        </View>
-                        <Text className="text-gray-900 font-bold">Saldo Real</Text>
-                    </View>
-                    <DonutChart data={stats.realBalanceData} />
+            {/* Donut Chart Section */}
+            <View className="items-center">
+                <View className="w-full flex-row justify-between items-center mb-4">
+                    <Text className="text-xl font-bold text-gray-900">Visão Geral</Text>
+                    <TouchableOpacity className="bg-gray-100 p-2 rounded-full">
+                        <ArrowUpRight size={20} color="#374151" />
+                    </TouchableOpacity>
+                </View>
+                
+                <View className="items-center justify-center relative py-6">
+                    <PieChart
+                        data={stats.categories}
+                        donut
+                        radius={120}
+                        innerRadius={104}
+                        centerLabelComponent={() => {
+                            return (
+                                <View className="items-center justify-center">
+                                    <Text className="text-gray-400 text-xs font-medium mb-1">Saldo Previsto</Text>
+                                    <Text className="text-gray-900 text-2xl font-bold tracking-tight">
+                                        {formatCurrency(stats.projectedBalance || 0)}
+                                    </Text>
+                                </View>
+                            );
+                        }}
+                        roundedCorners
+                        showValuesAsLabels={false}
+                        showText={false}
+                        strokeColor="#f9fafb"
+                        strokeWidth={6}
+                        focusOnPress
+                        toggleFocusOnPress
+                        shadow
+                        shadowColor="rgba(0,0,0,0.1)"
+                        shadowWidth={10}
+                    />
                 </View>
 
-                {/* Saldo Previsto */}
-                <View className="flex-1 bg-white p-4 rounded-2xl border border-gray-100 shadow-sm">
-                    <View className="flex-row items-center gap-2 mb-4">
-                        <View className="bg-blue-50 p-1.5 rounded-full">
-                            <TrendingUp size={16} color="#3B82F6" />
-                        </View>
-                        <Text className="text-gray-900 font-bold">Saldo Previsto</Text>
-                    </View>
-                    <DonutChart data={stats.forecastBalanceData} />
+                {/* Legend */}
+                <View className="flex-row justify-between w-full px-2 mt-8">
+                    {stats.categories?.map((cat, idx) => {
+                        const total = stats.categories.reduce((sum, c) => sum + c.value, 0);
+                        const percentage = total > 0 ? Math.round((cat.value / total) * 100) : 0;
+                        
+                        return (
+                            <View key={idx} className="flex-col items-center flex-1">
+                                <Text className="text-gray-500 text-[10px] mb-1 text-center" numberOfLines={1}>
+                                    {cat.text}
+                                </Text>
+                                <Text className="text-gray-900 font-bold text-lg mb-1">
+                                    {percentage}%
+                                </Text>
+                                {/* Progress bar */}
+                                <View className="w-12 h-1 bg-gray-200 rounded-full overflow-hidden">
+                                    <View 
+                                        style={{ 
+                                            backgroundColor: cat.color, 
+                                            height: '100%', 
+                                            width: `${percentage}%`,
+                                            borderRadius: 9999
+                                        }} 
+                                    />
+                                </View>
+                            </View>
+                        );
+                    })}
                 </View>
             </View>
 

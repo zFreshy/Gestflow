@@ -3,7 +3,8 @@ import { Button } from '../atoms/Button';
 import { Input } from '../atoms/Input';
 import { Select } from '../atoms/Select';
 import { FormField } from '../molecules/FormField';
-import { X } from 'lucide-react';
+import { X, Building2 } from 'lucide-react';
+import { supabase } from '../../lib/supabase';
 
 export function TransactionForm({ onAddTransaction, onEditTransaction, isOpen, onClose, initialData }) {
     // Helper to get local date in YYYY-MM-DD format
@@ -34,6 +35,10 @@ export function TransactionForm({ onAddTransaction, onEditTransaction, isOpen, o
     const [installments, setInstallments] = useState(''); // New state for installments
     const [isAmountTBD, setIsAmountTBD] = useState(false); // Novo estado
     
+    // Supplier specific states
+    const [supplierId, setSupplierId] = useState('');
+    const [suppliers, setSuppliers] = useState([]);
+    
     // Planned specific states
     const [plannedEntries, setPlannedEntries] = useState([{ dateStr: '', amount: '' }]);
 
@@ -52,10 +57,29 @@ export function TransactionForm({ onAddTransaction, onEditTransaction, isOpen, o
     };
 
     useEffect(() => {
+        const fetchSuppliers = async () => {
+            try {
+                const { data } = await supabase.from('suppliers').select('*').order('name');
+                if (data) setSuppliers(data);
+            } catch (err) {
+                console.error(err);
+            }
+        };
+        fetchSuppliers();
+    }, []);
+
+    useEffect(() => {
         if (isOpen) {
             if (initialData) {
                 // Edit mode: Populate form with initialData
-                setActiveTab(initialData.type);
+                // Check if it's a supplier transaction
+                if (initialData.type === 'expense' && (initialData.supplier_id || initialData.expenseType === 'supplier' || initialData.expense_type === 'supplier')) {
+                    setActiveTab('supplier');
+                    setSupplierId(initialData.supplier_id || '');
+                } else {
+                    setActiveTab(initialData.type);
+                }
+                
                 setDescription(initialData.description);
                 
                 // Lógica para carregar o valor "a definir" se for 0
@@ -115,6 +139,8 @@ export function TransactionForm({ onAddTransaction, onEditTransaction, isOpen, o
                 alert('Preencha todas as datas e valores planejados.');
                 return;
             }
+        } else if (activeTab === 'supplier') {
+            if (!supplierId || !amount || !date) return;
         } else {
             if (!description || (!amount && !isAmountTBD) || !date) return;
         }
@@ -124,17 +150,26 @@ export function TransactionForm({ onAddTransaction, onEditTransaction, isOpen, o
         const formattedDate = `${day}/${month}/${year}`;
         const timestamp = new Date(year, month - 1, day).getTime();
 
+        let finalType = activeTab;
+        let finalExpenseType = expenseType;
+        
+        if (activeTab === 'supplier') {
+            finalType = 'expense';
+            finalExpenseType = 'variable'; // Define como 'variable' para evitar erro de constraint no banco
+        }
+
         const transaction = {
             id: initialData ? initialData.id : crypto.randomUUID(),
             description,
             amount: isAmountTBD ? 0 : parseFloat(amount || 0),
-            type: activeTab, // 'income' or 'expense'
+            type: finalType, // 'income' or 'expense'
             paymentMethod,
             date: formattedDate,
-            timestamp: timestamp
+            timestamp: timestamp,
+            supplier_id: activeTab === 'supplier' ? supplierId : null
         };
 
-        if (activeTab === 'income') {
+        if (finalType === 'income') {
             if (isBakeryIncome) {
                 transaction.isBakeryIncome = true;
                 transaction.clientName = clientName;
@@ -143,8 +178,8 @@ export function TransactionForm({ onAddTransaction, onEditTransaction, isOpen, o
                 transaction.clientName = null;
             }
         } else {
-            transaction.expenseType = expenseType;
-            if (expenseType === 'fixed') {
+            transaction.expenseType = finalExpenseType;
+            if (finalExpenseType === 'fixed') {
                 transaction.recurrence = recurrence;
                 transaction.active = isActive;
                 transaction.end_date = !isActive && endDate ? endDate : null;
@@ -156,7 +191,7 @@ export function TransactionForm({ onAddTransaction, onEditTransaction, isOpen, o
                 if (installments && parseInt(installments) > 1 && !initialData) {
                     transaction.installments = parseInt(installments);
                 }
-            } else if (expenseType === 'planned' && !initialData) {
+            } else if (finalExpenseType === 'planned' && !initialData) {
                 transaction.plannedEntries = plannedEntries;
             } else {
                 transaction.recurrence = null;
@@ -196,39 +231,55 @@ export function TransactionForm({ onAddTransaction, onEditTransaction, isOpen, o
                 </div>
 
                 {/* Tabs */}
-                <div className="flex border-b px-6 shrink-0">
-                    <button
-                        className={`pb-2 px-4 text-sm font-medium border-b-2 transition-colors ${
-                            activeTab === 'income' 
-                                ? 'border-emerald-500 text-emerald-600' 
-                                : 'border-transparent text-muted-foreground hover:text-foreground'
-                        }`}
-                        onClick={() => setActiveTab('income')}
-                    >
-                        Lucro
-                    </button>
-                    <button
-                        className={`pb-2 px-4 text-sm font-medium border-b-2 transition-colors ${
-                            activeTab === 'expense' 
-                                ? 'border-red-500 text-red-600' 
-                                : 'border-transparent text-muted-foreground hover:text-foreground'
-                        }`}
-                        onClick={() => setActiveTab('expense')}
-                    >
-                        Despesa
-                    </button>
+                <div className="flex bg-gray-100 p-1.5 mx-6 mt-4 rounded-xl gap-1 shrink-0 overflow-x-auto">
+                    {[
+                        { id: 'expense', label: 'Despesa' },
+                        { id: 'income', label: 'Lucro' },
+                        { id: 'supplier', label: 'Fornecedor' }
+                    ].map((tab) => (
+                        <button
+                            key={tab.id}
+                            onClick={() => setActiveTab(tab.id)}
+                            className={`flex-1 py-2 px-4 text-sm font-semibold rounded-lg transition-all whitespace-nowrap ${
+                                activeTab === tab.id
+                                    ? tab.id === 'income' ? 'bg-emerald-500 text-white shadow-sm' : 
+                                      tab.id === 'supplier' ? 'bg-blue-600 text-white shadow-sm' : 'bg-red-500 text-white shadow-sm'
+                                    : 'text-gray-500 hover:text-gray-700 hover:bg-gray-200'
+                            }`}
+                        >
+                            {tab.label}
+                        </button>
+                    ))}
                 </div>
 
                 {/* Modal Body */}
                 <form onSubmit={handleSubmit} className="p-6 space-y-4 overflow-y-auto">
                     
                     {/* Common Fields */}
-                    <FormField label="Descrição">
+                    {activeTab === 'supplier' && (
+                        <FormField label="Fornecedor">
+                            <Select
+                                value={supplierId}
+                                onChange={(e) => {
+                                    setSupplierId(e.target.value);
+                                    const supp = suppliers.find(s => s.id === e.target.value);
+                                    if (supp) setDescription(`Compra: ${supp.name}`);
+                                }}
+                                required
+                            >
+                                <option value="" disabled>Selecione um fornecedor</option>
+                                {suppliers.map(s => (
+                                    <option key={s.id} value={s.id}>{s.name}</option>
+                                ))}
+                            </Select>
+                        </FormField>
+                    )}
+                    <FormField label={activeTab === 'supplier' ? 'Descrição / Itens (Opcional)' : 'Descrição'}>
                         <Input
-                            placeholder={activeTab === 'income' ? "Ex: Venda de Produto" : "Ex: Conta de Luz"}
+                            placeholder={activeTab === 'supplier' ? 'Ex: 10 sacos de farinha' : activeTab === 'income' ? "Ex: Venda de Produto" : "Ex: Conta de Luz"}
                             value={description}
                             onChange={(e) => setDescription(e.target.value)}
-                            required
+                            required={activeTab !== 'supplier'}
                         />
                     </FormField>
 

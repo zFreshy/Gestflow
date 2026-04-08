@@ -10,6 +10,7 @@ import { TransactionsPage } from './components/pages/TransactionsPage';
 import { CalendarPage } from './components/pages/CalendarPage';
 import { TransactionForm } from './components/organisms/TransactionForm';
 import { FixedExpensesPage } from './components/pages/FixedExpensesPage';
+import { SuppliersPage } from './components/pages/SuppliersPage';
 import { supabase } from './lib/supabase';
 
 function PrivateRoute({ children }) {
@@ -91,7 +92,7 @@ function AppContent() {
       
       let query = supabase
         .from('transactions')
-        .select('id, description, amount, type, payment_method, date, subtitle, client_name, is_bakery_income, recurrence, exam, health_plan, status, expense_type, interest_rate, active, end_date, user_email, created_at', { count: 'exact' })
+        .select('id, description, amount, type, payment_method, date, subtitle, client_name, is_bakery_income, recurrence, exam, health_plan, status, expense_type, interest_rate, active, end_date, user_email, created_at, installments, current_installment, supplier_id', { count: 'exact' })
         .order('date', { ascending: false });
 
       let start = 0;
@@ -181,7 +182,8 @@ function AppContent() {
         expense_type: newTransaction.expenseType,
         user_id: user.id,
         user_email: getEmailFromStorage(),
-        installments: newTransaction.installments || null
+        installments: newTransaction.installments || null,
+        supplier_id: newTransaction.supplier_id || null
       };
 
       console.log("Saving transaction with email:", transactionToSave.user_email);
@@ -336,7 +338,8 @@ function AppContent() {
         status: updatedTransaction.status || (updatedTransaction.id ? (transactions.find(t => t.id === updatedTransaction.id)?.status) : 'Aguardando'), // Preserve status if editing
         expense_type: updatedTransaction.expenseType,
         active: updatedTransaction.active,
-        end_date: updatedTransaction.end_date // Pass end_date to DB
+        end_date: updatedTransaction.end_date, // Pass end_date to DB
+        supplier_id: updatedTransaction.supplier_id || null
       };
 
       // Check if it's a virtual transaction (ID starts with 'virtual-')
@@ -660,6 +663,14 @@ function AppContent() {
                       onAddTransaction={handleAddTransaction}
                       onEdit={openEditForm} 
                       onDelete={handleDeleteTransaction} 
+                    />
+                  } 
+                />
+                <Route 
+                  path="/suppliers" 
+                  element={
+                    <SuppliersPage 
+                      transactions={transactions} 
                     />
                   } 
                 />

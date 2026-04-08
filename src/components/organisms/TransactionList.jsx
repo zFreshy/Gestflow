@@ -113,7 +113,9 @@ export function TransactionList({ transactions, onEdit, onDelete, onBatchDelete,
         } else if (filterType === 'bakery_income') {
             matchesType = t.type === 'income' && t.isBakeryIncome === true;
         } else if (filterType === 'expense') {
-            matchesType = t.type === 'expense';
+            matchesType = t.type === 'expense' && !t.supplier_id && t.expenseType !== 'supplier' && t.expense_type !== 'supplier';
+        } else if (filterType === 'supplier') {
+            matchesType = t.type === 'expense' && (t.supplier_id || t.expenseType === 'supplier' || t.expense_type === 'supplier');
         }
         
         const matchesMethod = filterMethod === 'all' || t.paymentMethod === filterMethod;
@@ -288,7 +290,8 @@ export function TransactionList({ transactions, onEdit, onDelete, onBatchDelete,
                             <option value="all">Todos os Tipos</option>
                             <option value="income">Entradas (Todas)</option>
                             <option value="bakery_income">Entradas (Só Padaria)</option>
-                            <option value="expense">Saídas (Despesas)</option>
+                            <option value="expense">Saídas (Despesas Gerais)</option>
+                            <option value="supplier">Saídas (Fornecedores)</option>
                         </Select>
                         <Select value={filterMethod} onChange={(e) => setFilterMethod(e.target.value)}>
                             <option value="all">Todos os Métodos</option>
@@ -410,6 +413,11 @@ export function TransactionList({ transactions, onEdit, onDelete, onBatchDelete,
                                                         {t.expenseType === 'fixed' && (
                                                             <span className="text-xs text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded">
                                                                 Fixa
+                                                            </span>
+                                                        )}
+                                                        {(t.supplier_id || t.expenseType === 'supplier' || t.expense_type === 'supplier') && (
+                                                            <span className="text-xs text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded">
+                                                                Fornecedor
                                                             </span>
                                                         )}
                                                         {t.user_email && (

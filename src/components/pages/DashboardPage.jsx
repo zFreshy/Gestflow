@@ -208,7 +208,7 @@ export function DashboardPage({ transactions }) {
                     icon={DollarSign}
                     accent="green"
                 >
-                    <div className="mt-2 h-28 w-full relative z-10">
+                    <div className="mt-2 min-h-[7rem] w-full relative z-10">
                         <DonutChart transactions={transactions} type="real_balance" />
                     </div>
                 </StatCard>
@@ -219,7 +219,7 @@ export function DashboardPage({ transactions }) {
                     icon={TrendingUp}
                     accent="blue"
                 >
-                    <div className="mt-2 h-28 w-full relative z-10">
+                    <div className="mt-2 min-h-[7rem] w-full relative z-10">
                         <DonutChart transactions={[...transactions, ...virtualExpenses]} type="forecast_balance" />
                     </div>
                 </StatCard>
@@ -364,19 +364,14 @@ export function DashboardPage({ transactions }) {
 
             {/* Bottom Stats Row - Secondary Info */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 pb-10">
-                {/* Card 1 — Pacientes (Total) */}
+                {/* Card 1 — Lucros por Convênio */}
                 <StatCard
-                    title="Clientes"
-                    icon={Users}
+                    title="Lucros por Convênio"
+                    icon={DollarSign}
                     accent="blue"
                 >
-                    <div className="flex flex-col items-center justify-center py-2 h-full relative z-10">
-                        <span className="text-4xl font-extrabold tracking-tight text-gray-900">268</span>
-                        <p className="text-xs text-gray-500 font-medium mt-1">Total Ativos</p>
-                    </div>
-                    <div className="flex items-center justify-between text-xs mt-4 pt-4 border-t border-gray-100/80 relative z-10">
-                        <span className="text-emerald-500 font-semibold bg-emerald-50 px-2 py-0.5 rounded-md">+12 novos</span>
-                        <span className="text-emerald-500 font-bold flex items-center gap-0.5"><TrendingUp className="h-3 w-3" /> 43%</span>
+                    <div className="mt-2 min-h-[7rem] w-full relative z-10">
+                        <DonutChart transactions={transactions} type="payment_methods" />
                     </div>
                 </StatCard>
 

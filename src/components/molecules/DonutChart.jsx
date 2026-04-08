@@ -11,13 +11,20 @@ const COLORS = [
 
 const METHOD_LABELS = {
     pix: 'Pix',
-    cartao: 'Cartão',
+    cartao: 'Cartão de Crédito',
+    debito: 'Cartão de Débito',
     dinheiro: 'Dinheiro',
+    credito_loja: 'Crédito Loja (fiado)',
+    vale_alimentacao: 'Vale Alimentação',
+    vale_combustivel: 'Vale Combustível',
+    diversos: 'Diversos',
+    outro: 'Outro'
 };
 
 const getFillColor = (name, index) => {
-    if (name === 'Entradas' || name === 'Receitas') return 'hsl(142, 71%, 45%)'; // green
+    if (name === 'Entradas' || name === 'Receitas') return 'hsl(142, 71%, 45%)'; // emerald
     if (name === 'Saídas' || name === 'Despesas') return 'hsl(0, 84%, 60%)'; // red
+    if (name === 'Fornecedores') return 'hsl(221, 83%, 53%)'; // blue
     if (name === 'Padaria') return 'hsl(38, 92%, 50%)'; // amber
     if (name === 'Consultório') return 'hsl(221, 83%, 53%)'; // blue
     if (name === 'Fixas') return 'hsl(280, 67%, 60%)'; // purple
@@ -33,7 +40,7 @@ export function DonutChart({ transactions, type = 'payment_methods' }) {
             grouped = transactions.reduce((acc, t) => {
                 if (t.type === 'income') {
                     const method = t.paymentMethod || 'outro';
-                    acc[method] = (acc[method] || 0) + 1;
+                    acc[method] = (acc[method] || 0) + t.amount;
                 }
                 return acc;
             }, {});
@@ -54,24 +61,32 @@ export function DonutChart({ transactions, type = 'payment_methods' }) {
                 }
             });
         } else if (type === 'real_balance') {
-            grouped = { 'Entradas': 0, 'Saídas': 0 };
+            grouped = { 'Entradas': 0, 'Saídas': 0, 'Fornecedores': 0 };
             const isPaid = (status) => ['Pago', 'Liberado'].includes(status);
             transactions.forEach(t => {
                 if (t.type === 'income') {
                     grouped['Entradas'] += t.amount;
                 } else if (t.type === 'expense') {
                     if (t.expenseType === 'variable' || isPaid(t.status)) {
-                        grouped['Saídas'] += t.amount;
+                        if (t.supplier_id || t.expenseType === 'supplier' || t.expense_type === 'supplier') {
+                            grouped['Fornecedores'] += t.amount;
+                        } else {
+                            grouped['Saídas'] += t.amount;
+                        }
                     }
                 }
             });
         } else if (type === 'forecast_balance') {
-            grouped = { 'Entradas': 0, 'Saídas': 0 };
+            grouped = { 'Entradas': 0, 'Saídas': 0, 'Fornecedores': 0 };
             transactions.forEach(t => {
                 if (t.type === 'income') {
                     grouped['Entradas'] += t.amount;
                 } else if (t.type === 'expense') {
-                    grouped['Saídas'] += t.amount;
+                    if (t.supplier_id || t.expenseType === 'supplier' || t.expense_type === 'supplier') {
+                        grouped['Fornecedores'] += t.amount;
+                    } else {
+                        grouped['Saídas'] += t.amount;
+                    }
                 }
             });
         }
@@ -97,7 +112,6 @@ export function DonutChart({ transactions, type = 'payment_methods' }) {
     }
 
     const formatValue = (value) => {
-        if (type === 'payment_methods') return value;
         return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
     };
 
@@ -115,6 +129,9 @@ export function DonutChart({ transactions, type = 'payment_methods' }) {
 
     const pieData = total === 0 ? [{ name: 'Vazio', value: 1 }] : data;
 
+    const showBalance = type === 'real_balance' || type === 'forecast_balance';
+    const balance = showBalance ? (data.find(d => d.name === 'Entradas')?.value || 0) - (data.find(d => d.name === 'Saídas')?.value || 0) - (data.find(d => d.name === 'Fornecedores')?.value || 0) : 0;
+
     return (
         <div className="flex items-center gap-6 h-full w-full">
             <div className="flex-1 min-w-0">
@@ -129,10 +146,24 @@ export function DonutChart({ transactions, type = 'payment_methods' }) {
                                 <span className="font-medium text-gray-700 truncate">{entry.name}</span>
                             </div>
                             <span className="text-gray-500 font-medium shrink-0">
-                                {type === 'payment_methods' ? entry.value : formatValue(entry.value)}
+                                {formatValue(entry.value)}
                             </span>
                         </div>
                     ))}
+                    {showBalance && (
+                        <div className="flex items-center justify-between text-sm pt-2 border-t border-gray-100">
+                            <div className="flex items-center gap-2 truncate pr-2">
+                                <div
+                                    className="h-3 w-3 rounded-full shrink-0"
+                                    style={{ backgroundColor: 'transparent' }}
+                                />
+                                <span className="font-bold text-gray-800 truncate">Saldo</span>
+                            </div>
+                            <span className={`font-bold shrink-0 ${balance >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                                {formatValue(balance)}
+                            </span>
+                        </div>
+                    )}
                 </div>
             </div>
             <div className="relative h-28 w-28 shrink-0 flex items-center justify-center">
@@ -155,11 +186,6 @@ export function DonutChart({ transactions, type = 'payment_methods' }) {
                         <Tooltip content={<CustomTooltip />} />
                     </PieChart>
                 </ResponsiveContainer>
-                {type === 'payment_methods' && (
-                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                        <span className="text-lg font-bold">{total}</span>
-                    </div>
-                )}
             </div>
         </div>
     );

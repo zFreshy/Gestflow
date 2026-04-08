@@ -28,6 +28,59 @@ export const transactionService = {
   },
 
   async create(transaction) {
+    let t = transaction;
+    // Handle Installments
+    if (t.installments && t.installments > 1) {
+        const installmentCount = t.installments;
+        const installmentAmount = Number((t.amount / installmentCount).toFixed(2));
+        
+        // Adjust for rounding error in last installment
+        const totalCalculated = installmentAmount * (installmentCount - 1);
+        const lastInstallmentAmount = Number((t.amount - totalCalculated).toFixed(2));
+
+        const transactionsToInsert = [];
+        const [year, month, day] = t.date.split('-');
+        let currentDate = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+
+        for (let i = 1; i <= installmentCount; i++) {
+            const currentAmount = i === installmentCount ? lastInstallmentAmount : installmentAmount;
+            
+            const installDate = new Date(currentDate);
+            
+            // Se a recorrência original for semanal, adiciona semanas em vez de meses
+            if (t.recurrence === 'weekly') {
+                if (i > 1) {
+                    installDate.setDate(installDate.getDate() + ((i - 1) * 7));
+                }
+            } else {
+                // Adicionar meses (recorrência mensal padrão para parcelamento)
+                if (i > 1) {
+                    installDate.setMonth(installDate.getMonth() + (i - 1));
+                }
+            }
+
+            const formattedInstallDate = `${installDate.getFullYear()}-${String(installDate.getMonth() + 1).padStart(2, '0')}-${String(installDate.getDate()).padStart(2, '0')}`;
+
+            transactionsToInsert.push({
+                ...t,
+                amount: currentAmount,
+                date: formattedInstallDate,
+                current_installment: i,
+                active: i === installmentCount ? false : true,
+                end_date: formattedInstallDate,
+                recurrence: null
+            });
+        }
+
+        const { data, error } = await supabase
+          .from('transactions')
+          .insert(transactionsToInsert)
+          .select();
+
+        if (error) throw error;
+        return data;
+    }
+
     const { data, error } = await supabase
       .from('transactions')
       .insert([transaction])

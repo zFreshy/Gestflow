@@ -529,8 +529,9 @@ function AppContent() {
       
       // If paying, we might update date and amount
       if (newStatus === 'Pago') {
-          if (paymentDate && transaction?.expenseType !== 'fixed') {
-            // Update date for non-fixed expenses only to avoid breaking recurrence and shifting months.
+          if (paymentDate) {
+            // Update date. For fixed expenses, user requested that the payment date SHOULD OVERRIDE
+            // the original due date.
             if (paymentDate.includes('/')) {
                 const [day, month, year] = paymentDate.split('/');
                 updates.date = `${year}-${month}-${day}`; 

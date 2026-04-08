@@ -103,9 +103,11 @@ export function FixedExpensesPage({ transactions, onUpdateStatus, onAddTransacti
             // Create new transaction for virtual expense
             // We use the ORIGINAL DUE DATE to keep the transaction in the correct month
             // and preserve the correct day for future recurrences!
+            // WAIT: The user specifically requested that the payment date provided in the modal 
+            // should OVERRIDE the original due date when confirming payment.
             
             // Format date to DD/MM/YYYY if it's not already
-            let formattedDate = selectedPayment.date; 
+            let formattedDate = date || selectedPayment.date; 
             if (formattedDate && formattedDate.includes('-')) {
                 const [year, month, day] = formattedDate.split('-');
                 formattedDate = `${day}/${month}/${year}`;
@@ -132,7 +134,9 @@ export function FixedExpensesPage({ transactions, onUpdateStatus, onAddTransacti
         } else {
             // For real fixed expenses, we DO NOT change the date, we pass null for paymentDate
             // so App.jsx's handleUpdateStatus keeps the original due date.
-            onUpdateStatus(id, status, null, interest, amountToSave);
+            // WAIT: The user specifically requested that the payment date provided in the modal 
+            // should OVERRIDE the original due date when confirming payment.
+            onUpdateStatus(id, status, date, interest, amountToSave);
         }
         setSelectedPayment(null);
     };

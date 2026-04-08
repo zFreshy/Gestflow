@@ -36,7 +36,7 @@ export function PaymentModal({ transaction, onClose, onConfirm }) {
         const formattedDate = `${day}/${month}/${year}`;
         
         const interest = interestAmount ? parseFloat(interestAmount) : 0;
-        const finalAmountValue = actualAmount ? parseFloat(actualAmount) : transaction.amount;
+        const finalAmountValue = actualAmount !== '' ? parseFloat(actualAmount) : transaction.amount;
         
         onConfirm(transaction.id, 'Pago', formattedDate, interest, finalAmountValue);
         onClose();
@@ -97,6 +97,36 @@ export function PaymentModal({ transaction, onClose, onConfirm }) {
                                 Esta despesa estava marcada como "A definir". Por favor, informe o valor pago.
                             </p>
                         )}
+                    </div>
+
+                    {/* Date Selection */}
+                    <div className="space-y-3">
+                        <label className="text-sm font-medium text-gray-700 block">
+                            Data do Pagamento
+                        </label>
+                        <div className="flex items-center gap-3">
+                            <div className="relative flex-1">
+                                <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                                <input
+                                    type="date"
+                                    className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-gray-200 focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none transition-all text-gray-900 font-medium"
+                                    value={paymentDate}
+                                    onChange={handleDateChange}
+                                    required
+                                />
+                            </div>
+                            <button
+                                type="button"
+                                onClick={setToday}
+                                className={`px-4 py-2.5 rounded-xl font-medium text-sm transition-colors border ${
+                                    useToday 
+                                        ? 'bg-purple-50 border-purple-200 text-purple-700' 
+                                        : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'
+                                }`}
+                            >
+                                Hoje
+                            </button>
+                        </div>
                     </div>
 
                     {/* Interest Amount */}

@@ -212,7 +212,7 @@ export function FixedExpensesSummaryModal({ isOpen, onClose, transactions }) {
                                             {item.current_installment ? `Parcela ${item.current_installment}` : 'Ocorrência'}
                                         </span>
                                         <span className={cn("font-bold", paid ? "text-gray-900" : "text-gray-500")}>
-                                            {formatCurrency(item.amount)}
+                                            {item.amount === 0 ? 'A definir' : formatCurrency(item.amount)}
                                         </span>
                                     </div>
                                 </div>

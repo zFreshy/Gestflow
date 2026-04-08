@@ -424,7 +424,7 @@ export function TransactionList({ transactions, onEdit, onDelete, onBatchDelete,
                                             <div className="flex items-center gap-6">
                                                 <div className="text-right">
                                                     <span className={`block font-bold ${isIncome ? 'text-emerald-600' : 'text-red-600'}`}>
-                                                        {isIncome ? '+' : '-'} {formattedAmount}
+                                                        {isIncome ? '+' : '-'} {t.amount === 0 ? 'A definir' : formattedAmount}
                                                     </span>
                                                     <span className={`text-xs font-medium ${statusColor}`}>
                                                         {statusLabel}

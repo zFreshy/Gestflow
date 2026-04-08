@@ -32,6 +32,7 @@ export function TransactionForm({ onAddTransaction, onEditTransaction, isOpen, o
     const [isActive, setIsActive] = useState(true);
     const [endDate, setEndDate] = useState(''); // New state for end date
     const [installments, setInstallments] = useState(''); // New state for installments
+    const [isAmountTBD, setIsAmountTBD] = useState(false); // Novo estado
     
     // Planned specific states
     const [plannedEntries, setPlannedEntries] = useState([{ dateStr: '', amount: '' }]);
@@ -56,7 +57,16 @@ export function TransactionForm({ onAddTransaction, onEditTransaction, isOpen, o
                 // Edit mode: Populate form with initialData
                 setActiveTab(initialData.type);
                 setDescription(initialData.description);
-                setAmount(initialData.amount.toString());
+                
+                // Lógica para carregar o valor "a definir" se for 0
+                if (initialData.type === 'expense' && initialData.amount === 0) {
+                    setIsAmountTBD(true);
+                    setAmount('');
+                } else {
+                    setAmount(initialData.amount.toString());
+                    setIsAmountTBD(false);
+                }
+                
                 setPaymentMethod(initialData.paymentMethod || initialData.payment_method);
                 
                 // Convert DD/MM/YYYY back to YYYY-MM-DD for input[type="date"]
@@ -106,7 +116,7 @@ export function TransactionForm({ onAddTransaction, onEditTransaction, isOpen, o
                 return;
             }
         } else {
-            if (!description || !amount || !date) return;
+            if (!description || (!amount && !isAmountTBD) || !date) return;
         }
 
         // Convert YYYY-MM-DD to DD/MM/YYYY
@@ -117,7 +127,7 @@ export function TransactionForm({ onAddTransaction, onEditTransaction, isOpen, o
         const transaction = {
             id: initialData ? initialData.id : crypto.randomUUID(),
             description,
-            amount: parseFloat(amount || 0),
+            amount: isAmountTBD ? 0 : parseFloat(amount || 0),
             type: activeTab, // 'income' or 'expense'
             paymentMethod,
             date: formattedDate,
@@ -232,8 +242,26 @@ export function TransactionForm({ onAddTransaction, onEditTransaction, isOpen, o
                                     placeholder="0.00"
                                     value={amount}
                                     onChange={(e) => setAmount(e.target.value)}
-                                    required
+                                    required={!isAmountTBD}
+                                    disabled={isAmountTBD}
                                 />
+                                {activeTab === 'expense' && expenseType === 'fixed' && (
+                                    <div className="flex items-center gap-2 mt-2">
+                                        <input
+                                            type="checkbox"
+                                            id="isAmountTBD"
+                                            checked={isAmountTBD}
+                                            onChange={(e) => {
+                                                setIsAmountTBD(e.target.checked);
+                                                if (e.target.checked) setAmount('');
+                                            }}
+                                            className="w-4 h-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500"
+                                        />
+                                        <label htmlFor="isAmountTBD" className="text-sm font-medium text-gray-700">
+                                            Valor a definir
+                                        </label>
+                                    </div>
+                                )}
                             </FormField>
 
                             <FormField label="Data">

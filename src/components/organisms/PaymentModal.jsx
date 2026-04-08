@@ -18,17 +18,27 @@ export function PaymentModal({ transaction, onClose, onConfirm }) {
     const [paymentDate, setPaymentDate] = useState(todayStr);
     const [interestAmount, setInterestAmount] = useState('');
     const [useToday, setUseToday] = useState(true);
+    const [actualAmount, setActualAmount] = useState(transaction?.amount || '');
+
+    // Se o amount original for 0, sabemos que é "A Definir"
+    const isAmountTBD = transaction?.amount === 0;
 
     const handleSubmit = (e) => {
         e.preventDefault();
+        
+        if (isAmountTBD && (!actualAmount || parseFloat(actualAmount) <= 0)) {
+            alert('Por favor, informe o valor pago.');
+            return;
+        }
         
         // Format date to DD/MM/YYYY
         const [year, month, day] = paymentDate.split('-');
         const formattedDate = `${day}/${month}/${year}`;
         
         const interest = interestAmount ? parseFloat(interestAmount) : 0;
+        const finalAmountValue = actualAmount ? parseFloat(actualAmount) : transaction.amount;
         
-        onConfirm(transaction.id, 'Pago', formattedDate, interest);
+        onConfirm(transaction.id, 'Pago', formattedDate, interest, finalAmountValue);
         onClose();
     };
 
@@ -64,32 +74,29 @@ export function PaymentModal({ transaction, onClose, onConfirm }) {
                 </div>
 
                 <form onSubmit={handleSubmit} className="p-6 space-y-6">
-                    {/* Date Selection */}
+                    {/* Final Amount Input (if TBD or optionally to change it) */}
                     <div className="space-y-3">
-                        <label className="text-sm font-medium text-gray-700 block">Quando foi pago?</label>
-                        
-                        <div className="flex gap-3">
-                            <button
-                                type="button"
-                                onClick={setToday}
-                                className={`flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl border text-sm font-medium transition-all ${
-                                    useToday 
-                                        ? 'bg-emerald-50 border-emerald-200 text-emerald-700' 
-                                        : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'
-                                }`}
-                            >
-                                <Calendar className="h-4 w-4" />
-                                Hoje
-                            </button>
-                            <div className="flex-1">
-                                <Input 
-                                    type="date" 
-                                    value={paymentDate}
-                                    onChange={handleDateChange}
-                                    className={`h-[42px] ${!useToday ? 'border-emerald-500 ring-1 ring-emerald-500' : ''}`}
-                                />
-                            </div>
+                        <label className="text-sm font-medium text-gray-700 block">
+                            {isAmountTBD ? 'Valor da Despesa (A definir)' : 'Valor da Despesa'}
+                        </label>
+                        <div className="relative">
+                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 font-medium">R$</span>
+                            <input
+                                type="number"
+                                step="0.01"
+                                min="0.01"
+                                value={actualAmount}
+                                onChange={(e) => setActualAmount(e.target.value)}
+                                className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-gray-200 focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none transition-all text-gray-900 font-medium"
+                                placeholder={isAmountTBD ? "0,00" : transaction.amount.toFixed(2)}
+                                required={isAmountTBD}
+                            />
                         </div>
+                        {isAmountTBD && (
+                            <p className="text-xs text-amber-600">
+                                Esta despesa estava marcada como "A definir". Por favor, informe o valor pago.
+                            </p>
+                        )}
                     </div>
 
                     {/* Interest Amount */}

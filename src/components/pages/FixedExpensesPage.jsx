@@ -96,38 +96,43 @@ export function FixedExpensesPage({ transactions, onUpdateStatus, onAddTransacti
         }
     };
 
-    const confirmPayment = (id, status, date, interest) => {
+    const confirmPayment = (id, status, date, interest, finalAmount) => {
+        const amountToSave = finalAmount !== undefined ? finalAmount : selectedPayment.amount;
+
         if (selectedPayment?.isVirtual) {
             // Create new transaction for virtual expense
-            // We use the payment date selected in the modal as the transaction date
+            // We use the ORIGINAL DUE DATE to keep the transaction in the correct month
+            // and preserve the correct day for future recurrences!
             
-            // Format date to YYYY-MM-DD for DB insertion if it comes as DD/MM/YYYY
-            let formattedDate = date;
-            if (date && date.includes('/')) {
-                const [day, month, year] = date.split('/');
-                formattedDate = `${year}-${month}-${day}`;
+            // Format date to DD/MM/YYYY if it's not already
+            let formattedDate = selectedPayment.date; 
+            if (formattedDate && formattedDate.includes('-')) {
+                const [year, month, day] = formattedDate.split('-');
+                formattedDate = `${day}/${month}/${year}`;
             }
 
             const newTransaction = {
                 description: selectedPayment.description,
-                amount: selectedPayment.amount + (interest || 0),
+                amount: amountToSave + (interest || 0),
                 type: 'expense',
                 paymentMethod: selectedPayment.payment_method || selectedPayment.paymentMethod || 'pix',
-                date: formattedDate, // Ensure it's in YYYY-MM-DD for DB
+                date: formattedDate, // This will be passed to App.jsx which expects DD/MM/YYYY
                 clientName: selectedPayment.client_name,
                 isBakeryIncome: false,
                 recurrence: selectedPayment.recurrence,
                 expenseType: 'fixed',
                 status: 'Pago',
                 active: true,
-                interestRate: interest ? (interest / selectedPayment.amount) * 100 : 0
+                interestRate: interest ? (interest / amountToSave) * 100 : 0
             };
             
             if (onAddTransaction) {
                 onAddTransaction(newTransaction);
             }
         } else {
-            onUpdateStatus(id, status, date, interest);
+            // For real fixed expenses, we DO NOT change the date, we pass null for paymentDate
+            // so App.jsx's handleUpdateStatus keeps the original due date.
+            onUpdateStatus(id, status, null, interest, amountToSave);
         }
         setSelectedPayment(null);
     };
@@ -423,10 +428,10 @@ export function FixedExpensesPage({ transactions, onUpdateStatus, onAddTransacti
                 <div className="flex items-center gap-6">
                     <div className="text-right">
                         <span className={cn(
-                            "block font-semibold text-sm",
+                            "font-bold md:text-lg",
                             paid ? "text-gray-400 line-through" : "text-red-600"
                         )}>
-                            {formatCurrency(expense.amount)}
+                            {expense.amount === 0 ? 'A definir' : formatCurrency(expense.amount)}
                         </span>
                         <span className={cn(
                             "text-[10px] px-2 py-0.5 rounded-full font-medium",

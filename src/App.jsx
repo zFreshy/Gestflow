@@ -158,9 +158,12 @@ function AppContent() {
 
   const handleAddTransaction = async (newTransaction) => {
     try {
-      // Convert DD/MM/YYYY to YYYY-MM-DD
-      const [day, month, year] = newTransaction.date.split('/');
-      const formattedDate = `${year}-${month}-${day}`;
+      // Safely handle both DD/MM/YYYY and YYYY-MM-DD
+      let formattedDate = newTransaction.date;
+      if (newTransaction.date && newTransaction.date.includes('/')) {
+          const [day, month, year] = newTransaction.date.split('/');
+          formattedDate = `${year}-${month}-${day}`;
+      }
 
       const transactionToSave = {
         description: newTransaction.description,
@@ -311,9 +314,12 @@ function AppContent() {
 
   const handleEditTransaction = async (updatedTransaction) => {
     try {
-      // Convert DD/MM/YYYY to YYYY-MM-DD
-      const [day, month, year] = updatedTransaction.date.split('/');
-      const formattedDate = `${year}-${month}-${day}`;
+      // Safely handle both DD/MM/YYYY and YYYY-MM-DD
+      let formattedDate = updatedTransaction.date;
+      if (updatedTransaction.date && updatedTransaction.date.includes('/')) {
+          const [day, month, year] = updatedTransaction.date.split('/');
+          formattedDate = `${year}-${month}-${day}`;
+      }
 
       const transactionToUpdate = {
         description: updatedTransaction.description,
@@ -513,17 +519,15 @@ function AppContent() {
     }
   };
 
-  const handleUpdateStatus = async (transactionId, newStatus, paymentDate = null, interestAmount = 0) => {
+  const handleUpdateStatus = async (transactionId, newStatus, paymentDate = null, interestAmount = 0, finalAmount = undefined) => {
     try {
       const updates = { status: newStatus };
       const transaction = transactions.find(t => t.id === transactionId);
       
       // If paying, we might update date and amount
       if (newStatus === 'Pago') {
-          if (paymentDate) {
-            // Update date regardless of expense type. 
-            // Previous logic prevented fixed expenses from updating their date, causing UI confusion.
-            // Check if paymentDate is already DD/MM/YYYY or YYYY-MM-DD
+          if (paymentDate && transaction?.expenseType !== 'fixed') {
+            // Update date for non-fixed expenses only to avoid breaking recurrence and shifting months.
             if (paymentDate.includes('/')) {
                 const [day, month, year] = paymentDate.split('/');
                 updates.date = `${year}-${month}-${day}`; 
@@ -532,7 +536,12 @@ function AppContent() {
             }
           }
 
-          if (interestAmount > 0) {
+          if (finalAmount !== undefined) {
+             updates.amount = finalAmount + interestAmount;
+             if (transaction) {
+                 updates.interest_rate = transaction.amount > 0 ? (interestAmount / transaction.amount) * 100 : 0;
+             }
+          } else if (interestAmount > 0) {
              if (transaction) {
                 updates.amount = transaction.amount + interestAmount;
                 // Add interest_rate field update if needed, similar to mobile

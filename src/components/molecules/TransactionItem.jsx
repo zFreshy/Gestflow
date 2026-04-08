@@ -30,7 +30,7 @@ const METHOD_LABELS = {
     diversos: 'Diversos',
 };
 
-export function TransactionItem({ transaction, onPress, onEdit, onDelete, isSelected, isSelectionMode }) {
+export function TransactionItem({ transaction, onPress, onEdit, onDelete, isSelected, isSelectionMode, showDate }) {
   const [isMenuVisible, setIsMenuVisible] = useState(false);
   const isIncome = transaction.type === 'income';
   
@@ -139,9 +139,20 @@ export function TransactionItem({ transaction, onPress, onEdit, onDelete, isSele
                     </Text>
                 )}
                 {isVirtual && <Text className="text-amber-600 text-xs font-normal"> (Prev)</Text>}
+                {(transaction.supplier_id || transaction.expenseType === 'supplier' || transaction.expense_type === 'supplier') && (
+                    <Text className="text-blue-600 text-xs font-normal ml-1"> [Fornecedor]</Text>
+                )}
             </Text>
             
             <View className="flex-row items-center mt-0.5 flex-wrap">
+                {showDate && transaction.date && (
+                    <>
+                        <Text className="text-[10px] font-bold text-gray-700">
+                            {formatDate(transaction.date)}
+                        </Text>
+                        <Text className="text-[10px] text-gray-300 mx-1">•</Text>
+                    </>
+                )}
                 <Text className={cn("text-[10px] font-medium", isOverdue && !isPaid ? "text-red-500" : "text-gray-500")}>
                     {METHOD_LABELS[transaction.paymentMethod] || transaction.paymentMethod}
                 </Text>

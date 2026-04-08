@@ -116,8 +116,12 @@ export function TransactionsPage({ navigation }) {
     if (filter !== 'all') {
       if (filter === 'bakery_income') {
         result = result.filter(t => t.type === 'income' && t.is_bakery_income === true);
-      } else {
-        result = result.filter(t => t.type === filter);
+      } else if (filter === 'income') {
+        result = result.filter(t => t.type === 'income');
+      } else if (filter === 'expense') {
+        result = result.filter(t => t.type === 'expense' && !t.supplier_id && t.expenseType !== 'supplier' && t.expense_type !== 'supplier');
+      } else if (filter === 'supplier') {
+        result = result.filter(t => t.type === 'expense' && (t.supplier_id || t.expenseType === 'supplier' || t.expense_type === 'supplier'));
       }
     }
 
@@ -568,6 +572,8 @@ export function TransactionsPage({ navigation }) {
                     </Text>
                 </TouchableOpacity>
                 <FilterTab label="Saídas" value="expense" activeValue={filter} onPress={setFilter} />
+                <FilterTab label="Fornecedor" value="supplier" activeValue={filter} onPress={setFilter} />
+                {/* Divider */}
                 <View className="w-4 border-l border-gray-200 mx-2 my-2" />
                 <FilterTab label="Pix" value="pix" activeValue={methodFilter} onPress={setMethodFilter} />
                 <FilterTab label="Dinheiro" value="dinheiro" activeValue={methodFilter} onPress={setMethodFilter} />

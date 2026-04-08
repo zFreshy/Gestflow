@@ -10,7 +10,18 @@ const COLORS = [
   '#EF4444', // red
 ];
 
-export function DonutChart({ data }) {
+const getFillColor = (name, index) => {
+    if (name === 'Entradas' || name === 'Receitas') return '#10B981'; // emerald
+    if (name === 'Saídas' || name === 'Despesas') return '#EF4444'; // red
+    if (name === 'Fornecedores') return '#3B82F6'; // blue
+    if (name === 'Padaria') return '#F59E0B'; // amber
+    if (name === 'Consultório') return '#3B82F6'; // blue
+    if (name === 'Fixas') return '#8B5CF6'; // purple
+    if (name === 'Variáveis') return '#EF4444'; // red
+    return COLORS[index % COLORS.length];
+};
+
+export function DonutChart({ data, showBalance = false }) {
   if (!data || data.length === 0) {
     return (
       <View className="items-center justify-center h-28">
@@ -40,6 +51,8 @@ export function DonutChart({ data }) {
   };
 
   const total = data.reduce((sum, item) => sum + item.value, 0);
+  const balance = showBalance ? (data.find(d => d.name === 'Entradas')?.value || 0) - (data.find(d => d.name === 'Saídas')?.value || 0) - (data.find(d => d.name === 'Fornecedores')?.value || 0) : 0;
+  
   let startAngle = 0;
   const radius = 45;
   const innerRadius = 30;
@@ -86,12 +99,21 @@ export function DonutChart({ data }) {
             <View key={entry.name} className="flex-row items-center mb-1">
               <View 
                 className="h-3 w-3 rounded-full mr-2"
-                style={{ backgroundColor: COLORS[idx % COLORS.length] }}
+                style={{ backgroundColor: getFillColor(entry.name, idx) }}
               />
               <Text className="text-gray-900 font-medium text-[10px] flex-1" numberOfLines={1}>{entry.name}</Text>
               <Text className="text-gray-600 text-[10px]">{formatValue(entry.value)}</Text>
             </View>
           ))}
+          {showBalance && (
+            <View className="flex-row items-center mt-1 pt-1 border-t border-gray-100">
+              <View className="h-3 w-3 mr-2" />
+              <Text className="text-gray-800 font-bold text-[10px] flex-1">Saldo</Text>
+              <Text className={`font-bold text-[10px] ${balance >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                {formatValue(balance)}
+              </Text>
+            </View>
+          )}
         </View>
       </View>
 
@@ -103,7 +125,7 @@ export function DonutChart({ data }) {
             ) : data.map((entry, idx) => {
               const angle = (entry.value / total) * 360;
               const path = createArc(startAngle, startAngle + angle, radius, innerRadius);
-              const fill = COLORS[idx % COLORS.length];
+              const fill = getFillColor(entry.name, idx);
               startAngle += angle;
               return <Path key={idx} d={path} fill={fill} />;
             })}

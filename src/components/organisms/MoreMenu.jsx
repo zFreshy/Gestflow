@@ -2,13 +2,13 @@ import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, Modal, StyleSheet } from 'react-native';
 import { useAuth } from '../contexts/AuthContext';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { LayoutDashboard, Receipt, FileText, Calendar, LogOut, X, ChevronRight } from 'lucide-react-native';
+import { LayoutDashboard, Receipt, FileText, Calendar, LogOut, X, ChevronRight, Building2 } from 'lucide-react-native';
 
 const MENU_ITEMS = [
     { name: 'Dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { name: 'Transactions', label: 'Transações', icon: Receipt },
-    // Removed redundant 'FixedExpenses' since it's on the bottom bar
     { name: 'Calendar', label: 'Calendário', icon: Calendar },
+    { name: 'Suppliers', label: 'Fornecedores', icon: Building2 },
 ];
 
 export function MoreMenu({ navigation, isVisible, onClose }) {

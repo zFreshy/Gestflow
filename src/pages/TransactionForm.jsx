@@ -8,15 +8,35 @@ import { Input } from '../components/atoms/Input';
 import { Button } from '../components/atoms/Button';
 import { X, Calendar } from 'lucide-react-native';
 
+import { supabase } from '../lib/supabase';
+
 export function TransactionForm({ navigation, route }) {
   const { user } = useAuth();
   const { initialType, initialExpenseType, transaction } = route.params || {};
   const isEditing = !!transaction;
 
   const [loading, setLoading] = useState(false);
-  const [type, setType] = useState(transaction?.type || initialType || 'income'); // income, expense
+  const [type, setType] = useState(() => {
+      if (transaction?.supplier_id || transaction?.expenseType === 'supplier' || transaction?.expense_type === 'supplier') return 'supplier';
+      return transaction?.type || initialType || 'income';
+  }); // income, expense, supplier
+  const [supplierId, setSupplierId] = useState(transaction?.supplier_id || '');
+  const [suppliers, setSuppliers] = useState([]);
+
+  // Fetch suppliers when needed
+  React.useEffect(() => {
+      if (type === 'supplier') {
+          supabase
+              .from('suppliers')
+              .select('*')
+              .order('name')
+              .then(({ data }) => setSuppliers(data || []))
+              .catch(console.error);
+      }
+  }, [type]);
   const [description, setDescription] = useState(transaction?.description || '');
   const [amount, setAmount] = useState(transaction?.amount ? transaction.amount.toString() : '');
+  const [isTbdAmount, setIsTbdAmount] = useState(transaction?.amount === 0 && transaction?.expense_type === 'fixed');
   
   // Date handling: transaction.date might be YYYY-MM-DD or DD/MM/YYYY depending on where it came from?
   // In the web app, we saw inconsistent formats. Let's assume standardized or handle both.
@@ -127,9 +147,17 @@ export function TransactionForm({ navigation, route }) {
           return;
       }
     } else {
-      if (!description || !amount || !date) {
+      if (!description || date === '') {
         Alert.alert('Erro', 'Preencha os campos obrigatórios');
         return;
+      }
+      if (!isTbdAmount && (!amount || amount === '')) {
+          Alert.alert('Erro', 'Preencha o valor ou marque como "Valor a definir".');
+          return;
+      }
+      if (type === 'supplier' && !supplierId) {
+          Alert.alert('Erro', 'Selecione um fornecedor.');
+          return;
       }
     }
 
@@ -165,22 +193,33 @@ export function TransactionForm({ navigation, route }) {
       const [year, month, day] = date.split('-');
       const timestamp = new Date(year, month - 1, day).getTime();
 
+      let finalType = type;
+      let finalExpenseType = type === 'expense' ? expenseType : null;
+      let finalSupplierId = null;
+
+      if (type === 'supplier') {
+          finalType = 'expense';
+          finalExpenseType = 'variable';
+          finalSupplierId = supplierId || null;
+      }
+
       const transactionData = {
         description,
-        amount: parseFloat(amount.replace(',', '.')),
-        type,
+        amount: isTbdAmount ? 0 : parseFloat(amount.replace(',', '.')),
+        type: finalType,
         payment_method: paymentMethod,
         date: date, // Keep YYYY-MM-DD format for database
         user_id: user.id,
         user_email: user.email, // Salvar o email no mobile também
-        is_bakery_income: type === 'income' ? isBakeryIncome : false,
-        client_name: type === 'income' && isBakeryIncome ? clientName : null,
-        expense_type: type === 'expense' ? expenseType : null,
-        recurrence: type === 'expense' && expenseType === 'fixed' ? recurrence : null,
-        interest_rate: type === 'expense' && expenseType === 'fixed' && interestRate ? parseFloat(interestRate.replace(',', '.')) : null,
-        active: type === 'expense' && expenseType === 'fixed' ? isActive : null,
-        end_date: type === 'expense' && expenseType === 'fixed' && !isActive ? endDate : null,
-        installments: type === 'expense' && expenseType === 'fixed' && installments && parseInt(installments) > 1 && !isEditing ? parseInt(installments) : null
+        is_bakery_income: finalType === 'income' ? isBakeryIncome : false,
+        client_name: finalType === 'income' && isBakeryIncome ? clientName : null,
+        expense_type: finalExpenseType,
+        recurrence: finalType === 'expense' && finalExpenseType === 'fixed' ? recurrence : null,
+        interest_rate: finalType === 'expense' && finalExpenseType === 'fixed' && interestRate ? parseFloat(interestRate.replace(',', '.')) : null,
+        active: finalType === 'expense' && finalExpenseType === 'fixed' ? isActive : null,
+        end_date: finalType === 'expense' && finalExpenseType === 'fixed' && !isActive ? endDate : null,
+        installments: finalType === 'expense' && finalExpenseType === 'fixed' && installments && parseInt(installments) > 1 && !isEditing ? parseInt(installments) : null,
+        supplier_id: finalSupplierId
       };
 
       if (isEditing) {
@@ -292,15 +331,15 @@ export function TransactionForm({ navigation, route }) {
       onPress={() => onPress(value)}
       className={`flex-1 py-3 items-center justify-center rounded-xl ${
         current === value 
-          ? (value === 'income' ? 'bg-emerald-100' : 'bg-red-100') 
+          ? (value === 'income' ? 'bg-emerald-100' : value === 'supplier' ? 'bg-blue-100' : 'bg-red-100') 
           : 'bg-gray-100'
       }`}
     >
-      <Text className={`font-bold ${
+      <Text className={`font-bold text-xs ${
         current === value 
-          ? (value === 'income' ? 'text-emerald-700' : 'text-red-700') 
+          ? (value === 'income' ? 'text-emerald-700' : value === 'supplier' ? 'text-blue-700' : 'text-red-700') 
           : 'text-gray-500'
-      }`}>
+      }`} numberOfLines={1}>
         {label}
       </Text>
     </TouchableOpacity>
@@ -321,7 +360,7 @@ export function TransactionForm({ navigation, route }) {
       >
         <ScrollView className="flex-1 px-6 py-4">
           {/* Type Selector */}
-          <View className="flex-row gap-4 mb-6">
+          <View className="flex-row gap-2 mb-6">
             <TabButton 
               label="Entrada" 
               value="income" 
@@ -331,6 +370,12 @@ export function TransactionForm({ navigation, route }) {
             <TabButton 
               label="Saída" 
               value="expense" 
+              current={type} 
+              onPress={setType} 
+            />
+            <TabButton 
+              label="Fornecedor" 
+              value="supplier" 
               current={type} 
               onPress={setType} 
             />
@@ -345,13 +390,32 @@ export function TransactionForm({ navigation, route }) {
 
           {!(type === 'expense' && expenseType === 'planned' && !isEditing) && (
             <>
-              <Input
-                label="Valor (R$)"
-                placeholder="0,00"
-                value={amount}
-                onChangeText={setAmount}
-                keyboardType="numeric"
-              />
+              {type === 'expense' && expenseType === 'fixed' && (
+                <View className="flex-row items-center justify-between bg-gray-50 p-4 rounded-xl mb-4">
+                  <View>
+                    <Text className="text-gray-700 font-medium">Valor a definir?</Text>
+                    <Text className="text-gray-500 text-xs">Ideal para luz, água, etc.</Text>
+                  </View>
+                  <Switch 
+                    value={isTbdAmount} 
+                    onValueChange={(val) => {
+                      setIsTbdAmount(val);
+                      if (val) setAmount('');
+                    }}
+                    trackColor={{ false: "#D1D5DB", true: "#7E1A8B" }}
+                  />
+                </View>
+              )}
+
+              {!isTbdAmount && (
+                <Input
+                  label="Valor (R$)"
+                  placeholder="0,00"
+                  value={amount}
+                  onChangeText={setAmount}
+                  keyboardType="numeric"
+                />
+              )}
 
               <TouchableOpacity onPress={() => setShowDatePicker(true)} className="mb-4">
                 <View pointerEvents="none">
@@ -408,6 +472,36 @@ export function TransactionForm({ navigation, route }) {
           </View>
 
           {/* Conditional Fields */}
+          {type === 'supplier' && (
+            <View className="bg-gray-50 p-4 rounded-xl mb-4">
+              <Text className="text-sm font-medium text-gray-700 mb-2">Fornecedor</Text>
+              {suppliers.length === 0 ? (
+                  <Text className="text-gray-500 italic mb-2">Nenhum fornecedor cadastrado.</Text>
+              ) : (
+                  <View className="flex-row flex-wrap gap-2 mb-2">
+                    {suppliers.map((s) => (
+                      <TouchableOpacity
+                        key={s.id}
+                        onPress={() => {
+                            setSupplierId(s.id);
+                            setDescription(`Compra: ${s.name}`);
+                        }}
+                        className={`px-3 py-2 rounded-lg border ${
+                          supplierId === s.id 
+                            ? 'bg-blue-50 border-blue-500' 
+                            : 'bg-white border-gray-200'
+                        }`}
+                      >
+                        <Text className={supplierId === s.id ? 'text-blue-700 font-medium' : 'text-gray-600'}>
+                          {s.name}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+              )}
+            </View>
+          )}
+
           {type === 'income' && (
             <View className="bg-gray-50 p-4 rounded-xl mb-4">
               <View className="flex-row justify-between items-center mb-4">

@@ -5,7 +5,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
-import { LayoutDashboard, Receipt, FileText, Calendar, MoreHorizontal, Plus, LogOut, X, ChevronRight } from 'lucide-react-native';
+import { LayoutDashboard, Receipt, FileText, Calendar, MoreHorizontal, Plus, LogOut, X, ChevronRight, Building2 } from 'lucide-react-native';
 
 import { AuthProvider, useAuth } from './src/contexts/AuthContext';
 import { LoginPage } from './src/pages/LoginPage';
@@ -15,6 +15,7 @@ import { TransactionsPage } from './src/pages/TransactionsPage';
 import { TransactionForm } from './src/pages/TransactionForm';
 import { FixedExpensesPage } from './src/pages/FixedExpensesPage';
 import { CalendarPage } from './src/pages/CalendarPage';
+import { SuppliersPage } from './src/pages/SuppliersPage';
 
 // Placeholder Pages
 const PlaceholderPage = ({ route }) => (
@@ -30,6 +31,7 @@ const Tab = createBottomTabNavigator();
 function MoreMenu({ isVisible, onClose, navigation, signOut }) {
   const MENU_ITEMS = [
     { name: 'Calendar', label: 'Calendário', icon: Calendar },
+    { name: 'Suppliers', label: 'Fornecedores', icon: Building2 },
   ];
 
   return (
@@ -241,6 +243,7 @@ function AppContent() {
             />
             {/* Screens accessible via Menu */}
             <Stack.Screen name="Calendar" component={CalendarPage} />
+            <Stack.Screen name="Suppliers" component={SuppliersPage} />
           </>
         ) : (
           <>

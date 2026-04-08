@@ -18,12 +18,15 @@ export function PaymentModal({ isVisible, transaction, onClose, onConfirm }) {
     const [paymentDate, setPaymentDate] = useState(today);
     const [showDatePicker, setShowDatePicker] = useState(false);
     const [interestAmount, setInterestAmount] = useState('');
+    const [finalAmount, setFinalAmount] = useState(''); // For TBD amount
+    const isTbdAmount = transaction?.amount === 0 && transaction?.expenseType === 'fixed';
     
     // Reset state when modal opens/closes
     useEffect(() => {
         if (isVisible) {
             setPaymentDate(today);
             setInterestAmount('');
+            setFinalAmount('');
         }
     }, [isVisible]);
 
@@ -44,7 +47,13 @@ export function PaymentModal({ isVisible, transaction, onClose, onConfirm }) {
     };
 
     const handleSubmit = () => {
+        if (isTbdAmount && (!finalAmount || parseFloat(finalAmount.replace(',', '.')) <= 0)) {
+            alert("Informe o valor final da despesa");
+            return;
+        }
+        
         const interest = interestAmount ? parseFloat(interestAmount.replace(',', '.')) : 0;
+        const actualFinalAmount = isTbdAmount ? parseFloat(finalAmount.replace(',', '.')) : null;
         
         // Ensure date format compatibility
         let finalDate = paymentDate;
@@ -53,7 +62,7 @@ export function PaymentModal({ isVisible, transaction, onClose, onConfirm }) {
             finalDate = `${year}-${month}-${day}`;
         }
         
-        onConfirm(transaction?.id, 'Pago', finalDate, interest);
+        onConfirm(transaction?.id, 'Pago', finalDate, interest, actualFinalAmount);
         onClose();
     };
 
@@ -90,6 +99,25 @@ export function PaymentModal({ isVisible, transaction, onClose, onConfirm }) {
 
                     {/* Body */}
                     <View className="p-4 space-y-6">
+                        {isTbdAmount && (
+                            <View>
+                                <Text className="text-sm font-medium text-gray-700 mb-3">Valor da Conta</Text>
+                                <View className="relative">
+                                    <View className="absolute left-3 top-3 z-10">
+                                        <DollarSign size={16} color="#9CA3AF" />
+                                    </View>
+                                    <TextInput
+                                        value={finalAmount}
+                                        onChangeText={setFinalAmount}
+                                        placeholder="0,00"
+                                        keyboardType="numeric"
+                                        className="pl-9 pr-4 h-12 border border-gray-200 rounded-xl text-gray-900 bg-gray-50"
+                                        autoFocus
+                                    />
+                                </View>
+                            </View>
+                        )}
+
                         {/* Date Selection */}
                         <View>
                             <Text className="text-sm font-medium text-gray-700 mb-3">Quando foi pago?</Text>

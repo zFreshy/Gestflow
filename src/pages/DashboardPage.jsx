@@ -187,6 +187,7 @@ export function DashboardPage({ navigation }) {
   const [transactions, setTransactions] = useState([]);
   const [viewMode, setViewMode] = useState('weekly'); // weekly, monthly, quarterly
   const [chartType, setChartType] = useState('previsto'); // 'previsto' or 'real'
+  const [focusedSlice, setFocusedSlice] = useState(null);
   const [isSummaryModalOpen, setIsSummaryModalOpen] = useState(false);
   const [stats, setStats] = useState({
     totalIncome: 0,
@@ -361,32 +362,65 @@ export function DashboardPage({ navigation }) {
     
     const projectedBalance = totalIncome - totalExpense - filteredUpcomingTotal - overdueTotal;
 
+    let realSaidas = 0;
+    let realFornecedores = 0;
+    data.filter(t => t.type === 'expense' && (t.expenseType === 'variable' || isPaid(t.status))).forEach(t => {
+        if (t.supplier_id || t.expenseType === 'supplier' || t.expense_type === 'supplier') {
+            realFornecedores += t.amount;
+        } else {
+            realSaidas += t.amount;
+        }
+    });
+    const realBalanceData = [
+        { name: 'Entradas', value: totalIncome },
+        { name: 'Saídas', value: realSaidas },
+        { name: 'Fornecedores', value: realFornecedores }
+    ].filter(d => d.value > 0);
+
+    let forecastSaidas = 0;
+    let forecastFornecedores = 0;
+    data.filter(t => t.type === 'expense').forEach(t => {
+        if (t.supplier_id || t.expenseType === 'supplier' || t.expense_type === 'supplier') {
+            forecastFornecedores += t.amount;
+        } else {
+            forecastSaidas += t.amount;
+        }
+    });
+    
+    // Add virtual ones
+    virtualUpcoming.forEach(t => {
+        if (t.supplier_id || t.expenseType === 'supplier' || t.expense_type === 'supplier') {
+            forecastFornecedores += t.amount;
+        } else {
+            forecastSaidas += t.amount;
+        }
+    });
+    virtualOverdue.forEach(t => {
+        if (t.supplier_id || t.expenseType === 'supplier' || t.expense_type === 'supplier') {
+            forecastFornecedores += t.amount;
+        } else {
+            forecastSaidas += t.amount;
+        }
+    });
+
+    const forecastBalanceData = [
+        { name: 'Entradas', value: totalIncome },
+        { name: 'Saídas', value: forecastSaidas },
+        { name: 'Fornecedores', value: forecastFornecedores }
+    ].filter(d => d.value > 0);
+
     // 5. Chart Data (Saldo Real e Previsto)
     const finalPieData = [
-        { value: totalIncome, color: '#34D399', text: 'Receitas', focused: true }, // Emerald-400
-        { value: totalExpense, color: '#F87171', text: 'Pagas' }, // Red-400
-        { value: filteredUpcomingTotal, color: '#FBBF24', text: 'A Vencer' }, // Amber-400
-        { value: overdueTotal, color: '#EF4444', text: 'Atrasadas' } // Red-500
+        { value: totalIncome, color: '#34D399', text: 'Receitas' }, // Emerald-400
+        { value: forecastSaidas, color: '#F87171', text: 'Pagas/A Vencer' }, // Red-400
+        { value: forecastFornecedores, color: '#3B82F6', text: 'Fornecedores' }, // Blue-500
     ].filter(d => d.value > 0);
 
     const realPieData = [
-        { value: totalIncome, color: '#34D399', text: 'Receitas', focused: true },
-        { value: totalExpense, color: '#F87171', text: 'Pagas' }
+        { value: totalIncome, color: '#34D399', text: 'Receitas' },
+        { value: realSaidas, color: '#F87171', text: 'Pagas' },
+        { value: realFornecedores, color: '#3B82F6', text: 'Fornecedores' }
     ].filter(d => d.value > 0);
-
-    const realSaidas = data.filter(t => t.type === 'expense' && (t.expenseType === 'variable' || isPaid(t.status))).reduce((acc, t) => acc + t.amount, 0);
-    const realBalanceData = [
-        { name: 'Entradas', value: totalIncome },
-        { name: 'Saídas', value: realSaidas }
-    ];
-
-    const forecastSaidas = data.filter(t => t.type === 'expense').reduce((acc, t) => acc + t.amount, 0) + 
-                           virtualUpcoming.reduce((acc, t) => acc + t.amount, 0) + 
-                           virtualOverdue.reduce((acc, t) => acc + t.amount, 0);
-    const forecastBalanceData = [
-        { name: 'Entradas', value: totalIncome },
-        { name: 'Saídas', value: forecastSaidas }
-    ];
 
     // 6. Period Totals
     const todayStr = today.toLocaleDateString('pt-BR');
@@ -421,6 +455,29 @@ export function DashboardPage({ navigation }) {
         return { income: inc, expense: exp, profit: inc - exp };
     };
 
+    const METHOD_LABELS = {
+        pix: 'Pix',
+        cartao: 'Cartão de Crédito',
+        debito: 'Cartão de Débito',
+        dinheiro: 'Dinheiro',
+        credito_loja: 'Crédito Loja (fiado)',
+        vale_alimentacao: 'Vale Alimentação',
+        vale_combustivel: 'Vale Combustível',
+        diversos: 'Diversos',
+        outro: 'Outro'
+    };
+
+    const paymentMethodsData = Object.entries(data.reduce((acc, t) => {
+        if (t.type === 'income') {
+            const method = t.paymentMethod || 'outro';
+            acc[method] = (acc[method] || 0) + t.amount;
+        }
+        return acc;
+    }, {})).map(([key, value]) => ({
+        name: METHOD_LABELS[key] || METHOD_LABELS.outro,
+        value
+    })).sort((a, b) => b.value - a.value).filter(d => d.value > 0);
+
     setStats({
       totalIncome,
       totalExpense,
@@ -430,6 +487,7 @@ export function DashboardPage({ navigation }) {
       realCategories: realPieData,
       realBalanceData,
       forecastBalanceData,
+      paymentMethodsData,
       upcomingTotal,
       upcomingCount: upcomingExpenses.length,
       overdueTotal,
@@ -706,13 +764,13 @@ export function DashboardPage({ navigation }) {
                     <Text className="text-lg font-bold text-gray-900">Visão Geral</Text>
                     <View className="flex-row bg-gray-50 rounded-xl p-1 border border-gray-100">
                         <TouchableOpacity 
-                            onPress={() => setChartType('previsto')}
+                            onPress={() => { setChartType('previsto'); setFocusedSlice(null); }}
                             className={`px-3 py-1.5 rounded-lg ${chartType === 'previsto' ? 'bg-white shadow-sm border border-gray-100' : ''}`}
                         >
                             <Text className={`text-xs font-bold ${chartType === 'previsto' ? 'text-[#7E1A8B]' : 'text-gray-500'}`}>Previsto</Text>
                         </TouchableOpacity>
                         <TouchableOpacity 
-                            onPress={() => setChartType('real')}
+                            onPress={() => { setChartType('real'); setFocusedSlice(null); }}
                             className={`px-3 py-1.5 rounded-lg ${chartType === 'real' ? 'bg-white shadow-sm border border-gray-100' : ''}`}
                         >
                             <Text className={`text-xs font-bold ${chartType === 'real' ? 'text-[#7E1A8B]' : 'text-gray-500'}`}>Real</Text>
@@ -722,18 +780,29 @@ export function DashboardPage({ navigation }) {
                 
                 <View className="items-center justify-center relative py-6">
                     <PieChart
-                        data={chartType === 'previsto' ? stats.categories : stats.realCategories}
+                        data={(chartType === 'previsto' ? stats.categories : stats.realCategories).map((d, index) => ({
+                            ...d,
+                            focused: focusedSlice?.index === index && focusedSlice?.type === chartType,
+                            onPress: () => {
+                                if (focusedSlice?.index === index && focusedSlice?.type === chartType) {
+                                    setFocusedSlice(null);
+                                } else {
+                                    setFocusedSlice({ index, type: chartType, text: d.text, value: d.value });
+                                }
+                            }
+                        }))}
                         donut
                         radius={120}
                         innerRadius={104}
                         centerLabelComponent={() => {
+                            const isCurrentChartFocused = focusedSlice && focusedSlice.type === chartType;
                             return (
                                 <View className="items-center justify-center">
                                     <Text className="text-gray-400 text-xs font-medium mb-1">
-                                        {chartType === 'previsto' ? 'Saldo Previsto' : 'Lucro Real'}
+                                        {isCurrentChartFocused ? focusedSlice.text : (chartType === 'previsto' ? 'Saldo Previsto' : 'Lucro Real')}
                                     </Text>
                                     <Text className="text-gray-900 text-2xl font-bold tracking-tight">
-                                        {formatCurrency(chartType === 'previsto' ? (stats.projectedBalance || 0) : (stats.netProfit || 0))}
+                                        {formatCurrency(isCurrentChartFocused ? focusedSlice.value : (chartType === 'previsto' ? (stats.projectedBalance || 0) : (stats.netProfit || 0)))}
                                     </Text>
                                 </View>
                             );
@@ -970,29 +1039,26 @@ export function DashboardPage({ navigation }) {
                     </View>
                 </ScrollView>
 
-                {/* Row 5: Business Logic (Patients, etc) - Mocked */}
-                <View className="flex-row gap-4 mt-2">
-                     {/* Patients */}
-                     <View className="flex-1 bg-white p-5 rounded-3xl border border-gray-100 shadow-sm relative overflow-hidden justify-between">
+                {/* Row 5: Business Logic */}
+                <View className="flex-row gap-4 mt-2 mb-4">
+                     {/* Lucros por Convênio */}
+                     <View className="w-[300px] bg-white p-5 rounded-3xl border border-gray-100 shadow-sm relative overflow-hidden justify-between">
                         <View className="absolute top-0 right-0 w-20 h-20 bg-blue-50 rounded-full -mr-8 -mt-8" />
                         <View className="flex-row justify-between items-start mb-4 relative z-10">
-                            <Text className="text-gray-500 text-xs font-semibold">Clientes Ativos</Text>
+                            <Text className="text-gray-900 text-sm font-bold">Lucros por Convênio</Text>
                             <View className="bg-blue-100/50 p-2.5 rounded-2xl">
-                                <Users size={18} color="#3B82F6" />
+                                <DollarSign size={18} color="#3B82F6" />
                             </View>
                         </View>
-                        <View className="items-center relative z-10">
-                            <Text className="text-gray-900 text-[32px] font-extrabold tracking-tight">268</Text>
-                            <View className="bg-emerald-50 px-2 py-0.5 rounded-full mt-1 border border-emerald-100">
-                                <Text className="text-emerald-600 text-[10px] font-bold">+12 este mês</Text>
-                            </View>
+                        <View className="relative z-10">
+                            <DonutChart data={stats.paymentMethodsData} />
                         </View>
                     </View>
 
                     {/* Statement Types replaced by Fixed Expenses Summary */}
                     <TouchableOpacity 
                         onPress={() => setIsSummaryModalOpen(true)}
-                        className="flex-1 bg-white p-5 rounded-3xl border border-gray-100 shadow-sm relative overflow-hidden justify-center items-center"
+                        className="w-[200px] bg-white p-5 rounded-3xl border border-gray-100 shadow-sm relative overflow-hidden justify-center items-center"
                     >
                         <View className="absolute top-0 right-0 w-24 h-24 bg-purple-50 rounded-full -mr-10 -mt-10" />
                         <View className="bg-purple-100/50 p-4 rounded-full mb-3 relative z-10">

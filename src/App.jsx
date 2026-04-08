@@ -76,9 +76,9 @@ function AppContent() {
       setTransactions([]);
       setHasMore(true);
       
-      // Se estiver na página de Dashboard (raiz), busca tudo. Senão, busca paginado.
-      const isDashboard = location.pathname === '/';
-      fetchTransactions(0, true, isDashboard);
+      // Sempre busca todas as transações, já que precisamos cruzar dados de 
+      // Despesas Fixas, Transações e Calendário de forma consistente
+      fetchTransactions(0, true, true);
     } else {
       setTransactions([]);
       setLoading(false);
@@ -237,10 +237,18 @@ function AppContent() {
           for (let i = 1; i <= installmentCount; i++) {
               const currentAmount = i === installmentCount ? lastInstallmentAmount : installmentAmount;
               
-              // Adicionar meses (recorrência mensal padrão para parcelamento)
               const installDate = new Date(currentDate);
-              if (i > 1) {
-                  installDate.setMonth(installDate.getMonth() + (i - 1));
+              
+              // Se a recorrência original for semanal, adiciona semanas em vez de meses
+              if (transactionToSave.recurrence === 'weekly') {
+                  if (i > 1) {
+                      installDate.setDate(installDate.getDate() + ((i - 1) * 7));
+                  }
+              } else {
+                  // Adicionar meses (recorrência mensal padrão para parcelamento)
+                  if (i > 1) {
+                      installDate.setMonth(installDate.getMonth() + (i - 1));
+                  }
               }
 
               const formattedInstallDate = `${installDate.getFullYear()}-${String(installDate.getMonth() + 1).padStart(2, '0')}-${String(installDate.getDate()).padStart(2, '0')}`;

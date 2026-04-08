@@ -216,7 +216,7 @@ function AppContent() {
           if (error) throw error;
 
           // Recarregar a lista toda, pois adicionamos várias
-          await fetchTransactions(0, true);
+          await fetchTransactions(0, true, true);
           setIsFormOpen(false);
           return;
       }
@@ -273,7 +273,7 @@ function AppContent() {
           if (error) throw error;
 
           // Recarregar a lista toda, pois adicionamos várias
-          await fetchTransactions(0, true);
+          await fetchTransactions(0, true, true);
           setIsFormOpen(false);
           return;
       }
@@ -404,7 +404,7 @@ function AppContent() {
           };
 
           if (requiresRefetch) {
-              await fetchTransactions();
+              await fetchTransactions(0, true, true);
           } else {
               setTransactions((prev) => [savedTransaction, ...prev]);
           }
@@ -465,7 +465,7 @@ function AppContent() {
           };
 
           if (requiresRefetch) {
-              await fetchTransactions();
+              await fetchTransactions(0, true, true);
           } else {
               setTransactions(prev => prev.map(t => t.id === savedTransaction.id ? savedTransaction : t));
           }
@@ -633,9 +633,9 @@ function AppContent() {
                     <TransactionsPage 
                       transactions={transactions} 
                       onEdit={openEditForm} 
-                      onDelete={handleDeleteTransaction}
+                      onDelete={handleDeleteTransaction} 
                       onBatchDelete={handleBatchDeleteTransactions}
-                      onImportSuccess={() => fetchTransactions(0, true)}
+                      onImportSuccess={() => fetchTransactions(0, true, true)}
                       onLoadMore={loadMoreTransactions}
                       hasMore={hasMore}
                       isLoadingMore={loading && page > 0}

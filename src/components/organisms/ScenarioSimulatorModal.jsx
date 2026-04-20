@@ -11,7 +11,7 @@ export function ScenarioSimulatorModal({ isOpen, onClose, stats }) {
 
     useEffect(() => {
         if (isOpen && stats) {
-            setCustomDailyIncome(stats.currentDailyAverage.toFixed(2));
+            setCustomDailyIncome(stats.currentNetDailyAverage.toFixed(2));
             setSimulatedExpenses([]);
             setNewExpenseDesc('');
             setNewExpenseAmount('');

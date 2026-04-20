@@ -85,6 +85,7 @@ export function GoalsPage({ transactions }) {
         let maxExpenseDateMs = todayDate.getTime();
         
         let currentMonthIncome = 0;
+        let currentMonthExpense = 0;
         const currentMonthStart = new Date(todayDate.getFullYear(), todayDate.getMonth(), 1);
 
         allTx.forEach(t => {
@@ -99,6 +100,9 @@ export function GoalsPage({ transactions }) {
                 const tDateMs = date.getTime();
                 if (tDateMs > maxExpenseDateMs) {
                     maxExpenseDateMs = tDateMs;
+                }
+                if (date >= currentMonthStart && date <= todayDate && !t.isVirtual) {
+                    currentMonthExpense += t.amount;
                 }
             }
         });
@@ -118,6 +122,7 @@ export function GoalsPage({ transactions }) {
         
         const currentDay = todayDate.getDate();
         const currentDailyAverage = currentDay > 0 ? currentMonthIncome / currentDay : 0;
+        const currentNetDailyAverage = currentDay > 0 ? (currentMonthIncome - currentMonthExpense) / currentDay : 0;
 
         const stats = {
             totalIncomeReal,
@@ -126,7 +131,8 @@ export function GoalsPage({ transactions }) {
             remainingDays,
             dailyAverageNeeded,
             monthlyAverageNeeded,
-            currentDailyAverage
+            currentDailyAverage,
+            currentNetDailyAverage
         };
 
         const days = {};
@@ -285,11 +291,17 @@ export function GoalsPage({ transactions }) {
                                 <span className="font-bold text-gray-900">{formatCurrency(stats.totalExpensesForecast)}</span>
                             </div>
                             <div className="flex justify-between items-center text-sm p-3 bg-white border border-gray-100 rounded-xl">
-                                <span className="text-gray-600 font-medium">Entradas até agora</span>
-                                <span className="font-bold text-emerald-600">-{formatCurrency(stats.totalIncomeReal)}</span>
+                                <div>
+                                    <span className="text-gray-600 font-medium block">Entradas até agora</span>
+                                    <span className="text-xs text-gray-400">Média atual: {formatCurrency(stats.currentDailyAverage)}/dia</span>
+                                </div>
+                                <span className="font-bold text-emerald-600">+{formatCurrency(stats.totalIncomeReal)}</span>
                             </div>
                             <div className="flex justify-between items-center text-sm p-3 bg-purple-50 border border-purple-100 rounded-xl">
-                                <span className="text-purple-900 font-bold">Falta Faturar (Total)</span>
+                                <div>
+                                    <span className="text-purple-900 font-bold block">Falta Faturar (Total)</span>
+                                    <span className="text-xs text-purple-700/80 font-medium">Média de faturamento atual: <span className={stats.currentNetDailyAverage >= 0 ? 'text-emerald-600' : 'text-rose-600'}>{formatCurrency(stats.currentNetDailyAverage)}/dia</span></span>
+                                </div>
                                 <span className="font-black text-purple-900">{formatCurrency(stats.incomeNeeded)}</span>
                             </div>
                         </div>

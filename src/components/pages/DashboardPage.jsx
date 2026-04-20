@@ -1,12 +1,14 @@
-import React, { useState } from 'react';
-import { ArrowUp, ArrowDown, DollarSign, TrendingUp, Users, Activity, XCircle, Clock, CheckCircle, Calendar as CalendarIcon, FileText } from 'lucide-react';
+import React, { useState, useMemo } from 'react';
+import { ArrowUp, ArrowDown, DollarSign, TrendingUp, Users, Activity, XCircle, Clock, CheckCircle, Calendar as CalendarIcon, FileText, Search, Flame, Target, Info } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { StatCard } from '../molecules/StatCard';
 import { DonutChart } from '../molecules/DonutChart';
 import { FinancesChart } from '../organisms/FinancesChart';
 import { FixedExpensesSummaryModal } from '../organisms/FixedExpensesSummaryModal';
+import { HiddenCostsModal } from '../organisms/HiddenCostsModal';
 
 export function DashboardPage({ transactions }) {
+    const [selectedHiddenCost, setSelectedHiddenCost] = useState(null);
     const [isSummaryModalOpen, setIsSummaryModalOpen] = useState(false);
     const totalCount = transactions.length;
     
@@ -198,6 +200,141 @@ export function DashboardPage({ transactions }) {
     const monthlyStats = calculateStats(monthlyTxs);
     const yearlyStats = calculateStats(yearlyTxs);
 
+    // 7. Heatmap (Últimas 12 Semanas = 84 dias)
+    const { heatmapDays, heatmapInsight } = useMemo(() => {
+        const days = [];
+        const numDays = 84;
+        const now = new Date();
+        now.setHours(0, 0, 0, 0);
+
+        // Map para acumular por dia da semana (0 = Dom, 1 = Seg, etc.)
+        const weekdayProfits = [0, 0, 0, 0, 0, 0, 0];
+        const weekdayCounts = [0, 0, 0, 0, 0, 0, 0];
+
+        // Mapear transações por data (timestamp)
+        const txByDate = {};
+        transactions.forEach(t => {
+            const d = getTransactionDate(t.date);
+            const ts = d.getTime();
+            if (!txByDate[ts]) txByDate[ts] = { income: 0, expense: 0 };
+            if (t.type === 'income') txByDate[ts].income += t.amount;
+            else if (t.type === 'expense') txByDate[ts].expense += t.amount;
+        });
+
+        // Gerar 84 dias
+        for (let i = numDays - 1; i >= 0; i--) {
+            const d = new Date(now);
+            d.setDate(now.getDate() - i);
+            const ts = d.getTime();
+            const dayTx = txByDate[ts] || { income: 0, expense: 0 };
+            const profit = dayTx.income - dayTx.expense;
+            
+            days.push({
+                date: d,
+                dateStr: d.toLocaleDateString('pt-BR'),
+                profit,
+                income: dayTx.income,
+                expense: dayTx.expense,
+                weekday: d.getDay()
+            });
+
+            // Só contar na média se houve alguma movimentação (pra não distorcer)
+            if (dayTx.income > 0 || dayTx.expense > 0) {
+                weekdayProfits[d.getDay()] += profit;
+                weekdayCounts[d.getDay()] += 1;
+            }
+        }
+
+        // Descobrir melhor e pior dia
+        let bestDay = -1;
+        let worstDay = -1;
+        let maxAvg = -Infinity;
+        let minAvg = Infinity;
+
+        const dayNames = ['Domingo', 'Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado'];
+
+        weekdayProfits.forEach((total, idx) => {
+            const count = weekdayCounts[idx];
+            if (count >= 2) { // Exige pelo menos 2 ocorrências para considerar uma "tendência"
+                const avg = total / count;
+                if (avg > maxAvg) { maxAvg = avg; bestDay = idx; }
+                if (avg < minAvg) { minAvg = avg; worstDay = idx; }
+            }
+        });
+
+        let insight = "Ainda não temos dados suficientes nas últimas semanas para analisar tendências dos seus melhores dias.";
+        if (bestDay !== -1 && worstDay !== -1) {
+            if (bestDay === worstDay) {
+                insight = `Aparentemente **${dayNames[bestDay]}** concentra o maior volume das suas movimentações, tanto de ganhos quanto de despesas.`;
+            } else {
+                insight = `🔥 Seu melhor dia de lucro médio é **${dayNames[bestDay]}**, mas seu pior dia (onde mais ocorrem despesas ou prejuízos) é **${dayNames[worstDay]}**. Considere remanejar vencimentos de boletos para mais perto de ${dayNames[bestDay]}.`;
+            }
+        }
+
+        return { heatmapDays: days, heatmapInsight: insight };
+    }, [transactions]);
+
+    // 8. Custos Ocultos (Últimos 30 dias)
+    const hiddenCosts = useMemo(() => {
+        const thirtyDaysAgo = new Date();
+        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+        
+        const smallExpenses = {};
+        
+        // Função simples para normalizar nomes e agrupar parecidos
+        const normalizeName = (name) => {
+            return name.toLowerCase()
+                .normalize('NFD').replace(/[\u0300-\u036f]/g, '') // remove acentos
+                .replace(/[^a-z0-9]/g, ' ') // remove especiais
+                .replace(/\s+/g, ' ') // espacos multiplos
+                .trim();
+        };
+
+        transactions.forEach(t => {
+            if (t.type === 'expense' && !t.supplier_id && t.amount <= 100) { // Consideramos < R$100 como pequeno
+                const d = getTransactionDate(t.date);
+                if (d >= thirtyDaysAgo) {
+                    const normName = normalizeName(t.description);
+                    if (normName.length < 3) return; // ignora muito curtos
+                    
+                    // Acha chave parecida (gambiarra simples: se uma string contem a outra)
+                    let matchedKey = Object.keys(smallExpenses).find(k => k.includes(normName) || normName.includes(k));
+                    if (!matchedKey) matchedKey = normName;
+
+                    if (!smallExpenses[matchedKey]) {
+                        smallExpenses[matchedKey] = { originalName: t.description, count: 0, total: 0, history: [] };
+                    }
+                    smallExpenses[matchedKey].count += 1;
+                    smallExpenses[matchedKey].total += t.amount;
+                    smallExpenses[matchedKey].history.push(t);
+                }
+            }
+        });
+
+        // Filtrar apenas os que aconteceram mais de 2 vezes no mês e somam mais de R$ 50
+        return Object.values(smallExpenses)
+            .filter(item => item.count >= 2 && item.total >= 50)
+            .sort((a, b) => b.total - a.total)
+            .slice(0, 5); // Top 5
+    }, [transactions]);
+
+    // Helper de cor pro heatmap
+    const getHeatmapColor = (profit, income, expense) => {
+        if (income === 0 && expense === 0) return 'bg-gray-100'; // Neutro/Sem transacao
+        if (profit > 0) {
+            if (profit > 1000) return 'bg-emerald-600';
+            if (profit > 500) return 'bg-emerald-500';
+            if (profit > 100) return 'bg-emerald-400';
+            return 'bg-emerald-300';
+        } else if (profit < 0) {
+            if (profit < -1000) return 'bg-rose-600';
+            if (profit < -500) return 'bg-rose-500';
+            if (profit < -100) return 'bg-rose-400';
+            return 'bg-rose-300';
+        }
+        return 'bg-yellow-300'; // Empate
+    };
+
     return (
         <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
             {/* Top Stats Row - Financial Overview */}
@@ -285,6 +422,76 @@ export function DashboardPage({ transactions }) {
                 <div className="relative z-10">
                     <FinancesChart transactions={transactions} />
                 </div>
+            </div>
+
+            {/* Heatmap & Hidden Costs Row */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                {/* Heatmap (2 columns) */}
+                <div className="lg:col-span-2">
+                    <StatCard
+                        title="Termômetro de Lucro (Últimas 12 Semanas)"
+                        icon={Flame}
+                        accent="orange"
+                        className="h-full"
+                    >
+                        <div className="mt-4 relative z-10 flex flex-col h-full gap-4">
+                            <div className="flex flex-wrap gap-1.5">
+                                {heatmapDays.map((day, i) => (
+                                    <div
+                                        key={i}
+                                        title={`${day.dateStr}\nLucro: ${formatCurrency(day.profit)}\nReceita: ${formatCurrency(day.income)}\nDespesa: ${formatCurrency(day.expense)}`}
+                                        className={cn(
+                                            "w-4 h-4 sm:w-5 sm:h-5 rounded-[4px] cursor-help transition-all hover:scale-125 hover:z-10 shadow-sm",
+                                            getHeatmapColor(day.profit, day.income, day.expense)
+                                        )}
+                                    />
+                                ))}
+                            </div>
+                            <div className="bg-orange-50/80 p-3.5 rounded-xl border border-orange-100 text-sm text-gray-700 flex items-start gap-2.5 mt-auto">
+                                <Flame className="w-5 h-5 text-orange-500 flex-shrink-0 mt-0.5" />
+                                <p dangerouslySetInnerHTML={{ __html: heatmapInsight.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>') }} />
+                            </div>
+                        </div>
+                    </StatCard>
+                </div>
+
+                {/* Hidden Costs (1 column) */}
+                <StatCard
+                    title="Custos Ocultos (30 dias)"
+                    icon={Search}
+                    accent="red"
+                    className="h-full"
+                >
+                    <div className="mt-4 relative z-10 flex flex-col h-full gap-3">
+                        <p className="text-xs text-gray-500 mb-1">
+                            Pequenos gastos frequentes que podem passar despercebidos.
+                        </p>
+                        {hiddenCosts.length === 0 ? (
+                            <div className="flex-1 flex items-center justify-center text-sm text-gray-500 text-center bg-gray-50/80 rounded-xl border border-dashed border-gray-200 p-4">
+                                Nenhum custo oculto detectado! 🎉
+                            </div>
+                        ) : (
+                            <div className="flex flex-col gap-2.5">
+                                {hiddenCosts.map((item, i) => (
+                                    <div 
+                                        key={i} 
+                                        className="flex justify-between items-center p-3 rounded-xl bg-rose-50/50 border border-rose-100/50 hover:bg-rose-100/80 transition-colors group cursor-pointer"
+                                        onClick={() => setSelectedHiddenCost(item)}
+                                    >
+                                        <div className="flex flex-col">
+                                            <span className="text-sm font-semibold text-gray-800 capitalize flex items-center gap-2">
+                                                {item.originalName.toLowerCase()}
+                                                <Info className="w-3.5 h-3.5 text-rose-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+                                            </span>
+                                            <span className="text-xs text-gray-500 font-medium">{item.count} repetições</span>
+                                        </div>
+                                        <span className="font-bold text-rose-600">{formatCurrency(item.total)}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                </StatCard>
             </div>
 
             {/* Averages Row */}
@@ -419,6 +626,12 @@ export function DashboardPage({ transactions }) {
                 isOpen={isSummaryModalOpen} 
                 onClose={() => setIsSummaryModalOpen(false)} 
                 transactions={transactions} 
+            />
+
+            <HiddenCostsModal 
+                isOpen={selectedHiddenCost !== null}
+                onClose={() => setSelectedHiddenCost(null)}
+                data={selectedHiddenCost}
             />
         </div>
     );

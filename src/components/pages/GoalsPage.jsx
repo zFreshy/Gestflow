@@ -1,12 +1,14 @@
 import React, { useState, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../atoms/Card';
-import { Target, TrendingUp, Calendar, ArrowRight, DollarSign, ChevronDown, ChevronUp, CheckCircle, XCircle } from 'lucide-react';
+import { Target, TrendingUp, Calendar, ArrowRight, DollarSign, ChevronDown, ChevronUp, CheckCircle, XCircle, Wand2 } from 'lucide-react';
 import { Input } from '../atoms/Input';
+import { ScenarioSimulatorModal } from '../organisms/ScenarioSimulatorModal';
 
 export function GoalsPage({ transactions }) {
     const [viewMode, setViewMode] = useState('daily');
     const [visibleCount, setVisibleCount] = useState(10);
     const [expandedId, setExpandedId] = useState(null);
+    const [isSimulatorOpen, setIsSimulatorOpen] = useState(false);
 
     const { stats, historyStats } = useMemo(() => {
         const getTransactionDate = (dateStr) => {
@@ -243,11 +245,18 @@ export function GoalsPage({ transactions }) {
             <div className="grid grid-cols-1 gap-6">
                 {/* Daily Action Plan */}
                 <Card className="shadow-sm border-gray-100">
-                    <CardHeader>
+                    <CardHeader className="flex flex-row items-center justify-between">
                         <CardTitle className="text-lg flex items-center gap-2">
                             <Calendar className="w-5 h-5 text-blue-600" />
                             Plano de Ação
                         </CardTitle>
+                        <button
+                            onClick={() => setIsSimulatorOpen(true)}
+                            className="flex items-center gap-2 px-3 py-1.5 bg-purple-50 text-purple-600 hover:bg-purple-100 hover:text-purple-700 font-semibold text-sm rounded-lg transition-colors border border-purple-100"
+                        >
+                            <Wand2 className="w-4 h-4" />
+                            Simulador de Cenários
+                        </button>
                     </CardHeader>
                     <CardContent>
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -409,6 +418,12 @@ export function GoalsPage({ transactions }) {
                     )}
                 </CardContent>
             </Card>
+
+            <ScenarioSimulatorModal 
+                isOpen={isSimulatorOpen} 
+                onClose={() => setIsSimulatorOpen(false)} 
+                stats={stats} 
+            />
         </div>
     );
 }

@@ -11,6 +11,7 @@ import { CalendarPage } from './components/pages/CalendarPage';
 import { TransactionForm } from './components/organisms/TransactionForm';
 import { FixedExpensesPage } from './components/pages/FixedExpensesPage';
 import { SuppliersPage } from './components/pages/SuppliersPage';
+import { GoalsPage } from './components/pages/GoalsPage';
 import { supabase } from './lib/supabase';
 
 function PrivateRoute({ children }) {
@@ -686,6 +687,14 @@ function AppContent() {
                   } 
                 />
                 {/* Redirect unknown routes to dashboard */}
+                <Route
+                  path="/metas"
+                  element={
+                    <GoalsPage 
+                      transactions={transactions} 
+                    />
+                  }
+                />
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>
 

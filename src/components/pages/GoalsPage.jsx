@@ -81,13 +81,20 @@ export function GoalsPage({ transactions }) {
         let totalIncomeReal = 0;
         let totalExpensesForecast = 0;
         let maxExpenseDateMs = todayDate.getTime();
+        
+        let currentMonthIncome = 0;
+        const currentMonthStart = new Date(todayDate.getFullYear(), todayDate.getMonth(), 1);
 
         allTx.forEach(t => {
+            const date = getTransactionDate(t.date);
             if (t.type === 'income') {
                 totalIncomeReal += t.amount;
+                if (date >= currentMonthStart && date <= todayDate) {
+                    currentMonthIncome += t.amount;
+                }
             } else if (t.type === 'expense') {
                 totalExpensesForecast += t.amount;
-                const tDateMs = getTransactionDate(t.date).getTime();
+                const tDateMs = date.getTime();
                 if (tDateMs > maxExpenseDateMs) {
                     maxExpenseDateMs = tDateMs;
                 }
@@ -108,7 +115,7 @@ export function GoalsPage({ transactions }) {
         const monthlyAverageNeeded = dailyAverageNeeded * 30; // Aproximação padrão de 30 dias por mês
         
         const currentDay = todayDate.getDate();
-        const currentDailyAverage = currentDay > 0 ? totalIncomeReal / currentDay : 0;
+        const currentDailyAverage = currentDay > 0 ? currentMonthIncome / currentDay : 0;
 
         const stats = {
             totalIncomeReal,
@@ -122,8 +129,6 @@ export function GoalsPage({ transactions }) {
 
         const days = {};
         const months = {};
-
-        const currentMonthStart = new Date(todayDate.getFullYear(), todayDate.getMonth(), 1);
 
         allTx.forEach(t => {
             const date = getTransactionDate(t.date);

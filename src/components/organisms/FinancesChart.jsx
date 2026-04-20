@@ -12,72 +12,74 @@ export function FinancesChart({ transactions }) {
             return new Date(y, m - 1, d);
         };
 
-        const grouped = transactions.reduce((acc, curr) => {
-            const dateObj = parseDate(curr.date);
-            let key;
-            
-            if (viewMode === 'year') {
-                const month = dateObj.getMonth() + 1;
-                const year = dateObj.getFullYear();
-                key = `${year}-${month.toString().padStart(2, '0')}`;
-            } else {
-                const d = dateObj.getDate().toString().padStart(2, '0');
-                const m = (dateObj.getMonth() + 1).toString().padStart(2, '0');
-                const y = dateObj.getFullYear();
-                key = `${y}-${m}-${d}`;
-            }
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
 
-            if (!acc[key]) {
-                acc[key] = {
-                    date: key,
-                    rawDate: dateObj,
+        const chartData = [];
+
+        if (viewMode === 'year') {
+            const currentYear = today.getFullYear();
+            const monthNames = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
+            
+            // Initialize 12 months
+            for (let i = 0; i < 12; i++) {
+                chartData.push({
+                    key: `${currentYear}-${(i + 1).toString().padStart(2, '0')}`,
+                    displayDate: `${monthNames[i]}/${currentYear.toString().slice(2)}`,
                     ganhos: 0,
                     gastos: 0
-                };
+                });
             }
-            
-            if (curr.type === 'income') {
-                acc[key].ganhos += curr.amount;
-            } else {
-                acc[key].gastos += curr.amount;
-            }
-            return acc;
-        }, {});
 
-        const sortedData = Object.values(grouped).sort((a, b) => {
-            if (viewMode === 'year') {
-                 // Sort by YYYY-MM
-                 return a.date.localeCompare(b.date);
-            }
-            return a.rawDate - b.rawDate;
-        });
-
-        const formattedData = sortedData.map(item => {
-            if (viewMode === 'year') {
-                const [year, month] = item.date.split('-');
-                const monthNames = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
-                return { 
-                    ...item, 
-                    displayDate: `${monthNames[parseInt(month) - 1]}/${year.slice(2)}` 
-                };
-            } else {
-                const date = item.rawDate;
-                const d = date.getDate().toString().padStart(2, '0');
-                const m = (date.getMonth() + 1).toString().padStart(2, '0');
-                return { 
-                    ...item, 
-                    displayDate: `${d}/${m}` 
-                };
-            }
-        });
-
-        if (viewMode === 'week') {
-            return formattedData.slice(-7);
-        } else if (viewMode === 'month') {
-            return formattedData.slice(-30);
+            transactions.forEach(curr => {
+                const dateObj = parseDate(curr.date);
+                if (dateObj.getFullYear() === currentYear) {
+                    const monthIndex = dateObj.getMonth();
+                    if (curr.type === 'income') {
+                        chartData[monthIndex].ganhos += curr.amount;
+                    } else if (curr.type === 'expense') {
+                        chartData[monthIndex].gastos += curr.amount;
+                    }
+                }
+            });
         } else {
-            return formattedData.slice(-12);
+            const daysCount = viewMode === 'week' ? 7 : 30;
+            
+            // Generate last N days ending today
+            for (let i = daysCount - 1; i >= 0; i--) {
+                const d = new Date(today);
+                d.setDate(today.getDate() - i);
+                
+                const dayStr = d.getDate().toString().padStart(2, '0');
+                const monthStr = (d.getMonth() + 1).toString().padStart(2, '0');
+                const yearStr = d.getFullYear();
+                
+                chartData.push({
+                    key: `${yearStr}-${monthStr}-${dayStr}`,
+                    displayDate: `${dayStr}/${monthStr}`,
+                    ganhos: 0,
+                    gastos: 0,
+                    rawDate: d.getTime()
+                });
+            }
+
+            transactions.forEach(curr => {
+                const dateObj = parseDate(curr.date);
+                const tTime = dateObj.getTime();
+                
+                // Find matching day in chartData
+                const targetDay = chartData.find(d => d.rawDate === tTime);
+                if (targetDay) {
+                    if (curr.type === 'income') {
+                        targetDay.ganhos += curr.amount;
+                    } else if (curr.type === 'expense') {
+                        targetDay.gastos += curr.amount;
+                    }
+                }
+            });
         }
+
+        return chartData;
     }, [transactions, viewMode]);
 
     const CustomTooltip = ({ active, payload, label }) => {

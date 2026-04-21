@@ -125,7 +125,7 @@ export function BakeryPage({ transactions }) {
                 weekday: d.getDay()
             });
 
-            if (profit > 0 || profit === 0) { // Conta todos os dias (com lucro ou não) para fazer a média real
+            if (profit > 0) { // Conta apenas os dias em que houve lucro para a média
                 weekdayProfits[d.getDay()] += profit;
                 weekdayCounts[d.getDay()] += 1;
             }
@@ -137,9 +137,9 @@ export function BakeryPage({ transactions }) {
 
         weekdayProfits.forEach((total, idx) => {
             const count = weekdayCounts[idx];
-            if (count > 0) { // garante que tem pelo menos 1 dia para não dar erro
+            if (count > 0) { 
                 const avg = total / count;
-                if (avg > maxAvg && total > 0) { // Pega a maior média, desde que tenha tido lucro
+                if (avg > maxAvg && total > 0) { 
                     maxAvg = avg; 
                     bestDay = idx; 
                 }
@@ -545,6 +545,10 @@ export function BakeryPage({ transactions }) {
                                 )}
                             />
                         ))}
+                    </div>
+                    <div className="bg-orange-50/80 p-3.5 rounded-xl border border-orange-100 text-sm text-gray-700 flex items-start gap-2.5">
+                        <Flame className="w-5 h-5 text-orange-500 flex-shrink-0 mt-0.5" />
+                        <p dangerouslySetInnerHTML={{ __html: heatmapInsight.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>') }} />
                     </div>
                 </div>
             </StatCard>

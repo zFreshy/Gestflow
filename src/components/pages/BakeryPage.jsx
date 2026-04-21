@@ -125,7 +125,7 @@ export function BakeryPage({ transactions }) {
                 weekday: d.getDay()
             });
 
-            if (profit > 0) {
+            if (profit > 0 || profit === 0) { // Conta todos os dias (com lucro ou não) para fazer a média real
                 weekdayProfits[d.getDay()] += profit;
                 weekdayCounts[d.getDay()] += 1;
             }
@@ -137,9 +137,12 @@ export function BakeryPage({ transactions }) {
 
         weekdayProfits.forEach((total, idx) => {
             const count = weekdayCounts[idx];
-            if (count >= 2) {
+            if (count > 0) { // garante que tem pelo menos 1 dia para não dar erro
                 const avg = total / count;
-                if (avg > maxAvg) { maxAvg = avg; bestDay = idx; }
+                if (avg > maxAvg && total > 0) { // Pega a maior média, desde que tenha tido lucro
+                    maxAvg = avg; 
+                    bestDay = idx; 
+                }
             }
         });
 
@@ -177,7 +180,11 @@ export function BakeryPage({ transactions }) {
                 // Filtra pelo mês e ano selecionados
                 if (tYear === year && tMonth === month) {
                     const key = `${tDay.toString().padStart(2, '0')}/${(tMonth + 1).toString().padStart(2, '0')}`;
-                    if (!grouped[key]) grouped[key] = { key, label: `Dia ${tDay}`, value: 0, dateObj: d };
+                    if (!grouped[key]) {
+                        const dayNames = ['Domingo', 'Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado'];
+                        const weekdayName = dayNames[d.getDay()];
+                        grouped[key] = { key, label: `Dia ${tDay} - ${weekdayName}`, value: 0, dateObj: d };
+                    }
                     grouped[key].value += t.amount;
                 }
             } else if (viewMode === 'year') {

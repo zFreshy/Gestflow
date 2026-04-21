@@ -8,6 +8,7 @@ import { DashboardTemplate } from './components/templates/DashboardTemplate';
 import { DashboardPage } from './components/pages/DashboardPage';
 import { TransactionsPage } from './components/pages/TransactionsPage';
 import { CalendarPage } from './components/pages/CalendarPage';
+import { BakeryPage } from './components/pages/BakeryPage';
 import { TransactionForm } from './components/organisms/TransactionForm';
 import { FixedExpensesPage } from './components/pages/FixedExpensesPage';
 import { SuppliersPage } from './components/pages/SuppliersPage';
@@ -694,6 +695,14 @@ function AppContent() {
                       transactions={transactions} 
                     />
                   }
+                />
+                <Route 
+                  path="/padaria" 
+                  element={
+                    <BakeryPage 
+                      transactions={transactions} 
+                    />
+                  } 
                 />
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>

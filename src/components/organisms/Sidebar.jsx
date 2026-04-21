@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { cn } from '../../lib/utils';
-import { LayoutDashboard, Calendar, Receipt, ChevronLeft, ChevronRight, ChevronDown, FileText, LogOut, X, Truck, Target } from 'lucide-react';
+import { LayoutDashboard, Calendar, Receipt, ChevronLeft, ChevronRight, ChevronDown, FileText, LogOut, X, Truck, Target, Store } from 'lucide-react';
 import { Avatar } from '../atoms/Avatar';
 import { useAuth } from '../../contexts/AuthContext';
 
@@ -9,6 +9,7 @@ const MENU_ITEMS = [
     { path: '/', label: 'Dashboard', icon: LayoutDashboard, exact: true },
     { path: '/transactions', label: 'Transações', icon: Receipt },
     { path: '/fixed-expenses', label: 'Despesas Fixas', icon: FileText },
+    { path: '/padaria', label: 'Padaria', icon: Store },
     { path: '/suppliers', label: 'Fornecedores', icon: Truck },
     { path: '/calendar', label: 'Calendário', icon: Calendar },
     { path: '/metas', label: 'Metas', icon: Target },

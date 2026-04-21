@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../atoms/Card';
 import { StatCard } from '../molecules/StatCard';
 import { MonthSelector } from '../molecules/MonthSelector';
+import { GrowthEvolutionChart } from '../organisms/GrowthEvolutionChart';
 import { Store, TrendingUp, TrendingDown, Calendar as CalendarIcon, ArrowUpRight, DollarSign, Activity, Flame, X } from 'lucide-react';
 import { cn } from '../../lib/utils';
 
@@ -283,6 +284,9 @@ export function BakeryPage({ transactions }) {
                     </CardContent>
                 </Card>
             </div>
+
+            {/* Evolução de Crescimento (%) */}
+            <GrowthEvolutionChart transactions={bakeryTxs} />
 
             {/* Termômetro de Lucros (Estilo Github Heatmap) */}
             <StatCard

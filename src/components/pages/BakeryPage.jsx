@@ -263,7 +263,7 @@ export function BakeryPage({ transactions }) {
     }, [bakeryTxs]);
 
     // 7. Análise por Dia da Semana e Método de Pagamento (Baseado no Filtro Atual)
-    const { weekdayData, paymentData } = useMemo(() => {
+    const { weekdayData, paymentData, weekdayInsight } = useMemo(() => {
         const dayNames = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
         const weekdayTotals = [0, 0, 0, 0, 0, 0, 0];
         const paymentMethods = {};
@@ -306,11 +306,27 @@ export function BakeryPage({ transactions }) {
             total: weekdayTotals[index]
         }));
 
+        let bestDay = -1;
+        let maxTotal = -Infinity;
+        const fullDayNames = ['Domingo', 'Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado'];
+
+        formattedWeekdayData.forEach((item, index) => {
+            if (item.total > maxTotal && item.total > 0) {
+                maxTotal = item.total;
+                bestDay = index;
+            }
+        });
+
         const formattedPaymentData = Object.entries(paymentMethods)
             .map(([name, value]) => ({ name, value }))
             .sort((a, b) => b.value - a.value);
 
-        return { weekdayData: formattedWeekdayData, paymentData: formattedPaymentData };
+        let insight = "Não há dados suficientes no período selecionado.";
+        if (bestDay !== -1) {
+            insight = `🔥 No período selecionado, a soma dos lucros foi maior na **${fullDayNames[bestDay]}**.`;
+        }
+
+        return { weekdayData: formattedWeekdayData, paymentData: formattedPaymentData, weekdayInsight: insight };
     }, [bakeryTxs, currentDate, viewMode]);
 
     const PIE_COLORS = ['#10b981', '#34d399', '#059669', '#6ee7b7', '#047857', '#a7f3d0'];
@@ -441,6 +457,10 @@ export function BakeryPage({ transactions }) {
                                 </BarChart>
                             </ResponsiveContainer>
                         </div>
+                        <div className="bg-blue-50/80 p-3.5 rounded-xl border border-blue-100 text-sm text-gray-700 flex items-start gap-2.5 mt-4">
+                            <Flame className="w-5 h-5 text-blue-500 flex-shrink-0 mt-0.5" />
+                            <p dangerouslySetInnerHTML={{ __html: weekdayInsight.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>') }} />
+                        </div>
                     </CardContent>
                 </Card>
 
@@ -518,10 +538,6 @@ export function BakeryPage({ transactions }) {
                                 )}
                             />
                         ))}
-                    </div>
-                    <div className="bg-orange-50/80 p-3.5 rounded-xl border border-orange-100 text-sm text-gray-700 flex items-start gap-2.5">
-                        <Flame className="w-5 h-5 text-orange-500 flex-shrink-0 mt-0.5" />
-                        <p dangerouslySetInnerHTML={{ __html: heatmapInsight.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>') }} />
                     </div>
                 </div>
             </StatCard>

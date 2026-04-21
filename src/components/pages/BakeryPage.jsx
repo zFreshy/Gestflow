@@ -3,9 +3,9 @@ import { Card, CardContent, CardHeader, CardTitle } from '../atoms/Card';
 import { StatCard } from '../molecules/StatCard';
 import { MonthSelector } from '../molecules/MonthSelector';
 import { GrowthEvolutionChart } from '../organisms/GrowthEvolutionChart';
-import { Store, TrendingUp, TrendingDown, Calendar as CalendarIcon, ArrowUpRight, DollarSign, Activity, Flame, X } from 'lucide-react';
+import { Store, TrendingUp, TrendingDown, Calendar as CalendarIcon, ArrowUpRight, DollarSign, Activity, Flame, X, Target, CreditCard, BarChart3 } from 'lucide-react';
 import { cn } from '../../lib/utils';
-
+import { PieChart, Pie, Cell as PieCell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 
 export function BakeryPage({ transactions }) {
     const [currentDate, setCurrentDate] = useState(new Date());
@@ -231,6 +231,102 @@ export function BakeryPage({ transactions }) {
         });
     }, [selectedHistoryItem, bakeryTxs, viewMode, currentDate]);
 
+    // 6. Forecast (Projeção do Mês Atual)
+    const forecastData = useMemo(() => {
+        const now = new Date();
+        const currentYear = now.getFullYear();
+        const currentMonth = now.getMonth();
+        const daysPassed = now.getDate();
+        
+        // Total de dias no mês atual
+        const totalDaysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
+        
+        let currentMonthTotal = 0;
+        bakeryTxs.forEach(t => {
+            const d = getTransactionDate(t.date);
+            if (d.getFullYear() === currentYear && d.getMonth() === currentMonth && d.getDate() <= daysPassed) {
+                currentMonthTotal += t.amount;
+            }
+        });
+        
+        const avgDaily = daysPassed > 0 ? currentMonthTotal / daysPassed : 0;
+        const projectedTotal = avgDaily * totalDaysInMonth;
+        
+        return {
+            currentMonthTotal,
+            projectedTotal,
+            avgDaily,
+            daysPassed,
+            totalDaysInMonth,
+            percentageCompleted: Math.min((daysPassed / totalDaysInMonth) * 100, 100)
+        };
+    }, [bakeryTxs]);
+
+    // 7. Análise por Dia da Semana e Método de Pagamento (Baseado no Filtro Atual)
+    const { weekdayData, paymentData } = useMemo(() => {
+        const dayNames = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+        const weekdayTotals = [0, 0, 0, 0, 0, 0, 0];
+        const paymentMethods = {};
+
+        const year = currentDate.getFullYear();
+        const month = currentDate.getMonth();
+
+        bakeryTxs.forEach(t => {
+            const d = getTransactionDate(t.date);
+            const tYear = d.getFullYear();
+            const tMonth = d.getMonth();
+            
+            let isInPeriod = false;
+            if (viewMode === 'month') {
+                isInPeriod = (tYear === year && tMonth === month);
+            } else {
+                isInPeriod = (tYear === year);
+            }
+
+            if (isInPeriod) {
+                // Dia da Semana
+                weekdayTotals[d.getDay()] += t.amount;
+
+                // Método de Pagamento
+                let method = t.paymentMethod || t.payment_method || 'dinheiro';
+                if(method === 'cartao') method = 'Cartão de Crédito';
+                if(method === 'debito') method = 'Cartão de Débito';
+                if(method === 'credito_loja') method = 'Crédito Loja (Fiado)';
+                if(method === 'vale_alimentacao') method = 'Vale Alimentação';
+                if(method === 'vale_combustivel') method = 'Vale Combustível';
+                
+                let formatMethod = method.charAt(0).toUpperCase() + method.slice(1).replace('_', ' ');
+                if (!paymentMethods[formatMethod]) paymentMethods[formatMethod] = 0;
+                paymentMethods[formatMethod] += t.amount;
+            }
+        });
+
+        const formattedWeekdayData = dayNames.map((name, index) => ({
+            name,
+            total: weekdayTotals[index]
+        }));
+
+        const formattedPaymentData = Object.entries(paymentMethods)
+            .map(([name, value]) => ({ name, value }))
+            .sort((a, b) => b.value - a.value);
+
+        return { weekdayData: formattedWeekdayData, paymentData: formattedPaymentData };
+    }, [bakeryTxs, currentDate, viewMode]);
+
+    const PIE_COLORS = ['#10b981', '#34d399', '#059669', '#6ee7b7', '#047857', '#a7f3d0'];
+
+    const CustomTooltipChart = ({ active, payload, label }) => {
+        if (active && payload && payload.length) {
+            return (
+                <div className="bg-white/95 backdrop-blur-md border border-gray-100 rounded-2xl shadow-lg p-3 text-sm">
+                    <p className="font-bold text-gray-800 mb-1">{payload[0].payload.name || label}</p>
+                    <p className="font-bold text-emerald-600">{formatBRL(payload[0].value)}</p>
+                </div>
+            );
+        }
+        return null;
+    };
+
     return (
         <div className="space-y-6 animate-in fade-in duration-500">
             {/* Header */}
@@ -245,7 +341,7 @@ export function BakeryPage({ transactions }) {
             </div>
 
             {/* Comparativos Rápidos */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 {/* Semana */}
                 <Card className="border-gray-100 shadow-sm rounded-2xl overflow-hidden relative">
                     <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-50 rounded-bl-full -z-10 opacity-50"></div>
@@ -283,10 +379,126 @@ export function BakeryPage({ transactions }) {
                         <p className="text-xs text-gray-400 mt-2 font-medium">Mês passado: {formatBRL(stats.lastMonthTotal)}</p>
                     </CardContent>
                 </Card>
+
+                {/* Projeção do Mês (Forecast) */}
+                <Card className="border-gray-100 shadow-sm rounded-2xl overflow-hidden relative bg-gradient-to-br from-indigo-50/50 to-purple-50/50">
+                    <div className="absolute top-0 right-0 w-32 h-32 bg-purple-100 rounded-bl-full -z-10 opacity-50"></div>
+                    <CardContent className="p-6">
+                        <div className="flex justify-between items-start mb-4">
+                            <div className="p-2 bg-purple-100 text-purple-600 rounded-xl">
+                                <Target className="w-5 h-5" />
+                            </div>
+                            <div className="px-2.5 py-1 rounded-lg text-xs font-bold flex items-center gap-1 bg-white text-purple-700 border border-purple-100 shadow-sm">
+                                {forecastData.daysPassed} de {forecastData.totalDaysInMonth} dias
+                            </div>
+                        </div>
+                        <p className="text-sm font-semibold text-gray-500 mb-1">Projeção Fechamento Mês</p>
+                        <h3 className="text-3xl font-black text-gray-900">{formatBRL(forecastData.projectedTotal)}</h3>
+                        <div className="mt-2.5 w-full bg-gray-200 rounded-full h-1.5">
+                            <div 
+                                className="bg-purple-500 h-1.5 rounded-full transition-all duration-1000" 
+                                style={{ width: `${forecastData.percentageCompleted}%` }}
+                            ></div>
+                        </div>
+                        <p className="text-xs text-gray-500 mt-1.5 font-medium text-right">Baseado na média diária de {formatBRL(forecastData.avgDaily)}</p>
+                    </CardContent>
+                </Card>
             </div>
 
             {/* Evolução de Crescimento (%) */}
             <GrowthEvolutionChart transactions={bakeryTxs} />
+
+            {/* Análise por Dia da Semana e Métodos de Pagamento */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <Card className="border-gray-100 shadow-sm rounded-2xl">
+                    <CardHeader>
+                        <CardTitle className="text-lg flex items-center gap-2">
+                            <BarChart3 className="w-5 h-5 text-blue-500" />
+                            Lucro por Dia da Semana
+                        </CardTitle>
+                        <p className="text-xs text-gray-500 font-medium">Desempenho no período selecionado</p>
+                    </CardHeader>
+                    <CardContent>
+                        <div className="h-64 w-full mt-2">
+                            <ResponsiveContainer width="100%" height="100%">
+                                <BarChart data={weekdayData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                                    <XAxis 
+                                        dataKey="name" 
+                                        axisLine={false} 
+                                        tickLine={false} 
+                                        tick={{ fill: '#64748b', fontSize: 12, fontWeight: 600 }}
+                                        dy={10}
+                                    />
+                                    <YAxis 
+                                        axisLine={false} 
+                                        tickLine={false} 
+                                        tick={{ fill: '#94a3b8', fontSize: 12 }}
+                                        tickFormatter={(value) => `R$ ${value}`}
+                                    />
+                                    <Tooltip content={<CustomTooltipChart />} cursor={{ fill: '#f8fafc' }} />
+                                    <Bar dataKey="total" radius={[6, 6, 0, 0]} barSize={30} fill="#3b82f6" />
+                                </BarChart>
+                            </ResponsiveContainer>
+                        </div>
+                    </CardContent>
+                </Card>
+
+                <Card className="border-gray-100 shadow-sm rounded-2xl">
+                    <CardHeader>
+                        <CardTitle className="text-lg flex items-center gap-2">
+                            <CreditCard className="w-5 h-5 text-indigo-500" />
+                            Métodos de Pagamento
+                        </CardTitle>
+                        <p className="text-xs text-gray-500 font-medium">Distribuição no período selecionado</p>
+                    </CardHeader>
+                    <CardContent>
+                        {paymentData.length === 0 ? (
+                            <div className="h-64 flex items-center justify-center text-gray-400 font-medium bg-gray-50/50 rounded-xl border border-dashed border-gray-200">
+                                Sem dados para o período.
+                            </div>
+                        ) : (
+                            <div className="h-64 w-full mt-2 flex flex-col md:flex-row items-center">
+                                <div className="h-full w-full md:w-1/2">
+                                    <ResponsiveContainer width="100%" height="100%">
+                                        <PieChart>
+                                            <Pie
+                                                data={paymentData}
+                                                cx="50%"
+                                                cy="50%"
+                                                innerRadius={60}
+                                                outerRadius={80}
+                                                paddingAngle={5}
+                                                dataKey="value"
+                                                stroke="none"
+                                            >
+                                                {paymentData.map((entry, index) => (
+                                                    <PieCell key={`cell-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />
+                                                ))}
+                                            </Pie>
+                                            <Tooltip content={<CustomTooltipChart />} />
+                                         </PieChart>
+                                     </ResponsiveContainer>
+                                 </div>
+                                 <div className="w-full md:w-1/2 flex flex-col gap-3 justify-center pl-4 mt-4 md:mt-0 overflow-y-auto max-h-[240px]">
+                                     {paymentData.map((item, index) => (
+                                        <div key={index} className="flex justify-between items-center text-sm">
+                                            <div className="flex items-center gap-2">
+                                                <div 
+                                                    className="w-3 h-3 rounded-full" 
+                                                    style={{ backgroundColor: PIE_COLORS[index % PIE_COLORS.length] }}
+                                                ></div>
+                                                <span className="font-semibold text-gray-700 capitalize truncate max-w-[120px]">{item.name}</span>
+                                            </div>
+                                            <span className="font-black text-gray-900">{formatBRL(item.value)}</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                    </CardContent>
+                </Card>
+            </div>
 
             {/* Termômetro de Lucros (Estilo Github Heatmap) */}
             <StatCard

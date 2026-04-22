@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '../atoms/Card';
 import { StatCard } from '../molecules/StatCard';
 import { MonthSelector } from '../molecules/MonthSelector';
 import { GrowthEvolutionChart } from '../organisms/GrowthEvolutionChart';
-import { Store, TrendingUp, TrendingDown, Calendar as CalendarIcon, ArrowUpRight, DollarSign, Activity, Flame, X, Target, CreditCard, BarChart3 } from 'lucide-react';
+import { Store, TrendingUp, TrendingDown, Calendar as CalendarIcon, ArrowUpRight, DollarSign, Activity, Flame, X, Target, CreditCard, BarChart3, Sun, PartyPopper } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { PieChart, Pie, Cell as PieCell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 
@@ -12,10 +12,17 @@ export function BakeryPage({ transactions }) {
     const [viewMode, setViewMode] = useState('month'); // 'month' | 'year'
     const [visibleCount, setVisibleCount] = useState(10);
     const [selectedHistoryItem, setSelectedHistoryItem] = useState(null);
+    const [apiHolidays, setApiHolidays] = useState(new Map());
+    const [isHolidayModalOpen, setIsHolidayModalOpen] = useState(false);
+    const [holidayModalVisibleCount, setHolidayModalVisibleCount] = useState(10);
 
     useEffect(() => {
         setVisibleCount(10);
     }, [currentDate, viewMode]);
+
+    useEffect(() => {
+        if (isHolidayModalOpen) setHolidayModalVisibleCount(10);
+    }, [isHolidayModalOpen]);
 
     // 1. Filtrar as transações apenas da Padaria (Income com a flag)
     const bakeryTxs = useMemo(() => {
@@ -28,6 +35,48 @@ export function BakeryPage({ transactions }) {
         const [day, month, year] = dateStr.split('/');
         return new Date(year, month - 1, day);
     };
+
+    // Buscar Feriados na Brasil API para os anos que possuem transações
+    useEffect(() => {
+        const yearsToFetch = new Set();
+        bakeryTxs.forEach(t => {
+            const d = getTransactionDate(t.date);
+            const year = d.getFullYear();
+            if (year > 2000) yearsToFetch.add(year);
+        });
+
+        if (yearsToFetch.size === 0) return;
+
+        const fetchHolidays = async () => {
+            const newHolidays = new Map();
+            
+            for (const year of yearsToFetch) {
+                try {
+                    // Feriados Nacionais (inclui móveis como Carnaval, Sexta-feira Santa, Corpus Christi)
+                    const res = await fetch(`https://brasilapi.com.br/api/feriados/v1/${year}`);
+                    if (res.ok) {
+                        const data = await res.json();
+                        data.forEach(h => {
+                            // API retorna YYYY-MM-DD
+                            const [y, m, d] = h.date.split('-');
+                            newHolidays.set(`${d}/${m}/${y}`, h.name);
+                        });
+                    }
+                } catch (error) {
+                    console.error("Erro ao buscar feriados da Brasil API:", error);
+                }
+                
+                // Adicionar feriados fixos estaduais/regionais de Pernambuco
+                newHolidays.set(`06/03/${year}`, 'Data Magna de Pernambuco');
+                newHolidays.set(`24/06/${year}`, 'São João');
+                newHolidays.set(`16/07/${year}`, 'Nossa Senhora do Carmo');
+            }
+            
+            setApiHolidays(newHolidays);
+        };
+
+        fetchHolidays();
+    }, [bakeryTxs]);
 
     // Formatador de Moeda
     const formatBRL = (value) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value || 0);
@@ -336,6 +385,123 @@ export function BakeryPage({ transactions }) {
         return { weekdayData: formattedWeekdayData, paymentData: formattedPaymentData, weekdayInsight: insight };
     }, [bakeryTxs, currentDate, viewMode]);
 
+    // 8. Sazonalidade do Mês (Início, Meio, Fim)
+    const seasonalityData = useMemo(() => {
+        const year = currentDate.getFullYear();
+        const month = currentDate.getMonth();
+
+        let startTotal = 0; // 1-10
+        let middleTotal = 0; // 11-20
+        let endTotal = 0; // 21+
+
+        bakeryTxs.forEach(t => {
+            const d = getTransactionDate(t.date);
+            if (d.getFullYear() === year && d.getMonth() === month) {
+                const day = d.getDate();
+                if (day <= 10) startTotal += t.amount;
+                else if (day <= 20) middleTotal += t.amount;
+                else endTotal += t.amount;
+            }
+        });
+
+        const total = startTotal + middleTotal + endTotal;
+        
+        return {
+            data: [
+                { name: 'Início (1 a 10)', value: startTotal, percent: total > 0 ? (startTotal / total) * 100 : 0 },
+                { name: 'Meio (11 a 20)', value: middleTotal, percent: total > 0 ? (middleTotal / total) * 100 : 0 },
+                { name: 'Fim (21+)', value: endTotal, percent: total > 0 ? (endTotal / total) * 100 : 0 }
+            ],
+            total
+        };
+    }, [bakeryTxs, currentDate]);
+
+    // 9. Efeito Feriado (Feriados Nacionais + API + Pernambuco)
+    const holidayEffect = useMemo(() => {
+        // Feriados fixos principais como fallback caso a API falhe ou ainda não tenha carregado
+        const fixedHolidaysFallback = {
+            '01/01': 'Confraternização Universal',
+            '06/03': 'Data Magna PE',
+            '21/04': 'Tiradentes',
+            '01/05': 'Dia do Trabalho',
+            '24/06': 'São João',
+            '16/07': 'Nossa Sra. do Carmo',
+            '07/09': 'Independência do Brasil',
+            '12/10': 'Nossa Senhora Aparecida',
+            '02/11': 'Finados',
+            '15/11': 'Proclamação da República',
+            '25/12': 'Natal'
+        };
+
+        let holidayTotal = 0;
+        let holidayDays = new Set();
+        let nonHolidayTotal = 0;
+        let nonHolidayDays = new Set();
+        let holidaySalesMap = new Map(); // "DD/MM/YYYY" -> { amount, name, dateObj }
+
+        bakeryTxs.forEach(t => {
+            const d = getTransactionDate(t.date);
+            const dayStr = d.getDate().toString().padStart(2, '0');
+            const monthStr = (d.getMonth() + 1).toString().padStart(2, '0');
+            const yearStr = d.getFullYear().toString();
+            const dayMonth = `${dayStr}/${monthStr}`;
+            const dateStr = `${dayMonth}/${yearStr}`; // Unique day
+            
+            const isApiHoliday = apiHolidays.has(dateStr);
+            const isFallbackHoliday = apiHolidays.size === 0 && fixedHolidaysFallback[dayMonth];
+            const isHoliday = isApiHoliday || isFallbackHoliday;
+
+            if (isHoliday) {
+                holidayTotal += t.amount;
+                holidayDays.add(dateStr);
+
+                if (!holidaySalesMap.has(dateStr)) {
+                    const hName = isApiHoliday ? apiHolidays.get(dateStr) : fixedHolidaysFallback[dayMonth];
+                    holidaySalesMap.set(dateStr, {
+                        dateStr,
+                        name: hName,
+                        amount: 0,
+                        dateObj: d
+                    });
+                }
+                holidaySalesMap.get(dateStr).amount += t.amount;
+            } else {
+                nonHolidayTotal += t.amount;
+                nonHolidayDays.add(dateStr);
+            }
+        });
+
+        const hCount = holidayDays.size;
+        const nhCount = nonHolidayDays.size;
+        
+        const avgHoliday = hCount > 0 ? holidayTotal / hCount : 0;
+        const avgNonHoliday = nhCount > 0 ? nonHolidayTotal / nhCount : 0;
+        
+        let insight = "Sem dados suficientes em feriados para comparar.";
+        if (hCount > 0 && nhCount > 0) {
+            if (avgHoliday > avgNonHoliday) {
+                const diff = ((avgHoliday - avgNonHoliday) / avgNonHoliday * 100).toFixed(1);
+                insight = `🎉 Feriados vendem **${diff}% a mais** que dias normais em média! (Média Feriado: ${formatBRL(avgHoliday)})`;
+            } else {
+                const diff = ((avgNonHoliday - avgHoliday) / avgNonHoliday * 100).toFixed(1);
+                insight = `📉 Feriados vendem **${diff}% a menos** que dias normais em média. (Média Feriado: ${formatBRL(avgHoliday)})`;
+            }
+        } else if (hCount > 0 && nhCount === 0) {
+            insight = `Temos apenas vendas em feriados registradas!`;
+        }
+
+        const holidaySalesList = Array.from(holidaySalesMap.values()).sort((a, b) => b.dateObj - a.dateObj);
+
+        return {
+            holidayTotal,
+            avgHoliday,
+            holidayDaysCount: hCount,
+            avgNonHoliday,
+            insight,
+            holidaySalesList
+        };
+    }, [bakeryTxs, apiHolidays]);
+
     const PIE_COLORS = ['#10b981', '#34d399', '#059669', '#6ee7b7', '#047857', '#a7f3d0'];
 
     const CustomTooltipChart = ({ active, payload, label }) => {
@@ -553,6 +719,88 @@ export function BakeryPage({ transactions }) {
                 </div>
             </StatCard>
 
+            {/* Sazonalidade do Mês e Efeito Feriado */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Sazonalidade do Mês */}
+                <Card className="border-gray-100 shadow-sm rounded-2xl">
+                    <CardHeader>
+                        <CardTitle className="text-lg flex items-center gap-2">
+                            <Sun className="w-5 h-5 text-amber-500" />
+                            Sazonalidade do Mês
+                        </CardTitle>
+                        <p className="text-xs text-gray-500 font-medium">Distribuição de vendas no mês selecionado</p>
+                    </CardHeader>
+                    <CardContent>
+                        {seasonalityData.total === 0 ? (
+                            <div className="h-48 flex items-center justify-center text-gray-400 font-medium bg-gray-50/50 rounded-xl border border-dashed border-gray-200">
+                                Sem dados para o mês selecionado.
+                            </div>
+                        ) : (
+                            <div className="space-y-5 mt-2">
+                                {seasonalityData.data.map((item, index) => (
+                                    <div key={index} className="space-y-2">
+                                        <div className="flex justify-between items-center text-sm">
+                                            <span className="font-semibold text-gray-700">{item.name}</span>
+                                            <span className="font-black text-gray-900">{formatBRL(item.value)}</span>
+                                        </div>
+                                        <div className="w-full bg-gray-100 rounded-full h-2.5">
+                                            <div 
+                                                className={`h-2.5 rounded-full ${
+                                                    index === 0 ? 'bg-amber-400' : 
+                                                    index === 1 ? 'bg-amber-500' : 'bg-amber-600'
+                                                }`} 
+                                                style={{ width: `${item.percent}%` }}
+                                            ></div>
+                                        </div>
+                                        <p className="text-xs text-right text-gray-500 font-medium">{item.percent.toFixed(1)}% do mês</p>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </CardContent>
+                </Card>
+
+                {/* Efeito Feriado */}
+                <Card className="border-gray-100 shadow-sm rounded-2xl relative overflow-hidden">
+                    <div className="absolute top-0 right-0 w-40 h-40 bg-rose-50 rounded-bl-full -z-10 opacity-50"></div>
+                    <CardHeader>
+                        <div className="flex justify-between items-start">
+                            <div>
+                                <CardTitle className="text-lg flex items-center gap-2">
+                                    <PartyPopper className="w-5 h-5 text-rose-500" />
+                                    Efeito Feriado
+                                </CardTitle>
+                                <p className="text-xs text-gray-500 font-medium mt-1">Impacto de feriados nacionais no faturamento</p>
+                            </div>
+                            <button 
+                                onClick={() => setIsHolidayModalOpen(true)} 
+                                className="text-xs text-rose-600 hover:text-rose-700 font-bold bg-rose-50 px-3 py-1.5 rounded-lg transition-colors border border-rose-100 shadow-sm"
+                            >
+                                Ver Detalhes
+                            </button>
+                        </div>
+                    </CardHeader>
+                    <CardContent>
+                        <div className="grid grid-cols-2 gap-4 mt-2 mb-6">
+                            <div className="bg-rose-50/50 p-4 rounded-2xl border border-rose-100">
+                                <p className="text-xs text-rose-600 font-bold mb-1">Média Feriados</p>
+                                <h4 className="text-2xl font-black text-gray-900">{formatBRL(holidayEffect.avgHoliday)}</h4>
+                                <p className="text-xs text-gray-500 mt-1 font-medium">Baseado em {holidayEffect.holidayDaysCount} dias</p>
+                            </div>
+                            <div className="bg-gray-50/80 p-4 rounded-2xl border border-gray-100">
+                                <p className="text-xs text-gray-500 font-bold mb-1">Média Dias Normais</p>
+                                <h4 className="text-2xl font-black text-gray-900">{formatBRL(holidayEffect.avgNonHoliday)}</h4>
+                                <p className="text-xs text-gray-500 mt-1 font-medium">Restante do ano</p>
+                            </div>
+                        </div>
+                        <div className="bg-rose-50/80 p-3.5 rounded-xl border border-rose-100 text-sm text-gray-700 flex items-start gap-2.5">
+                            <PartyPopper className="w-5 h-5 text-rose-500 flex-shrink-0 mt-0.5" />
+                            <p dangerouslySetInnerHTML={{ __html: holidayEffect.insight.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>') }} />
+                        </div>
+                    </CardContent>
+                </Card>
+            </div>
+
             {/* Controle de Filtro de Histórico */}
             <div className="flex flex-col sm:flex-row items-center justify-between gap-4 bg-white p-4 rounded-2xl border border-gray-100 shadow-sm">
                 <div className="flex bg-gray-100 p-1 rounded-xl">
@@ -691,6 +939,66 @@ export function BakeryPage({ transactions }) {
                         <div className="p-5 border-t border-gray-100 bg-gray-50 rounded-b-2xl flex justify-between items-center">
                             <span className="font-bold text-gray-600">Total do período</span>
                             <span className="font-black text-emerald-600 text-xl">{formatBRL(selectedHistoryItem.value)}</span>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Modal de Detalhes dos Feriados */}
+            {isHolidayModalOpen && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
+                    <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[85vh] flex flex-col animate-in fade-in zoom-in duration-200">
+                        <div className="flex justify-between items-center p-6 border-b border-gray-100">
+                            <div>
+                                <h3 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+                                    <PartyPopper className="w-6 h-6 text-rose-500" />
+                                    Vendas em Feriados
+                                </h3>
+                                <p className="text-sm text-gray-500 mt-1">Histórico detalhado de faturamento nos feriados</p>
+                            </div>
+                            <button 
+                                onClick={() => setIsHolidayModalOpen(false)} 
+                                className="text-gray-400 hover:text-gray-600 hover:bg-gray-100 p-2 rounded-xl transition-colors"
+                            >
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+                        <div className="overflow-y-auto p-0">
+                            <div className="divide-y divide-gray-100">
+                                {holidayEffect.holidaySalesList.slice(0, holidayModalVisibleCount).map((h, idx) => (
+                                    <div key={idx} className="p-5 flex justify-between items-center hover:bg-gray-50/50 transition-colors">
+                                        <div>
+                                            <p className="font-bold text-gray-900">{h.name}</p>
+                                            <div className="flex items-center gap-2 mt-1">
+                                                <span className="text-xs font-semibold text-gray-500 bg-gray-100 px-2 py-0.5 rounded-md">
+                                                    {h.dateStr}
+                                                </span>
+                                            </div>
+                                        </div>
+                                        <span className="font-black text-emerald-600 text-lg">{formatBRL(h.amount)}</span>
+                                    </div>
+                                ))}
+                                {holidayEffect.holidaySalesList.length === 0 && (
+                                    <div className="p-8 text-center text-gray-500 font-medium">
+                                        Nenhuma venda em feriado registrada.
+                                    </div>
+                                )}
+                            </div>
+                            
+                            {holidayEffect.holidaySalesList.length > holidayModalVisibleCount && (
+                                <div className="p-4 flex justify-center bg-gray-50/50">
+                                    <button 
+                                        onClick={() => setHolidayModalVisibleCount(prev => prev + 10)}
+                                        className="px-5 py-2 bg-white border border-gray-200 text-gray-700 text-sm font-bold rounded-xl hover:bg-gray-50 hover:text-gray-900 transition-colors shadow-sm"
+                                    >
+                                        Carregar mais
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+                        <div className="p-5 border-t border-gray-100 bg-gray-50 rounded-b-2xl flex justify-between items-center">
+                            <span className="font-bold text-gray-600">Total em feriados</span>
+                            <span className="font-black text-emerald-600 text-xl">{formatBRL(holidayEffect.holidayTotal)}</span>
                         </div>
                     </div>
                 </div>

@@ -1,0 +1,69 @@
+name: Release do app Mercadinho
+
+# Dispara ao empurrar uma tag tipo `mercadinho-v0.1.0`, ou na mao pela aba
+# Actions. A versao da tag tem que bater com a do desktop/src-tauri/tauri.conf.json.
+on:
+  push:
+    tags:
+      - 'mercadinho-v*'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Instalar Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+
+      - name: Instalar Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache do Rust
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: './desktop/src-tauri -> target'
+
+      - name: Instalar dependencias do frontend
+        working-directory: ./desktop
+        run: npm ci
+
+      - name: Compilar, assinar e publicar
+        uses: tauri-apps/tauri-action@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Chave privada que assina o update. Sem ela o app instalado recusa
+          # a atualizacao, porque a assinatura nao confere com a pubkey.
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          # O Vite embute isso no bundle na hora do build, entao precisa estar
+          # presente aqui e nao so na maquina de desenvolvimento.
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          VITE_SITE_URL: ${{ secrets.VITE_SITE_URL }}
+        with:
+          projectPath: ./desktop
+          tagName: mercadinho-v__VERSION__
+          releaseName: 'Mercadinho v__VERSION__'
+          releaseBody: |
+            Instalador para Windows.
+
+            Baixe o arquivo `.msi` abaixo e execute. Se o Windows avisar que o
+            aplicativo nao e reconhecido, clique em "Mais informacoes" e depois
+            em "Executar assim mesmo".
+
+            Quem ja tem o app instalado nao precisa baixar nada: ele avisa
+            sozinho e se atualiza.
+          releaseDraft: false
+          prerelease: false
+          # Gera o latest.json que o app consulta para saber se ha versao nova.
+          includeUpdaterJson: true

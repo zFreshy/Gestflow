@@ -1,0 +1,14 @@
+node_modules
+dist
+dist-ssr
+*.local
+.claude
+.env
+
+.github/
+
+src-tauri/target
+src-tauri/gen
+
+# Chave privada do updater - NUNCA commitar
+*.key

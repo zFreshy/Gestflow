@@ -879,13 +879,17 @@ create policy "admin_delete_employee_profiles" on public.employee_profiles
 -- As tres funcoes de trigger nao recebem grant nenhum: o trigger as executa
 -- pelo mecanismo interno, ninguem precisa poder chama-las direto.
 -- ============================================================================
-revoke all on function public.create_sale(jsonb, jsonb, numeric, text, uuid) from public;
-revoke all on function public.is_admin() from public;
-revoke all on function public.is_employee() from public;
-revoke all on function public.current_employee_profile_id() from public;
-revoke all on function public.apply_sale_item_stock() from public;
-revoke all on function public.apply_stock_entry() from public;
-revoke all on function public.apply_employee_credit_stock() from public;
+-- `from public, anon`: os dois sao necessarios. PUBLIC e o padrao do Postgres;
+-- o `anon` o Supabase concede EXPLICITAMENTE, e revogar de PUBLIC nao apaga uma
+-- concessao nominal. Medido: so com `from public`, is_admin() ainda respondia
+-- para quem nao estava logado.
+revoke all on function public.create_sale(jsonb, jsonb, numeric, text, uuid) from public, anon;
+revoke all on function public.is_admin() from public, anon;
+revoke all on function public.is_employee() from public, anon;
+revoke all on function public.current_employee_profile_id() from public, anon;
+revoke all on function public.apply_sale_item_stock() from public, anon;
+revoke all on function public.apply_stock_entry() from public, anon;
+revoke all on function public.apply_employee_credit_stock() from public, anon;
 
 grant execute on function public.create_sale(jsonb, jsonb, numeric, text, uuid) to authenticated;
 grant execute on function public.is_admin() to authenticated;

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -24,6 +24,8 @@ export function ProfileSwitcher({ collapsed }) {
     const navigate = useNavigate();
 
     const [open, setOpen] = useState(false);
+    const [menuPos, setMenuPos] = useState({});
+    const triggerRef = useRef(null);
     const [profiles, setProfiles] = useState([]);
     const [target, setTarget] = useState(null); // null | 'admin' | perfil
     const [password, setPassword] = useState('');
@@ -40,6 +42,26 @@ export function ProfileSwitcher({ collapsed }) {
         if (!open) return;
         listEmployeeProfiles().then(setProfiles).catch(() => setProfiles([]));
     }, [open]);
+
+    /**
+     * Abre o menu ancorado no botão. Ele sobe a partir do topo do botão porque
+     * o gatilho fica no rodapé da sidebar — para baixo não haveria espaço.
+     */
+    const toggleMenu = () => {
+        setOpen((v) => {
+            if (v) return false;
+
+            const rect = triggerRef.current?.getBoundingClientRect();
+            if (rect) {
+                setMenuPos({
+                    left: rect.left,
+                    bottom: window.innerHeight - rect.top + 8,
+                    width: Math.max(rect.width, 256),
+                });
+            }
+            return true;
+        });
+    };
 
     const startSwitch = (to) => {
         setTarget(to);
@@ -84,7 +106,8 @@ export function ProfileSwitcher({ collapsed }) {
         <>
             {/* Botão do perfil atual */}
             <button
-                onClick={() => setOpen((v) => !v)}
+                ref={triggerRef}
+                onClick={toggleMenu}
                 className={cn(
                     "w-full flex items-center gap-3 rounded-2xl transition-colors relative z-10",
                     collapsed ? "flex-col p-2 hover:bg-gray-50" : "bg-white p-3 border border-gray-100 shadow-sm hover:bg-gray-50"
@@ -111,19 +134,26 @@ export function ProfileSwitcher({ collapsed }) {
                 )}
             </button>
 
-            {/* Lista de perfis */}
-            {open && (
+            {/*
+              Menu e camada de fechar vao JUNTOS no portal.
+
+              Tentar deixar só a camada no portal não funciona: a sidebar tem
+              backdrop-blur, que cria contexto de empilhamento próprio, então o
+              `z-50` do menu só valia dentro da sidebar e a camada `z-40` do
+              body ficava por cima dele. Todo clique acertava a camada e o menu
+              fechava — parecia que os perfis não eram clicáveis.
+
+              Estando os dois no mesmo contexto, a ordem volta a valer. Como
+              fora da sidebar não há a que se ancorar, a posição é calculada a
+              partir do botão.
+            */}
+            {open && createPortal(
                 <>
-                    {/* Também via portal: dentro da sidebar, esta camada cobriria
-                        só a própria sidebar, e clicar no conteúdo não fecharia. */}
-                    {createPortal(
-                        <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />,
-                        document.body
-                    )}
-                    <div className={cn(
-                        "absolute z-50 bg-white rounded-2xl border border-gray-200 shadow-2xl overflow-hidden",
-                        collapsed ? "left-[88px] bottom-4 w-64" : "left-5 right-5 bottom-24"
-                    )}>
+                    <div className="fixed inset-0 z-[60]" onClick={() => setOpen(false)} />
+                    <div
+                        className="fixed z-[61] bg-white rounded-2xl border border-gray-200 shadow-2xl overflow-hidden"
+                        style={menuPos}
+                    >
                         <p className="px-4 pt-3 pb-2 text-[11px] font-bold text-gray-400 uppercase tracking-wide">
                             Trocar de perfil
                         </p>
@@ -180,7 +210,8 @@ export function ProfileSwitcher({ collapsed }) {
                             </>
                         )}
                     </div>
-                </>
+                </>,
+                document.body
             )}
 
             {/*

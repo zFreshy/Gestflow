@@ -66,4 +66,8 @@ jobs:
           releaseDraft: false
           prerelease: false
           # Gera o latest.json que o app consulta para saber se ha versao nova.
-          includeUpdaterJson: true
+          # O nome certo e `uploadUpdaterJson` — `includeUpdaterJson` nao existe
+          # e a action so avisa, sem falhar. Como o padrao ja e true, o arquivo
+          # saia de qualquer jeito, mas deixar o nome errado esconderia o dia em
+          # que alguem quisesse desligar isso de proposito.
+          uploadUpdaterJson: true

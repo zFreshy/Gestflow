@@ -41,29 +41,84 @@ create index if not exists products_supplier_idx on public.products (supplier_id
 -- ============================================================================
 -- PERFIS DE FUNCIONARIO
 --
--- Funcionam como perfil do Chrome: quem tem conta de verdade (login do
--- Supabase) e o dono. Os funcionarios sao perfis dentro dessa conta, com nome e
--- senha, sem e-mail e sem conta propria.
+-- Cada funcionario e uma conta Supabase de verdade, com e-mail sintetico
+-- (maria@funcionario.local). Na tela ele digita so nome e senha; o e-mail e
+-- montado a partir do nome e nunca aparece.
 --
--- ATENCAO: isto NAO e barreira de seguranca. Todo acesso ao banco continua
--- sendo feito com a sessao do administrador logado, entao o perfil so decide o
--- que a interface mostra. Serve para organizar o caixa e evitar que o
--- funcionario veja o financeiro sem querer - nao para impedir quem queira
--- burlar. Barreira real exigiria conta Supabase por funcionario e RLS por papel.
+-- A conta real e o que torna a separacao efetiva: o RLS enxerga quem esta
+-- pedindo e nega o dado na origem. Esconder menu e coluna nao adiantaria, pois
+-- o dado ainda chegaria na maquina e bastaria abrir o devtools para ler.
+--
+-- Quem NAO tem linha aqui e administrador. Uma tabela de papeis separada
+-- exigiria semear os administradores que ja existem e daria margem a conta sem
+-- papel nenhum; assim a regra tem uma fonte unica de verdade.
 -- ============================================================================
 
--- crypt()/gen_salt() para nao guardar a senha em texto puro.
-create extension if not exists pgcrypto;
-
 create table if not exists public.employee_profiles (
-  id            uuid primary key default gen_random_uuid(),
-  name          text not null unique,
-  password_hash text not null,
-  active        boolean not null default true,
-  created_by    uuid references auth.users,
-  created_at    timestamptz not null default now(),
-  updated_at    timestamptz not null default now()
+  id          uuid primary key default gen_random_uuid(),
+  user_id     uuid unique references auth.users(id) on delete cascade,
+  name        text not null unique,
+  login_email text unique,
+  active      boolean not null default true,
+  created_by  uuid references auth.users,
+  created_at  timestamptz not null default now(),
+  updated_at  timestamptz not null default now()
 );
+
+-- Migracao de bancos que ja tinham o modelo antigo (perfil sem conta, com
+-- senha em hash na propria tabela).
+alter table public.employee_profiles
+  add column if not exists user_id     uuid unique references auth.users(id) on delete cascade,
+  add column if not exists login_email text unique;
+
+-- A senha agora mora no auth.users. Guardar hash aqui era mais um segredo para
+-- vazar, sem servir para nada.
+alter table public.employee_profiles drop column if exists password_hash;
+
+create index if not exists employee_profiles_user_idx on public.employee_profiles (user_id);
+
+-- ----------------------------------------------------------------------------
+-- Quem e quem
+--
+-- SECURITY DEFINER porque estas funcoes sao usadas dentro das proprias policies
+-- de employee_profiles: se lessem a tabela com as permissoes de quem chamou,
+-- entrariam em recursao infinita de RLS.
+-- ----------------------------------------------------------------------------
+create or replace function public.is_employee()
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1 from public.employee_profiles
+     where user_id = auth.uid() and active
+  );
+$$;
+
+create or replace function public.is_admin()
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select auth.uid() is not null and not public.is_employee();
+$$;
+
+/** Perfil do funcionario logado, para ele so mexer no que e dele. */
+create or replace function public.current_employee_profile_id()
+returns uuid
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select id from public.employee_profiles
+   where user_id = auth.uid() and active
+   limit 1;
+$$;
 
 -- ----------------------------------------------------------------------------
 -- CLIENTES
@@ -393,7 +448,6 @@ declare
   v_total      numeric(10,2) := 0;
   v_paid       numeric(10,2) := 0;
   v_count      integer       := 0;
-  v_item       jsonb;
   v_email      text;
   v_summary    text;
 begin
@@ -417,14 +471,23 @@ begin
 
   select email into v_email from auth.users where id = auth.uid();
 
-  -- Totais calculados no banco a partir dos itens: o cliente nao dita o total.
-  for v_item in select * from jsonb_array_elements(p_items) loop
-    v_subtotal   := v_subtotal
-                    + (v_item->>'quantity')::numeric * (v_item->>'unit_price')::numeric;
-    v_cost_total := v_cost_total
-                    + (v_item->>'quantity')::numeric * coalesce((v_item->>'unit_cost')::numeric, 0);
-    v_count      := v_count + 1;
-  end loop;
+  -- Precos vem da tabela de produtos, nao do que o app mandou.
+  --
+  -- O app envia preco junto so para montar a tela; confiar nele deixaria
+  -- qualquer um registrar uma venda de R$ 0,01 chamando a API direto. Item sem
+  -- product_id (granel, produto nao cadastrado) e a unica excecao, porque nao
+  -- ha de onde buscar.
+  select coalesce(sum(qty * price), 0),
+         coalesce(sum(qty * cost), 0),
+         count(*)
+    into v_subtotal, v_cost_total, v_count
+    from (
+      select (i->>'quantity')::numeric as qty,
+             coalesce(p.sale_price, (i->>'unit_price')::numeric) as price,
+             coalesce(p.cost_price, coalesce((i->>'unit_cost')::numeric, 0)) as cost
+        from jsonb_array_elements(p_items) as i
+        left join public.products p on p.id = nullif(i->>'product_id', '')::uuid
+    ) resolvido;
 
   v_total := greatest(v_subtotal - coalesce(p_discount, 0), 0);
 
@@ -451,17 +514,21 @@ begin
   returning id into v_sale_id;
 
   -- O trigger em sale_items cuida da baixa de estoque.
+  -- Mesma resolucao de preco usada nos totais, para o item gravado bater com o
+  -- valor cobrado.
   insert into public.sale_items (sale_id, product_id, barcode, product_name,
                                  quantity, unit_price, unit_cost, subtotal)
   select v_sale_id,
-         nullif(item->>'product_id', '')::uuid,
-         item->>'barcode',
-         item->>'product_name',
+         p.id,
+         coalesce(p.barcode, item->>'barcode'),
+         coalesce(p.name, item->>'product_name'),
          (item->>'quantity')::numeric,
-         (item->>'unit_price')::numeric,
-         coalesce((item->>'unit_cost')::numeric, 0),
-         (item->>'quantity')::numeric * (item->>'unit_price')::numeric
-    from jsonb_array_elements(p_items) as item;
+         coalesce(p.sale_price, (item->>'unit_price')::numeric),
+         coalesce(p.cost_price, coalesce((item->>'unit_cost')::numeric, 0)),
+         (item->>'quantity')::numeric
+           * coalesce(p.sale_price, (item->>'unit_price')::numeric)
+    from jsonb_array_elements(p_items) as item
+    left join public.products p on p.id = nullif(item->>'product_id', '')::uuid;
 
   insert into public.sale_payments (sale_id, method, amount)
   select v_sale_id, p->>'method', (p->>'amount')::numeric
@@ -475,96 +542,28 @@ $$;
 -- VIEW: produtos abaixo do estoque minimo
 -- ============================================================================
 -- ============================================================================
--- PERFIS: criar, conferir senha, renomear
+-- PERFIS: funcoes antigas removidas
 --
--- Tudo por funcao SECURITY DEFINER porque o `password_hash` nunca deve sair da
--- tabela. A listagem usa a view abaixo, que expoe so nome e situacao.
---
--- `search_path` inclui `extensions` porque no Supabase o pgcrypto costuma
--- morar la, e sem isso o crypt() nao seria encontrado.
+-- Na versao anterior o perfil tinha senha propria, guardada em hash aqui, e
+-- estas funcoes cuidavam disso. Agora a senha e do auth.users e quem confere e
+-- o proprio Supabase, entao elas nao so ficaram sem uso como manteriam um
+-- caminho paralelo de autenticacao mais fraco que o oficial.
 -- ============================================================================
+drop function if exists public.create_employee_profile(text, text);
+drop function if exists public.verify_employee_password(uuid, text);
+drop function if exists public.set_employee_password(uuid, text);
 
-create or replace function public.create_employee_profile(
-  p_name     text,
-  p_password text
-)
-returns uuid
-language plpgsql
-security definer
-set search_path = public, extensions
-as $$
-declare
-  v_id uuid;
-begin
-  if coalesce(trim(p_name), '') = '' then
-    raise exception 'O nome do perfil e obrigatorio';
-  end if;
-
-  if length(coalesce(p_password, '')) < 4 then
-    raise exception 'A senha precisa de pelo menos 4 caracteres';
-  end if;
-
-  insert into public.employee_profiles (name, password_hash, created_by)
-  values (trim(p_name), crypt(p_password, gen_salt('bf')), auth.uid())
-  returning id into v_id;
-
-  return v_id;
-exception
-  when unique_violation then
-    raise exception 'Ja existe um perfil com esse nome';
-end;
-$$;
-
-create or replace function public.verify_employee_password(
-  p_profile_id uuid,
-  p_password   text
-)
-returns boolean
-language plpgsql
-security definer
-set search_path = public, extensions
-as $$
-declare
-  v_hash text;
-begin
-  select password_hash into v_hash
-    from public.employee_profiles
-   where id = p_profile_id and active;
-
-  if v_hash is null then
-    return false;
-  end if;
-
-  return v_hash = crypt(p_password, v_hash);
-end;
-$$;
-
-create or replace function public.set_employee_password(
-  p_profile_id uuid,
-  p_password   text
-)
-returns void
-language plpgsql
-security definer
-set search_path = public, extensions
-as $$
-begin
-  if length(coalesce(p_password, '')) < 4 then
-    raise exception 'A senha precisa de pelo menos 4 caracteres';
-  end if;
-
-  update public.employee_profiles
-     set password_hash = crypt(p_password, gen_salt('bf')),
-         updated_at    = now()
-   where id = p_profile_id;
-end;
-$$;
-
--- Listagem sem o hash. View comum (nao security_invoker) de proposito: ela
--- precisa enxergar a tabela que o RLS mantem fechada para leitura direta.
+-- Listagem dos perfis para o seletor de conta. Precisa ser visivel antes do
+-- login do funcionario, entao roda como dono (nao security_invoker) e expoe so
+-- nome e situacao.
+-- `login_email` entra aqui porque o seletor de perfil precisa dele para fazer
+-- o login. Nao e segredo: e derivado do nome de forma previsivel
+-- (maria -> maria@funcionario.local) e sozinho nao abre nada — a senha
+-- continua sendo exigida pelo Supabase.
 create or replace view public.employee_profiles_public as
-  select id, name, active, created_at
-    from public.employee_profiles;
+  select id, name, login_email, active, created_at
+    from public.employee_profiles
+   where active;
 
 -- ============================================================================
 -- VIEW: quanto cada cliente deve no fiado
@@ -573,9 +572,10 @@ create or replace view public.employee_profiles_public as
 -- venda ou apagar um pagamento corrige a divida sozinho — um contador
 -- denormalizado sairia do lugar no primeiro estorno e ninguem perceberia.
 -- ============================================================================
-create or replace view public.customer_credit_balance
-  with (security_invoker = true)
-as
+-- Sem security_invoker de proposito: a conta soma `sale_payments`, que o
+-- funcionario nao pode ler. Rodando como dono, ela devolve o saldo certo para
+-- os dois papeis sem abrir a tabela de vendas para ninguem.
+create or replace view public.customer_credit_balance as
   with debt as (
     select s.customer_id, sum(sp.amount) as total
       from public.sales s
@@ -621,62 +621,183 @@ as
 -- ============================================================================
 -- RLS
 --
--- Mesmo modelo do resto do projeto (todo mundo logado ve tudo), mas restrito
--- a usuarios autenticados - o `anon` nao enxerga nada.
+-- Aqui e onde a separacao entre administrador e funcionario deixa de ser
+-- aparencia e vira regra. Um detalhe do Postgres torna isso obrigatorio: todo
+-- usuario logado compartilha o MESMO papel `authenticated`, entao permissao por
+-- coluna (GRANT) nao consegue distinguir os dois. A distincao tem que estar na
+-- policy, e como policy e por LINHA e nao por coluna, tudo que contem valor
+-- financeiro (custo, lucro, faturamento) e negado por inteiro ao funcionario e
+-- reexposto pela view `products_pos`, que simplesmente nao tem essas colunas.
+--
+-- Regra geral: o funcionario opera o caixa, o administrador enxerga dinheiro.
 -- ============================================================================
-alter table public.products        enable row level security;
-alter table public.sales           enable row level security;
-alter table public.sale_items      enable row level security;
-alter table public.sale_payments   enable row level security;
-alter table public.stock_entries   enable row level security;
+alter table public.products          enable row level security;
+alter table public.sales             enable row level security;
+alter table public.sale_items        enable row level security;
+alter table public.sale_payments     enable row level security;
+alter table public.stock_entries     enable row level security;
 alter table public.customers         enable row level security;
 alter table public.credit_payments   enable row level security;
 alter table public.employee_credits  enable row level security;
 alter table public.employee_profiles enable row level security;
 
+-- Limpa as policies permissivas da versao anterior, em que todo mundo via tudo.
+do $$
+declare
+  t text;
+  p text;
+begin
+  foreach t in array array['products', 'sales', 'sale_items', 'sale_payments',
+                           'stock_entries', 'customers', 'credit_payments',
+                           'employee_credits', 'employee_profiles'] loop
+    foreach p in array array['select', 'insert', 'update', 'delete'] loop
+      execute format('drop policy if exists "auth_%s_%s" on public.%I', p, t, t);
+      execute format('drop policy if exists "admin_%s_%s" on public.%I', p, t, t);
+      execute format('drop policy if exists "emp_%s_%s" on public.%I', p, t, t);
+    end loop;
+  end loop;
+end $$;
+
+-- ----------------------------------------------------------------------------
+-- SO ADMINISTRADOR: tudo que revela dinheiro
+--
+-- sales/sale_items/sale_payments guardam faturamento, custo e lucro.
+-- stock_entries e o quanto se paga ao fornecedor.
+-- O funcionario nao le nada disso — nem em consulta direta pela API.
+-- ----------------------------------------------------------------------------
 do $$
 declare
   t text;
 begin
-  foreach t in array array['products', 'sales', 'sale_items', 'sale_payments',
-                           'stock_entries', 'customers', 'credit_payments',
-                           'employee_credits'] loop
-    execute format('drop policy if exists "auth_select_%1$s" on public.%1$I', t);
-    execute format('drop policy if exists "auth_insert_%1$s" on public.%1$I', t);
-    execute format('drop policy if exists "auth_update_%1$s" on public.%1$I', t);
-    execute format('drop policy if exists "auth_delete_%1$s" on public.%1$I', t);
-
-    execute format('create policy "auth_select_%1$s" on public.%1$I for select to authenticated using (true)', t);
-    execute format('create policy "auth_insert_%1$s" on public.%1$I for insert to authenticated with check (true)', t);
-    execute format('create policy "auth_update_%1$s" on public.%1$I for update to authenticated using (true)', t);
-    execute format('create policy "auth_delete_%1$s" on public.%1$I for delete to authenticated using (true)', t);
+  foreach t in array array['sales', 'sale_items', 'sale_payments', 'stock_entries'] loop
+    execute format($f$
+      create policy "admin_select_%1$s" on public.%1$I
+        for select to authenticated using (public.is_admin());
+      create policy "admin_insert_%1$s" on public.%1$I
+        for insert to authenticated with check (public.is_admin());
+      create policy "admin_update_%1$s" on public.%1$I
+        for update to authenticated using (public.is_admin());
+      create policy "admin_delete_%1$s" on public.%1$I
+        for delete to authenticated using (public.is_admin());
+    $f$, t);
   end loop;
 end $$;
 
--- employee_profiles fica de fora do laco acima: recebe insert/update/delete,
--- mas NENHUMA policy de select. Assim o `password_hash` nao pode ser lido pela
--- API nem por engano; quem lista e a view employee_profiles_public.
+-- O funcionario ainda vende: quem grava a venda e o create_sale, que roda como
+-- SECURITY DEFINER e por isso passa por cima destas policies. Ou seja, ele
+-- consegue registrar venda sem conseguir ler nenhuma.
+
+-- ----------------------------------------------------------------------------
+-- PRODUTOS: administrador le a tabela; funcionario le a view sem custo
+-- ----------------------------------------------------------------------------
+create policy "admin_select_products" on public.products
+  for select to authenticated using (public.is_admin());
+create policy "admin_insert_products" on public.products
+  for insert to authenticated with check (public.is_admin());
+create policy "admin_update_products" on public.products
+  for update to authenticated using (public.is_admin());
+create policy "admin_delete_products" on public.products
+  for delete to authenticated using (public.is_admin());
+
+-- View de venda: mesmos produtos, sem cost_price. Roda como dono para
+-- atravessar o RLS acima de proposito — e o unico caminho do funcionario ate o
+-- catalogo, e nele o custo simplesmente nao existe.
+create or replace view public.products_pos as
+  select id, barcode, name, unit, sale_price, stock_quantity, min_stock,
+         category, supplier_id, active
+    from public.products
+   where active;
+
+-- ----------------------------------------------------------------------------
+-- CLIENTES E FIADO: os dois lados operam
+--
+-- Divida de cliente nao e lucro da loja, e vender fiado no balcao e trabalho de
+-- caixa. Sem isto o funcionario nao conseguiria fechar uma venda no fiado.
+-- ----------------------------------------------------------------------------
 do $$
 declare
-  p text;
+  t text;
 begin
-  foreach p in array array['insert', 'update', 'delete'] loop
-    execute format('drop policy if exists "auth_%s_employee_profiles" on public.employee_profiles', p);
+  foreach t in array array['customers', 'credit_payments'] loop
+    execute format($f$
+      create policy "auth_select_%1$s" on public.%1$I
+        for select to authenticated using (true);
+      create policy "auth_insert_%1$s" on public.%1$I
+        for insert to authenticated with check (true);
+      create policy "admin_update_%1$s" on public.%1$I
+        for update to authenticated using (public.is_admin());
+      create policy "admin_delete_%1$s" on public.%1$I
+        for delete to authenticated using (public.is_admin());
+    $f$, t);
   end loop;
-  execute 'drop policy if exists "auth_select_employee_profiles" on public.employee_profiles';
-
-  create policy "auth_insert_employee_profiles" on public.employee_profiles
-    for insert to authenticated with check (true);
-  create policy "auth_update_employee_profiles" on public.employee_profiles
-    for update to authenticated using (true);
-  create policy "auth_delete_employee_profiles" on public.employee_profiles
-    for delete to authenticated using (true);
 end $$;
 
+-- ----------------------------------------------------------------------------
+-- CREDITO DA LOJA: cada funcionario so enxerga o proprio consumo
+-- ----------------------------------------------------------------------------
+create policy "emp_select_employee_credits" on public.employee_credits
+  for select to authenticated
+  using (public.is_admin() or employee_profile_id = public.current_employee_profile_id());
+
+-- Lancar so para si mesmo: ninguem poe consumo na conta do colega.
+create policy "emp_insert_employee_credits" on public.employee_credits
+  for insert to authenticated
+  with check (
+    public.is_admin() or (
+      employee_profile_id = public.current_employee_profile_id()
+      and settled_at is null   -- funcionario nao nasce lancamento ja quitado
+    )
+  );
+
+-- Marcar como descontado e ato do administrador: e o acerto do pagamento.
+create policy "admin_update_employee_credits" on public.employee_credits
+  for update to authenticated using (public.is_admin());
+
+-- O funcionario corrige o proprio erro, desde que ainda nao tenha sido
+-- descontado — mexer em conta ja fechada bagunçaria o acerto do mes passado.
+create policy "emp_delete_employee_credits" on public.employee_credits
+  for delete to authenticated
+  using (
+    public.is_admin() or (
+      employee_profile_id = public.current_employee_profile_id()
+      and settled_at is null
+    )
+  );
+
+-- ----------------------------------------------------------------------------
+-- PERFIS: so o administrador cria e mexe
+--
+-- O funcionario le apenas a propria linha, que e o que o app precisa para saber
+-- quem ele e. A lista para o seletor de conta vem da view.
+-- ----------------------------------------------------------------------------
+create policy "emp_select_employee_profiles" on public.employee_profiles
+  for select to authenticated
+  using (public.is_admin() or user_id = auth.uid());
+create policy "admin_insert_employee_profiles" on public.employee_profiles
+  for insert to authenticated with check (public.is_admin());
+create policy "admin_update_employee_profiles" on public.employee_profiles
+  for update to authenticated using (public.is_admin());
+create policy "admin_delete_employee_profiles" on public.employee_profiles
+  for delete to authenticated using (public.is_admin());
+
+-- ============================================================================
+-- GRANTS
+-- ============================================================================
 grant execute on function public.create_sale(jsonb, jsonb, numeric, text, uuid) to authenticated;
-grant execute on function public.create_employee_profile(text, text) to authenticated;
-grant execute on function public.verify_employee_password(uuid, text) to authenticated;
-grant execute on function public.set_employee_password(uuid, text) to authenticated;
+grant execute on function public.is_admin() to authenticated;
+grant execute on function public.is_employee() to authenticated;
+grant execute on function public.current_employee_profile_id() to authenticated;
+
 grant select on public.employee_profiles_public to authenticated;
+grant select on public.products_pos to authenticated;
+
+-- low_stock_products roda com security_invoker e le `products`, que o
+-- funcionario nao pode ler: para ele a view simplesmente volta vazia. Nao
+-- precisa de restricao extra — o RLS ja resolve, e as telas que a usam sao do
+-- administrador de qualquer forma.
 grant select on public.low_stock_products to authenticated;
+
+-- customer_credit_balance e o caso oposto: precisa ser calculada corretamente
+-- tambem para o funcionario, senao ele venderia fiado sem enxergar o quanto a
+-- pessoa ja deve. Ela expoe divida de cliente, nao faturamento da loja.
 grant select on public.customer_credit_balance to authenticated;

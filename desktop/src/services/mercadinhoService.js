@@ -18,10 +18,20 @@ export async function listProducts({ includeInactive = false } = {}) {
     return data ?? [];
 }
 
+/**
+ * De onde ler o catalogo.
+ *
+ * `products_pos` e uma view sem a coluna de custo, liberada para todo mundo
+ * logado. A tabela `products` so o administrador enxerga. Por isso o caminho
+ * padrao e a view: ela atende os dois papeis. `withCost` e para as telas do
+ * administrador que precisam do custo (entrada de estoque, cadastro).
+ */
+const productSource = (withCost) => (withCost ? 'products' : 'products_pos');
+
 /** Busca exata pelo codigo de barras. Retorna null se nao existir. */
-export async function findProductByBarcode(barcode) {
+export async function findProductByBarcode(barcode, { withCost = false } = {}) {
     const { data, error } = await supabase
-        .from('products')
+        .from(productSource(withCost))
         .select('*')
         .eq('barcode', barcode)
         .eq('active', true)
@@ -31,9 +41,9 @@ export async function findProductByBarcode(barcode) {
     return data;
 }
 
-export async function searchProducts(term) {
+export async function searchProducts(term, { withCost = false } = {}) {
     const { data, error } = await supabase
-        .from('products')
+        .from(productSource(withCost))
         .select('*')
         .eq('active', true)
         .or(`name.ilike.%${term}%,barcode.ilike.%${term}%`)
@@ -495,33 +505,50 @@ export async function listEmployeeProfiles({ includeInactive = false } = {}) {
     return data ?? [];
 }
 
-export async function createEmployeeProfile({ name, password }) {
-    const { data, error } = await supabase.rpc('create_employee_profile', {
-        p_name: name,
-        p_password: password,
+/**
+ * Cria a conta do funcionario.
+ *
+ * Vai pela Edge Function porque criar usuario exige a service_role key, que
+ * nao pode existir dentro de um app instalado na maquina do cliente. A funcao
+ * confere no servidor se quem chamou e administrador.
+ */
+export async function createEmployeeAccount({ name, password }) {
+    const { data, error } = await supabase.functions.invoke('create-employee', {
+        body: { name, password },
     });
 
-    if (error) throw error;
-    return data; // uuid do perfil
+    // Erro HTTP vem embrulhado: a mensagem util esta no corpo da resposta.
+    if (error) {
+        let message = 'Não consegui criar o funcionário.';
+        try {
+            const body = await error.context?.json?.();
+            if (body?.error) message = body.error;
+        } catch {
+            // Sem corpo legível — fica a mensagem genérica.
+        }
+        throw new Error(message);
+    }
+
+    if (data?.error) throw new Error(data.error);
+    return data?.profile;
 }
 
-export async function verifyEmployeePassword(profileId, password) {
-    const { data, error } = await supabase.rpc('verify_employee_password', {
-        p_profile_id: profileId,
-        p_password: password,
-    });
-
+/** Quem esta logado e administrador? Quem decide e o banco. */
+export async function checkIsAdmin() {
+    const { data, error } = await supabase.rpc('is_admin');
     if (error) throw error;
     return data === true;
 }
 
-export async function setEmployeePassword(profileId, password) {
-    const { error } = await supabase.rpc('set_employee_password', {
-        p_profile_id: profileId,
-        p_password: password,
-    });
+/** Perfil do funcionario logado, ou null se for administrador. */
+export async function getMyEmployeeProfile() {
+    const { data, error } = await supabase
+        .from('employee_profiles')
+        .select('id, name, active')
+        .maybeSingle();
 
     if (error) throw error;
+    return data;
 }
 
 export async function setEmployeeProfileActive(profileId, active) {

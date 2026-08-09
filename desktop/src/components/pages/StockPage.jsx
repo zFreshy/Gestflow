@@ -107,7 +107,11 @@ export function StockPage() {
             return;
         }
         const timer = setTimeout(() => {
-            searchProducts(term).then(setSearchResults).catch(() => setSearchResults([]));
+            // withCost: tela de administrador, e o custo anterior é sugerido no
+            // formulário de entrada.
+            searchProducts(term, { withCost: true })
+                .then(setSearchResults)
+                .catch(() => setSearchResults([]));
         }, 250);
         return () => clearTimeout(timer);
     }, [searchTerm]);
@@ -131,7 +135,7 @@ export function StockPage() {
         if (!clean) return;
 
         try {
-            const product = await findProductByBarcode(clean);
+            const product = await findProductByBarcode(clean, { withCost: true });
             if (product) selectProduct(product);
             else setNotFoundCode(clean);
         } catch (err) {

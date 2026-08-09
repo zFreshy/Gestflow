@@ -22,7 +22,9 @@ const MENU_ITEMS = [
     // que é exatamente o que o funcionário não deve ver.
     { path: '/estoque', label: 'Estoque', icon: PackagePlus, adminOnly: true },
     { path: '/fiado', label: 'Fiado', icon: NotebookPen },
-    { path: '/vendas', label: 'Histórico', icon: Receipt },
+    // Histórico mostra faturamento e lucro — o banco nem devolve essas linhas
+    // para o funcionário, então a tela viria vazia de qualquer forma.
+    { path: '/vendas', label: 'Histórico', icon: Receipt, adminOnly: true },
     { path: '/meu-credito', label: 'Meu crédito', icon: ShoppingBasket, employeeOnly: true },
     { path: '/creditos', label: 'Crédito da loja', icon: ShoppingBasket, adminOnly: true },
     { path: '/perfis', label: 'Perfis', icon: Users, adminOnly: true },

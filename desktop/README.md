@@ -214,27 +214,41 @@ que o WebView carregou — `http://localhost:1420` em desenvolvimento e
 feito em um não valia no outro. Em arquivo, o login é do aplicativo e vale nos
 dois. Para forçar logout completo, apague esse arquivo.
 
-**Perfis de funcionário — e o que eles NÃO são.** Funcionam como perfil do
-Chrome: a conta de verdade é a do administrador (login do Supabase), e os
-funcionários são perfis dentro dela, com nome e senha, sem e-mail e sem conta
-própria. Criar um perfil exige estar no administrador; entrar num perfil pede a
-senha dele; voltar para o administrador pede a senha da conta.
+**Perfis de funcionário.** A experiência é a do Chrome — clica no perfil, digita
+a senha, pronto. Por baixo, cada funcionário é uma **conta Supabase de verdade**,
+com e-mail sintético (`maria@funcionario.local`) que ele nunca vê nem digita.
+Trocar de perfil é fazer login; voltar para o administrador pede a senha da conta
+dele.
 
-**Isso não é barreira de segurança.** Toda chamada ao banco continua usando a
-sessão do administrador, então o perfil só decide o que a interface mostra. Quem
-souber mexer consegue contornar. Serve para o funcionário não ver o financeiro
-sem querer e para separar o crédito da loja de cada um — não para guardar
-segredo de quem você não confia. Barreira real exigiria uma conta Supabase por
-funcionário e RLS por papel.
+**A separação é feita pelo banco, não pela tela.** Este é o ponto: esconder menu
+e coluna não protegeria nada, porque o dado ainda chegaria na máquina e bastaria
+abrir o devtools. Com conta própria, o RLS nega na origem — mesmo chamando a API
+por fora do app, a conta do funcionário recebe zero linha de `sales`,
+`sale_items`, `sale_payments`, `stock_entries` e `products`.
 
-O funcionário não vê: Dashboard, Estoque (dar entrada exige digitar o custo de
-compra), coluna de custo e margem em Produtos, e o card de lucro no Histórico.
-Em troca ganha **Meu crédito**.
+Um detalhe do Postgres explica o desenho: todo usuário logado compartilha o mesmo
+papel `authenticated`, então permissão por coluna não distingue os dois. E policy
+é por linha, não por coluna. Por isso o catálogo é negado inteiro ao funcionário
+e devolvido pela view **`products_pos`**, que simplesmente não tem `cost_price`.
 
-A senha do perfil é guardada com hash bcrypt (`crypt`/`gen_salt` do pgcrypto),
-nunca em texto puro, e a tabela `employee_profiles` **não tem policy de select**
-— nem a API consegue ler o hash. A listagem vem da view
-`employee_profiles_public`, que só expõe nome e situação.
+O funcionário não vê: Dashboard, Estoque, Histórico, custo e margem em Produtos.
+Em troca ganha **Meu crédito**, onde só enxerga os próprios lançamentos.
+
+O `create_sale` também deixou de confiar no app: **o preço vem da tabela de
+produtos**, não do que foi enviado. Sem isso, bastaria chamar a API direto para
+registrar uma venda de R$ 0,01.
+
+Criar funcionário passa pela Edge Function `create-employee`, porque criar
+usuário exige a `service_role key` — que não pode viajar dentro de um app
+instalado na máquina do cliente. A função confere no servidor se quem chamou é
+administrador.
+
+```bash
+supabase functions deploy create-employee
+```
+
+Trocar a senha de um funcionário é feito pelo painel do Supabase, em
+**Authentication → Users**.
 
 **Crédito da loja (consumo do funcionário).** É coisa diferente do fiado do
 cliente: o devedor é o funcionário e a quitação acontece na folha, não no caixa.

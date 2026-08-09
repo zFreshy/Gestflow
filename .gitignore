@@ -31,5 +31,8 @@ dist-ssr
 dist/*
 
 supabase/*
+# As Edge Functions sao codigo do projeto e precisam ser versionadas: sem elas
+# ninguem consegue reimplantar o que roda no servidor.
+!supabase/functions/
 
 mobile

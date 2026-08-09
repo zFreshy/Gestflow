@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import {
     ChevronsUpDown, ShieldCheck, User, Lock, Loader2, X, Check, Settings,
@@ -8,7 +9,7 @@ import { Button } from '../atoms/Button';
 import { Input } from '../atoms/Input';
 import { cn } from '../../lib/utils';
 import { useAuth } from '../../contexts/AuthContext';
-import { useProfile } from '../../contexts/ProfileContext';
+import { useProfile, rememberedAdminEmail } from '../../contexts/ProfileContext';
 import { listEmployeeProfiles } from '../../services/mercadinhoService';
 
 const NAMES_BY_EMAIL = {
@@ -29,8 +30,11 @@ export function ProfileSwitcher({ collapsed }) {
     const [checking, setChecking] = useState(false);
     const [error, setError] = useState('');
 
-    const adminName = NAMES_BY_EMAIL[getUserEmail()] || 'Administrador';
-    const currentName = isAdmin ? adminName : profile.name;
+    // Dentro de um perfil de funcionário, getUserEmail() é o e-mail sintético
+    // dele — o nome do administrador tem que vir do que ficou lembrado.
+    const adminEmail = isAdmin ? getUserEmail() : rememberedAdminEmail();
+    const adminName = NAMES_BY_EMAIL[adminEmail] || 'Administrador';
+    const currentName = isAdmin ? adminName : (profile?.name ?? 'Funcionário');
 
     useEffect(() => {
         if (!open) return;
@@ -59,6 +63,10 @@ export function ProfileSwitcher({ collapsed }) {
                 setError('Senha incorreta.');
                 return;
             }
+
+            // A troca é um login de verdade, então tudo que estava em memória
+            // pertence à sessão anterior.
+            setProfiles([]);
 
             setTarget(null);
             setPassword('');
@@ -106,7 +114,12 @@ export function ProfileSwitcher({ collapsed }) {
             {/* Lista de perfis */}
             {open && (
                 <>
-                    <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+                    {/* Também via portal: dentro da sidebar, esta camada cobriria
+                        só a própria sidebar, e clicar no conteúdo não fecharia. */}
+                    {createPortal(
+                        <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />,
+                        document.body
+                    )}
                     <div className={cn(
                         "absolute z-50 bg-white rounded-2xl border border-gray-200 shadow-2xl overflow-hidden",
                         collapsed ? "left-[88px] bottom-4 w-64" : "left-5 right-5 bottom-24"
@@ -170,8 +183,15 @@ export function ProfileSwitcher({ collapsed }) {
                 </>
             )}
 
-            {/* Confirmação por senha */}
-            {target && (
+            {/*
+              Confirmação por senha, montada no <body> via portal.
+
+              A sidebar usa `backdrop-blur`, e backdrop-filter cria containing
+              block: dentro dela, `position: fixed` passa a se medir pela
+              sidebar em vez da janela, e o modal ficava espremido no canto
+              esquerdo. O portal tira o modal de dentro desse contexto.
+            */}
+            {target && createPortal(
                 <div className="modal-overlay" onClick={checking ? undefined : () => setTarget(null)}>
                     <form
                         onSubmit={confirmSwitch}
@@ -223,7 +243,8 @@ export function ProfileSwitcher({ collapsed }) {
                             Entrar neste perfil
                         </Button>
                     </form>
-                </div>
+                </div>,
+                document.body
             )}
         </>
     );

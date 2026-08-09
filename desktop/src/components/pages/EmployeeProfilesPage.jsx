@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import {
-    Users, UserPlus, Loader2, KeyRound, Trash2, Pencil, ShieldAlert, Check, X,
+    Users, UserPlus, Loader2, Trash2, Pencil, ShieldCheck, Check, X,
 } from 'lucide-react';
 import { Button } from '../atoms/Button';
 import { Input } from '../atoms/Input';
@@ -8,7 +8,7 @@ import { Badge } from '../atoms/Badge';
 import { Avatar } from '../atoms/Avatar';
 import { cn, formatDate } from '../../lib/utils';
 import {
-    listEmployeeProfiles, createEmployeeProfile, setEmployeePassword,
+    listEmployeeProfiles, createEmployeeAccount,
     renameEmployeeProfile, setEmployeeProfileActive, deleteEmployeeProfile,
 } from '../../services/mercadinhoService';
 
@@ -23,8 +23,6 @@ export function EmployeeProfilesPage() {
 
     const [renaming, setRenaming] = useState(null);
     const [renameValue, setRenameValue] = useState('');
-    const [resetting, setResetting] = useState(null);
-    const [resetValue, setResetValue] = useState('');
 
     const load = async () => {
         setLoading(true);
@@ -44,20 +42,19 @@ export function EmployeeProfilesPage() {
         setError('');
 
         if (!newName.trim()) { setError('Digite o nome do funcionário.'); return; }
-        if (newPassword.length < 4) { setError('A senha precisa de pelo menos 4 caracteres.'); return; }
+        // 6 é o mínimo do Supabase, e agora a conta é dele de verdade.
+        if (newPassword.length < 6) { setError('A senha precisa de pelo menos 6 caracteres.'); return; }
 
         setSaving(true);
         try {
-            await createEmployeeProfile({ name: newName, password: newPassword });
+            await createEmployeeAccount({ name: newName, password: newPassword });
             setNewName('');
             setNewPassword('');
             setCreating(false);
             load();
         } catch (err) {
             console.error(err);
-            setError(err?.message?.includes('Ja existe')
-                ? 'Já existe um perfil com esse nome.'
-                : 'Não consegui criar o perfil.');
+            setError(err.message || 'Não consegui criar o funcionário.');
         } finally {
             setSaving(false);
         }
@@ -72,22 +69,6 @@ export function EmployeeProfilesPage() {
         } catch (err) {
             console.error(err);
             alert('Não consegui renomear (talvez o nome já exista).');
-        }
-    };
-
-    const handleReset = async (profile) => {
-        if (resetValue.length < 4) {
-            alert('A senha precisa de pelo menos 4 caracteres.');
-            return;
-        }
-        try {
-            await setEmployeePassword(profile.id, resetValue);
-            setResetting(null);
-            setResetValue('');
-            alert(`Senha do perfil "${profile.name}" trocada.`);
-        } catch (err) {
-            console.error(err);
-            alert('Não consegui trocar a senha.');
         }
     };
 
@@ -135,17 +116,16 @@ export function EmployeeProfilesPage() {
                 )}
             </div>
 
-            {/* O que o perfil é e o que não é */}
-            <div className="flex items-start gap-3 rounded-2xl bg-amber-50 border border-amber-200 p-4">
-                <ShieldAlert className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
-                <div className="text-sm text-amber-800 leading-relaxed">
-                    <p className="font-bold">Perfil não é conta separada.</p>
+            {/* O que a separação garante */}
+            <div className="flex items-start gap-3 rounded-2xl bg-emerald-50 border border-emerald-200 p-4">
+                <ShieldCheck className="h-5 w-5 text-emerald-600 shrink-0 mt-0.5" />
+                <div className="text-sm text-emerald-800 leading-relaxed">
+                    <p className="font-bold">Cada funcionário tem conta própria.</p>
                     <p className="mt-0.5">
-                        Funciona como perfil do Chrome: serve para o funcionário não ver o
-                        financeiro e para separar o crédito da loja de cada um. Todo o acesso ao
-                        banco continua sendo feito pela sua conta de administrador — quem souber
-                        mexer consegue contornar. Não use isso para guardar segredo de quem você
-                        não confia.
+                        Na tela ele digita só nome e senha, mas por baixo é um login de verdade. O
+                        bloqueio do financeiro é feito pelo banco de dados, não pela interface:
+                        mesmo tentando por fora do app, a conta dele não consegue ler vendas,
+                        custos nem lucro. Ele também só enxerga o próprio crédito da loja.
                     </p>
                 </div>
             </div>
@@ -268,58 +248,28 @@ export function EmployeeProfilesPage() {
                                 )}
                             </div>
 
-                            {resetting === p.id ? (
-                                <div className="flex items-center gap-2">
-                                    <Input
-                                        type="password"
-                                        value={resetValue}
-                                        onChange={(e) => setResetValue(e.target.value)}
-                                        onKeyDown={(e) => {
-                                            if (e.key === 'Enter') { e.preventDefault(); handleReset(p); }
-                                            if (e.key === 'Escape') { setResetting(null); setResetValue(''); }
-                                        }}
-                                        placeholder="Nova senha"
-                                        className="h-9 w-44"
-                                        autoFocus
-                                    />
-                                    <Button size="sm" variant="brand" onClick={() => handleReset(p)}>
-                                        <Check className="h-4 w-4" />
-                                    </Button>
-                                    <Button size="sm" variant="outline" onClick={() => { setResetting(null); setResetValue(''); }}>
-                                        <X className="h-4 w-4" />
-                                    </Button>
-                                </div>
-                            ) : (
-                                <div className="flex items-center gap-1">
-                                    <button
-                                        onClick={() => { setRenaming(p.id); setRenameValue(p.name); }}
-                                        className="h-9 w-9 rounded-lg flex items-center justify-center text-gray-400 hover:text-[#7E1A8B] hover:bg-[#7E1A8B]/10 transition-colors"
-                                        title="Renomear"
-                                    >
-                                        <Pencil className="h-4 w-4" />
-                                    </button>
-                                    <button
-                                        onClick={() => { setResetting(p.id); setResetValue(''); }}
-                                        className="h-9 w-9 rounded-lg flex items-center justify-center text-gray-400 hover:text-[#7E1A8B] hover:bg-[#7E1A8B]/10 transition-colors"
-                                        title="Trocar senha"
-                                    >
-                                        <KeyRound className="h-4 w-4" />
-                                    </button>
-                                    <button
-                                        onClick={() => handleToggleActive(p)}
-                                        className="h-9 px-3 rounded-lg text-xs font-semibold text-gray-500 hover:bg-gray-100 transition-colors"
-                                    >
-                                        {p.active ? 'Desativar' : 'Reativar'}
-                                    </button>
-                                    <button
-                                        onClick={() => handleDelete(p)}
-                                        className="h-9 w-9 rounded-lg flex items-center justify-center text-gray-300 hover:text-red-600 hover:bg-red-50 transition-colors"
-                                        title="Apagar"
-                                    >
-                                        <Trash2 className="h-4 w-4" />
-                                    </button>
-                                </div>
-                            )}
+                            <div className="flex items-center gap-1">
+                                <button
+                                    onClick={() => { setRenaming(p.id); setRenameValue(p.name); }}
+                                    className="h-9 w-9 rounded-lg flex items-center justify-center text-gray-400 hover:text-[#7E1A8B] hover:bg-[#7E1A8B]/10 transition-colors"
+                                    title="Renomear"
+                                >
+                                    <Pencil className="h-4 w-4" />
+                                </button>
+                                <button
+                                    onClick={() => handleToggleActive(p)}
+                                    className="h-9 px-3 rounded-lg text-xs font-semibold text-gray-500 hover:bg-gray-100 transition-colors"
+                                >
+                                    {p.active ? 'Desativar' : 'Reativar'}
+                                </button>
+                                <button
+                                    onClick={() => handleDelete(p)}
+                                    className="h-9 w-9 rounded-lg flex items-center justify-center text-gray-300 hover:text-red-600 hover:bg-red-50 transition-colors"
+                                    title="Apagar"
+                                >
+                                    <Trash2 className="h-4 w-4" />
+                                </button>
+                            </div>
                         </div>
                     ))
                 )}

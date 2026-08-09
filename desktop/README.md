@@ -231,8 +231,19 @@ papel `authenticated`, então permissão por coluna não distingue os dois. E po
 é por linha, não por coluna. Por isso o catálogo é negado inteiro ao funcionário
 e devolvido pela view **`products_pos`**, que simplesmente não tem `cost_price`.
 
-O funcionário não vê: Dashboard, Estoque, Histórico, custo e margem em Produtos.
-Em troca ganha **Meu crédito**, onde só enxerga os próprios lançamentos.
+O funcionário não vê: Dashboard, Estoque, Histórico, Fiado, e custo/margem em
+Produtos — onde a tela vira consulta de preço e estoque, sem botão de editar. Em
+troca ganha **Meu crédito**, onde só enxerga os próprios lançamentos.
+
+Ele **ainda vende fiado** no PDV: escolhe o cliente, ou cadastra na hora. O que
+não pode é registrar que alguém pagou a dívida — isso é dinheiro entrando, e
+seria o caminho mais óbvio de desvio (dar a dívida por paga sem o dinheiro
+entrar no caixa).
+
+Duas coisas que o linter do Supabase aponta e são intencionais: `products_pos` e
+`customer_credit_balance` rodam como dono. É proposital — são justamente o
+caminho controlado para o funcionário chegar a um dado derivado de tabela que
+ele não pode ler. Sem elas, ou ele veria o custo, ou não conseguiria trabalhar.
 
 O `create_sale` também deixou de confiar no app: **o preço vem da tabela de
 produtos**, não do que foi enviado. Sem isso, bastaria chamar a API direto para

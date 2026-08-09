@@ -30,7 +30,11 @@ export function ProductsPage() {
     const load = async () => {
         setLoading(true);
         try {
-            setProducts(await listProducts({ includeInactive: showInactive }));
+            // Funcionário lê a view sem custo; a tabela não devolve nada para ele.
+            setProducts(await listProducts({
+                includeInactive: isAdmin && showInactive,
+                withCost: isAdmin,
+            }));
         } catch (err) {
             console.error(err);
         } finally {
@@ -38,7 +42,7 @@ export function ProductsPage() {
         }
     };
 
-    useEffect(() => { load(); }, [showInactive]);
+    useEffect(() => { load(); }, [showInactive, isAdmin]);
 
     // Bipar nesta tela joga o código na busca — jeito rápido de achar um produto.
     useBarcodeScanner((code) => setSearch(code));
@@ -128,16 +132,20 @@ export function ProductsPage() {
                         {products.length} {products.length === 1 ? 'produto cadastrado' : 'produtos cadastrados'}
                     </p>
                 </div>
-                <div className="flex items-center gap-3">
-                    <Button variant="outline" onClick={() => setImportOpen(true)}>
-                        <FileSpreadsheet className="h-4 w-4 mr-2" />
-                        Importar planilha
-                    </Button>
-                    <Button variant="brand" onClick={openNew}>
-                        <Plus className="h-4 w-4 mr-2" />
-                        Novo produto
-                    </Button>
-                </div>
+                {/* Cadastrar e importar são bloqueados pelo RLS para o
+                    funcionário; mostrar o botão só daria erro na cara dele. */}
+                {isAdmin && (
+                    <div className="flex items-center gap-3">
+                        <Button variant="outline" onClick={() => setImportOpen(true)}>
+                            <FileSpreadsheet className="h-4 w-4 mr-2" />
+                            Importar planilha
+                        </Button>
+                        <Button variant="brand" onClick={openNew}>
+                            <Plus className="h-4 w-4 mr-2" />
+                            Novo produto
+                        </Button>
+                    </div>
+                )}
             </div>
 
             {/* Filtros */}
@@ -170,15 +178,18 @@ export function ProductsPage() {
                         </div>
                     )}
 
-                    <label className="flex items-center gap-2 text-sm font-medium text-gray-600 cursor-pointer select-none whitespace-nowrap">
-                        <input
-                            type="checkbox"
-                            checked={showInactive}
-                            onChange={(e) => setShowInactive(e.target.checked)}
-                            className="h-4 w-4 rounded border-gray-300 accent-[#7E1A8B]"
-                        />
-                        Desativados
-                    </label>
+                    {/* A view do funcionário só traz produto ativo. */}
+                    {isAdmin && (
+                        <label className="flex items-center gap-2 text-sm font-medium text-gray-600 cursor-pointer select-none whitespace-nowrap">
+                            <input
+                                type="checkbox"
+                                checked={showInactive}
+                                onChange={(e) => setShowInactive(e.target.checked)}
+                                className="h-4 w-4 rounded border-gray-300 accent-[#7E1A8B]"
+                            />
+                            Desativados
+                        </label>
+                    )}
 
                     {hasFilters && (
                         <Button variant="outline" onClick={clearFilters}>
@@ -314,24 +325,26 @@ export function ProductsPage() {
                                             </div>
                                         </td>
                                         <td className="px-3 py-3">
-                                            <div className="flex items-center justify-end gap-1">
-                                                <button
-                                                    onClick={() => openEdit(p)}
-                                                    className="h-8 w-8 rounded-lg flex items-center justify-center text-gray-400 hover:text-[#7E1A8B] hover:bg-[#7E1A8B]/10 transition-colors"
-                                                    title="Editar"
-                                                >
-                                                    <Pencil className="h-4 w-4" />
-                                                </button>
-                                                {p.active && (
+                                            {isAdmin && (
+                                                <div className="flex items-center justify-end gap-1">
                                                     <button
-                                                        onClick={() => handleDeactivate(p)}
-                                                        className="h-8 w-8 rounded-lg flex items-center justify-center text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors"
-                                                        title="Desativar"
+                                                        onClick={() => openEdit(p)}
+                                                        className="h-8 w-8 rounded-lg flex items-center justify-center text-gray-400 hover:text-[#7E1A8B] hover:bg-[#7E1A8B]/10 transition-colors"
+                                                        title="Editar"
                                                     >
-                                                        <Trash2 className="h-4 w-4" />
+                                                        <Pencil className="h-4 w-4" />
                                                     </button>
-                                                )}
-                                            </div>
+                                                    {p.active && (
+                                                        <button
+                                                            onClick={() => handleDeactivate(p)}
+                                                            className="h-8 w-8 rounded-lg flex items-center justify-center text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors"
+                                                            title="Desativar"
+                                                        >
+                                                            <Trash2 className="h-4 w-4" />
+                                                        </button>
+                                                    )}
+                                                </div>
+                                            )}
                                         </td>
                                     </tr>
                                 );

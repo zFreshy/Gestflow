@@ -451,6 +451,13 @@ declare
   v_email      text;
   v_summary    text;
 begin
+  -- Cinto e suspensorio: o GRANT ja limita a chamada a quem esta logado, mas a
+  -- funcao e SECURITY DEFINER e grava venda — se um dia alguem afrouxar a
+  -- permissao sem perceber, esta linha ainda segura.
+  if auth.uid() is null then
+    raise exception 'Precisa estar autenticado';
+  end if;
+
   if p_items is null or jsonb_array_length(p_items) = 0 then
     raise exception 'Carrinho vazio';
   end if;
@@ -560,7 +567,16 @@ drop function if exists public.set_employee_password(uuid, text);
 -- o login. Nao e segredo: e derivado do nome de forma previsivel
 -- (maria -> maria@funcionario.local) e sozinho nao abre nada — a senha
 -- continua sendo exigida pelo Supabase.
-create or replace view public.employee_profiles_public as
+--
+-- DROP antes de criar: `create or replace view` nao aceita renomear nem
+-- reordenar coluna, e falha com 42P16 em quem ja tinha a versao anterior.
+-- Pela mesma razao ele tambem NAO limpa opcoes antigas da view (como
+-- security_invoker), entao recriar do zero e a unica forma de garantir que a
+-- definicao no banco e a que esta escrita aqui.
+drop view if exists public.employee_profiles_public;
+create view public.employee_profiles_public
+  with (security_invoker = true)
+as
   select id, name, login_email, active, created_at
     from public.employee_profiles
    where active;
@@ -575,7 +591,12 @@ create or replace view public.employee_profiles_public as
 -- Sem security_invoker de proposito: a conta soma `sale_payments`, que o
 -- funcionario nao pode ler. Rodando como dono, ela devolve o saldo certo para
 -- os dois papeis sem abrir a tabela de vendas para ninguem.
-create or replace view public.customer_credit_balance as
+--
+-- DROP antes de criar porque `create or replace` mantem as opcoes que a view ja
+-- tinha: quem rodou a versao anterior ficaria com security_invoker ligado, e o
+-- saldo apareceria zerado para o funcionario sem nenhum erro na tela.
+drop view if exists public.customer_credit_balance;
+create view public.customer_credit_balance as
   with debt as (
     select s.customer_id, sum(sp.amount) as total
       from public.sales s
@@ -607,8 +628,10 @@ create or replace view public.customer_credit_balance as
     left join paid p on p.customer_id = c.id;
 
 -- security_invoker: sem isso a view rodaria com os poderes do dono e passaria
--- por cima do RLS de `products`.
-create or replace view public.low_stock_products
+-- por cima do RLS de `products`. Como so o administrador le `products`, para o
+-- funcionario ela volta vazia — que e o desejado.
+drop view if exists public.low_stock_products;
+create view public.low_stock_products
   with (security_invoker = true)
 as
   select p.*,
@@ -702,35 +725,45 @@ create policy "admin_delete_products" on public.products
 -- View de venda: mesmos produtos, sem cost_price. Roda como dono para
 -- atravessar o RLS acima de proposito — e o unico caminho do funcionario ate o
 -- catalogo, e nele o custo simplesmente nao existe.
-create or replace view public.products_pos as
+drop view if exists public.products_pos;
+create view public.products_pos as
   select id, barcode, name, unit, sale_price, stock_quantity, min_stock,
          category, supplier_id, active
     from public.products
    where active;
 
 -- ----------------------------------------------------------------------------
--- CLIENTES E FIADO: os dois lados operam
+-- CLIENTES: os dois lados leem e cadastram
 --
--- Divida de cliente nao e lucro da loja, e vender fiado no balcao e trabalho de
--- caixa. Sem isto o funcionario nao conseguiria fechar uma venda no fiado.
+-- Vender fiado no balcao e trabalho de caixa, e para isso o funcionario precisa
+-- escolher o cliente — ou cadastrar na hora, se for a primeira compra dele.
+-- Nome e telefone de cliente nao revelam nada do financeiro da loja.
+-- Alterar e apagar continuam com o administrador.
 -- ----------------------------------------------------------------------------
-do $$
-declare
-  t text;
-begin
-  foreach t in array array['customers', 'credit_payments'] loop
-    execute format($f$
-      create policy "auth_select_%1$s" on public.%1$I
-        for select to authenticated using (true);
-      create policy "auth_insert_%1$s" on public.%1$I
-        for insert to authenticated with check (true);
-      create policy "admin_update_%1$s" on public.%1$I
-        for update to authenticated using (public.is_admin());
-      create policy "admin_delete_%1$s" on public.%1$I
-        for delete to authenticated using (public.is_admin());
-    $f$, t);
-  end loop;
-end $$;
+create policy "auth_select_customers" on public.customers
+  for select to authenticated using (true);
+create policy "auth_insert_customers" on public.customers
+  for insert to authenticated with check (true);
+create policy "admin_update_customers" on public.customers
+  for update to authenticated using (public.is_admin());
+create policy "admin_delete_customers" on public.customers
+  for delete to authenticated using (public.is_admin());
+
+-- ----------------------------------------------------------------------------
+-- RECEBIMENTO DE FIADO: so administrador
+--
+-- Registrar que alguem pagou a divida e mexer em dinheiro que entrou. Deixar
+-- isso na mao do funcionario abriria o caminho mais obvio de desvio: dar a
+-- divida por paga sem o dinheiro ter entrado no caixa.
+-- ----------------------------------------------------------------------------
+create policy "admin_select_credit_payments" on public.credit_payments
+  for select to authenticated using (public.is_admin());
+create policy "admin_insert_credit_payments" on public.credit_payments
+  for insert to authenticated with check (public.is_admin());
+create policy "admin_update_credit_payments" on public.credit_payments
+  for update to authenticated using (public.is_admin());
+create policy "admin_delete_credit_payments" on public.credit_payments
+  for delete to authenticated using (public.is_admin());
 
 -- ----------------------------------------------------------------------------
 -- CREDITO DA LOJA: cada funcionario so enxerga o proprio consumo
@@ -770,9 +803,12 @@ create policy "emp_delete_employee_credits" on public.employee_credits
 -- O funcionario le apenas a propria linha, que e o que o app precisa para saber
 -- quem ele e. A lista para o seletor de conta vem da view.
 -- ----------------------------------------------------------------------------
-create policy "emp_select_employee_profiles" on public.employee_profiles
-  for select to authenticated
-  using (public.is_admin() or user_id = auth.uid());
+-- Leitura liberada para quem esta logado: depois que a senha saiu daqui (ela
+-- vive no auth.users), a tabela guarda so nome, e-mail de login e situacao —
+-- nada que um colega nao veja no dia a dia. E o seletor de perfil precisa
+-- listar todo mundo para permitir a troca.
+create policy "auth_select_employee_profiles" on public.employee_profiles
+  for select to authenticated using (true);
 create policy "admin_insert_employee_profiles" on public.employee_profiles
   for insert to authenticated with check (public.is_admin());
 create policy "admin_update_employee_profiles" on public.employee_profiles
@@ -782,7 +818,23 @@ create policy "admin_delete_employee_profiles" on public.employee_profiles
 
 -- ============================================================================
 -- GRANTS
+--
+-- O Postgres da EXECUTE de funcao para PUBLIC por padrao, e PUBLIC inclui o
+-- papel `anon`. Como estas funcoes sao SECURITY DEFINER, isso significava que
+-- daria para chamar create_sale sem sequer estar logado. Cada uma e revogada
+-- e so devolvida a quem precisa.
+--
+-- As tres funcoes de trigger nao recebem grant nenhum: o trigger as executa
+-- pelo mecanismo interno, ninguem precisa poder chama-las direto.
 -- ============================================================================
+revoke all on function public.create_sale(jsonb, jsonb, numeric, text, uuid) from public;
+revoke all on function public.is_admin() from public;
+revoke all on function public.is_employee() from public;
+revoke all on function public.current_employee_profile_id() from public;
+revoke all on function public.apply_sale_item_stock() from public;
+revoke all on function public.apply_stock_entry() from public;
+revoke all on function public.apply_employee_credit_stock() from public;
+
 grant execute on function public.create_sale(jsonb, jsonb, numeric, text, uuid) to authenticated;
 grant execute on function public.is_admin() to authenticated;
 grant execute on function public.is_employee() to authenticated;

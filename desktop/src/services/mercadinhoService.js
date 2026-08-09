@@ -5,10 +5,21 @@ import { STORE_CREDIT as STORE_CREDIT_METHOD } from '../lib/payments';
 // Produtos
 // ---------------------------------------------------------------------------
 
-export async function listProducts({ includeInactive = false } = {}) {
+/**
+ * Catalogo completo.
+ *
+ * `withCost` decide a fonte: a tabela (so administrador) ou a view sem custo.
+ * O funcionario precisa consultar preco e estoque no balcao, mas a tabela
+ * `products` nao devolve nada para ele — sem a view, a tela viria vazia.
+ */
+export async function listProducts({ includeInactive = false, withCost = true } = {}) {
+    // `suppliers` so no caminho do administrador: a view de PDV nao tem relacao
+    // declarada, e o funcionario nao precisa saber de quem se compra.
+    const columns = withCost ? '*, suppliers(id, name)' : '*';
+
     let query = supabase
-        .from('products')
-        .select('*, suppliers(id, name)')
+        .from(productSource(withCost))
+        .select(columns)
         .order('name', { ascending: true });
 
     if (!includeInactive) query = query.eq('active', true);

@@ -21,7 +21,10 @@ const MENU_ITEMS = [
     // Estoque fica só com o admin: dar entrada exige digitar o custo de compra,
     // que é exatamente o que o funcionário não deve ver.
     { path: '/estoque', label: 'Estoque', icon: PackagePlus, adminOnly: true },
-    { path: '/fiado', label: 'Fiado', icon: NotebookPen },
+    // Receber pagamento de fiado é mexer em dinheiro que entrou — o banco só
+    // aceita do administrador. O funcionário ainda vende fiado no PDV, onde
+    // escolhe ou cadastra o cliente.
+    { path: '/fiado', label: 'Fiado', icon: NotebookPen, adminOnly: true },
     // Histórico mostra faturamento e lucro — o banco nem devolve essas linhas
     // para o funcionário, então a tela viria vazia de qualquer forma.
     { path: '/vendas', label: 'Histórico', icon: Receipt, adminOnly: true },

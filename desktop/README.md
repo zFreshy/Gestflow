@@ -135,7 +135,26 @@ O app se atualiza sozinho. O fluxo:
    perder, os apps já instalados param de aceitar atualização e todo mundo
    precisa reinstalar na mão.
 
-2. Nos **Settings → Secrets and variables → Actions** do repositório, cadastre:
+2. Cadastre os secrets do repositório. Pela linha de comando, sem precisar
+   copiar e colar valor nenhum (rode de dentro de `desktop/`):
+
+   ```bash
+   gh secret set TAURI_SIGNING_PRIVATE_KEY --repo zFreshy/Gestflow < ~/.tauri/mercadinho.key
+   ```
+
+   ```bash
+   printf '' | gh secret set TAURI_SIGNING_PRIVATE_KEY_PASSWORD --repo zFreshy/Gestflow
+   ```
+
+   ```bash
+   gh secret set VITE_SUPABASE_URL --repo zFreshy/Gestflow --body "$(grep '^VITE_SUPABASE_URL=' .env | cut -d= -f2-)"
+   ```
+
+   ```bash
+   gh secret set VITE_SUPABASE_ANON_KEY --repo zFreshy/Gestflow --body "$(grep '^VITE_SUPABASE_ANON_KEY=' .env | cut -d= -f2-)"
+   ```
+
+   Ou pela interface, em **Settings → Secrets and variables → Actions**:
 
    | Secret | Valor |
    |---|---|
@@ -143,7 +162,7 @@ O app se atualiza sozinho. O fluxo:
    | `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | vazio (a chave foi gerada sem senha) |
    | `VITE_SUPABASE_URL` | mesma do `.env` |
    | `VITE_SUPABASE_ANON_KEY` | mesma do `.env` |
-   | `VITE_SITE_URL` | URL do site Gestflow |
+   | `VITE_SITE_URL` | URL do site Gestflow (opcional) |
 
 ### A cada versão
 

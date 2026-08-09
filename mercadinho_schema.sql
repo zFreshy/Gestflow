@@ -290,6 +290,46 @@ create index if not exists stock_entries_product_idx  on public.stock_entries (p
 create index if not exists stock_entries_supplier_idx on public.stock_entries (supplier_id);
 
 -- ============================================================================
+-- TRANCA TUDO, AGORA
+--
+-- Isto fica aqui em cima, logo depois das tabelas, e nao junto das policies la
+-- embaixo, por um motivo aprendido do jeito ruim: se o script parar no meio por
+-- qualquer erro, o que vem depois nao roda. Com o `enable` no fim, uma falha
+-- deixava as tabelas criadas e SEM RLS — e o Supabase concede leitura para
+-- `anon` por padrao, entao o banco inteiro ficava legivel por qualquer um que
+-- tivesse a chave publica (que viaja dentro do app instalado).
+--
+-- Ligando o RLS aqui, tabela sem policy nega tudo. Uma falha no meio passa a
+-- resultar em app quebrado, que se percebe na hora, em vez de banco aberto, que
+-- ninguem percebe.
+-- ============================================================================
+alter table public.products          enable row level security;
+alter table public.sales             enable row level security;
+alter table public.sale_items        enable row level security;
+alter table public.sale_payments     enable row level security;
+alter table public.stock_entries     enable row level security;
+alter table public.customers         enable row level security;
+alter table public.credit_payments   enable row level security;
+alter table public.employee_credits  enable row level security;
+alter table public.employee_profiles enable row level security;
+
+-- As views sao trancadas uma a uma, logo depois de cada CREATE VIEW — nao aqui.
+-- Elas ainda nem existem neste ponto, e um revoke em objeto inexistente e um
+-- no-op silencioso: a view nasceria depois ja com o privilegio padrao do
+-- Supabase, aberta para `anon`.
+
+-- Nenhuma tabela deste app deve ser alcancavel sem login.
+revoke all on public.products          from anon;
+revoke all on public.sales             from anon;
+revoke all on public.sale_items        from anon;
+revoke all on public.sale_payments     from anon;
+revoke all on public.stock_entries     from anon;
+revoke all on public.customers         from anon;
+revoke all on public.credit_payments   from anon;
+revoke all on public.employee_credits  from anon;
+revoke all on public.employee_profiles from anon;
+
+-- ============================================================================
 -- TRIGGERS DE ESTOQUE
 --
 -- O estoque nunca e mexido na mao pelo app: quem move e o banco. Assim nao tem
@@ -581,6 +621,9 @@ as
     from public.employee_profiles
    where active;
 
+revoke all on public.employee_profiles_public from anon, authenticated;
+grant select on public.employee_profiles_public to authenticated;
+
 -- ============================================================================
 -- VIEW: quanto cada cliente deve no fiado
 --
@@ -627,6 +670,12 @@ create view public.customer_credit_balance as
     left join debt d on d.customer_id = c.id
     left join paid p on p.customer_id = c.id;
 
+-- Roda como dono para conseguir somar `sale_payments`, entao o GRANT e o unico
+-- controle: sem este revoke, a divida de todos os clientes ficaria legivel sem
+-- login.
+revoke all on public.customer_credit_balance from anon, authenticated;
+grant select on public.customer_credit_balance to authenticated;
+
 -- security_invoker: sem isso a view rodaria com os poderes do dono e passaria
 -- por cima do RLS de `products`. Como so o administrador le `products`, para o
 -- funcionario ela volta vazia — que e o desejado.
@@ -641,6 +690,9 @@ as
      and p.min_stock > 0
      and p.stock_quantity <= p.min_stock;
 
+revoke all on public.low_stock_products from anon, authenticated;
+grant select on public.low_stock_products to authenticated;
+
 -- ============================================================================
 -- RLS
 --
@@ -654,15 +706,8 @@ as
 --
 -- Regra geral: o funcionario opera o caixa, o administrador enxerga dinheiro.
 -- ============================================================================
-alter table public.products          enable row level security;
-alter table public.sales             enable row level security;
-alter table public.sale_items        enable row level security;
-alter table public.sale_payments     enable row level security;
-alter table public.stock_entries     enable row level security;
-alter table public.customers         enable row level security;
-alter table public.credit_payments   enable row level security;
-alter table public.employee_credits  enable row level security;
-alter table public.employee_profiles enable row level security;
+-- O RLS ja foi ligado la em cima, logo depois das tabelas, para o script falhar
+-- fechado se parar no meio. Aqui so vem quem pode fazer o que.
 
 -- Limpa as policies permissivas da versao anterior, em que todo mundo via tudo.
 do $$
@@ -731,6 +776,13 @@ create view public.products_pos as
          category, supplier_id, active
     from public.products
    where active;
+
+-- Trancada aqui mesmo, e nao no fim do arquivo: esta view roda como dono e
+-- atravessa o RLS de propósito, entao o GRANT e o unico controle que ela tem.
+-- Deixar para depois abriria uma janela em que ela existe com o privilegio
+-- padrao do Supabase — ou seja, legivel sem login.
+revoke all on public.products_pos from anon, authenticated;
+grant select on public.products_pos to authenticated;
 
 -- ----------------------------------------------------------------------------
 -- CLIENTES: os dois lados leem e cadastram
@@ -840,16 +892,6 @@ grant execute on function public.is_admin() to authenticated;
 grant execute on function public.is_employee() to authenticated;
 grant execute on function public.current_employee_profile_id() to authenticated;
 
-grant select on public.employee_profiles_public to authenticated;
-grant select on public.products_pos to authenticated;
-
--- low_stock_products roda com security_invoker e le `products`, que o
--- funcionario nao pode ler: para ele a view simplesmente volta vazia. Nao
--- precisa de restricao extra — o RLS ja resolve, e as telas que a usam sao do
--- administrador de qualquer forma.
-grant select on public.low_stock_products to authenticated;
-
--- customer_credit_balance e o caso oposto: precisa ser calculada corretamente
--- tambem para o funcionario, senao ele venderia fiado sem enxergar o quanto a
--- pessoa ja deve. Ela expoe divida de cliente, nao faturamento da loja.
-grant select on public.customer_credit_balance to authenticated;
+-- As quatro views ja foram revogadas de `anon` e liberadas para
+-- `authenticated` logo apos cada CREATE VIEW, e nao aqui: entre a criacao e o
+-- fim do arquivo elas ficariam abertas se o script parasse no meio.

@@ -135,31 +135,30 @@ O app se atualiza sozinho. O fluxo:
    perder, os apps já instalados param de aceitar atualização e todo mundo
    precisa reinstalar na mão.
 
-2. Cadastre os secrets do repositório. Pela linha de comando, sem precisar
-   copiar e colar valor nenhum (rode de dentro de `desktop/`):
+2. Cadastre os secrets do repositório. No **PowerShell**, de dentro de
+   `desktop/` — os valores saem direto dos arquivos, sem copiar e colar:
 
-   ```bash
-   gh secret set TAURI_SIGNING_PRIVATE_KEY --repo zFreshy/Gestflow < ~/.tauri/mercadinho.key
+   ```powershell
+   gh secret set TAURI_SIGNING_PRIVATE_KEY --repo zFreshy/Gestflow --body (Get-Content ~/.tauri/mercadinho.key -Raw)
    ```
 
-   ```bash
-   printf '' | gh secret set TAURI_SIGNING_PRIVATE_KEY_PASSWORD --repo zFreshy/Gestflow
+   ```powershell
+   $v = ((Get-Content .env | Select-String '^VITE_SUPABASE_URL=') -split '=',2)[1]; gh secret set VITE_SUPABASE_URL --repo zFreshy/Gestflow --body $v
    ```
 
-   ```bash
-   gh secret set VITE_SUPABASE_URL --repo zFreshy/Gestflow --body "$(grep '^VITE_SUPABASE_URL=' .env | cut -d= -f2-)"
+   ```powershell
+   $v = ((Get-Content .env | Select-String '^VITE_SUPABASE_ANON_KEY=') -split '=',2)[1]; gh secret set VITE_SUPABASE_ANON_KEY --repo zFreshy/Gestflow --body $v
    ```
 
-   ```bash
-   gh secret set VITE_SUPABASE_ANON_KEY --repo zFreshy/Gestflow --body "$(grep '^VITE_SUPABASE_ANON_KEY=' .env | cut -d= -f2-)"
-   ```
+   Não precisa cadastrar `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`: secret que não
+   existe vira string vazia no Actions, que é exatamente o certo para uma chave
+   gerada sem senha.
 
    Ou pela interface, em **Settings → Secrets and variables → Actions**:
 
    | Secret | Valor |
    |---|---|
    | `TAURI_SIGNING_PRIVATE_KEY` | conteúdo de `~/.tauri/mercadinho.key` |
-   | `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | vazio (a chave foi gerada sem senha) |
    | `VITE_SUPABASE_URL` | mesma do `.env` |
    | `VITE_SUPABASE_ANON_KEY` | mesma do `.env` |
    | `VITE_SITE_URL` | URL do site Gestflow (opcional) |

@@ -169,7 +169,7 @@ export function EmployeeProfilesPage() {
                                 type="password"
                                 value={newPassword}
                                 onChange={(e) => setNewPassword(e.target.value)}
-                                placeholder="Mínimo 4 caracteres"
+                                placeholder="Mínimo 6 caracteres"
                             />
                         </div>
                     </div>

@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
     Receipt, Loader2, Trash2, ChevronDown, ChevronRight, Search, X, FilterX,
+    Printer, FileText, CloudOff,
 } from 'lucide-react';
 import { Input } from '../atoms/Input';
 import { Badge } from '../atoms/Badge';
@@ -10,15 +11,22 @@ import {
     cn, formatCurrency, formatDateTime, dayStartInstant, dayEndInstant, toISODate,
 } from '../../lib/utils';
 import { PAYMENT_METHODS, paymentLabel, paymentTone } from '../../lib/payments';
-import { listSales, listSaleItems, deleteSale } from '../../services/mercadinhoService';
+import {
+    listSales, listSaleItems, deleteSale, listInvoicesForSales,
+    emitInvoice, refreshInvoice,
+} from '../../services/mercadinhoService';
 import { useProfile } from '../../contexts/ProfileContext';
+import { useReceipt } from '../../contexts/ReceiptContext';
 
 export function SalesHistoryPage() {
     const { isAdmin } = useProfile();
+    const { print } = useReceipt();
     const [sales, setSales] = useState([]);
     const [loading, setLoading] = useState(true);
     const [expanded, setExpanded] = useState(null);
     const [itemsBySale, setItemsBySale] = useState({});
+    const [invoices, setInvoices] = useState({});
+    const [workingOn, setWorkingOn] = useState(null);
 
     // Filtros
     const [preset, setPreset] = useState('mes');
@@ -44,7 +52,18 @@ export function SalesHistoryPage() {
             to: dayEndInstant(range.to),
             limit: 1000,
         })
-            .then((data) => { if (!cancelled) setSales(data); })
+            .then(async (data) => {
+                if (cancelled) return;
+                setSales(data);
+                // Quais dessas vendas já têm nota. Numa consulta só: uma por
+                // linha seriam mil idas ao servidor para pintar um ícone.
+                try {
+                    const map = await listInvoicesForSales(data.map((s) => s.id));
+                    if (!cancelled) setInvoices(map);
+                } catch (err) {
+                    console.error(err);
+                }
+            })
             .catch((err) => console.error(err))
             .finally(() => { if (!cancelled) setLoading(false); });
 
@@ -134,6 +153,85 @@ export function SalesHistoryPage() {
         }
     };
 
+    /** Itens da venda, do cache da tela ou do servidor. */
+    const itemsOf = async (sale) => {
+        if (itemsBySale[sale.id]) return itemsBySale[sale.id];
+        const items = await listSaleItems(sale.id);
+        setItemsBySale((prev) => ({ ...prev, [sale.id]: items }));
+        return items;
+    };
+
+    /**
+     * Reimprime o cupom.
+     *
+     * Reimprimir NÃO é emitir de novo: se a venda tem nota autorizada, sai o
+     * mesmo DANFE, com a mesma chave e o mesmo protocolo. Emitir outra nota
+     * para a mesma venda significaria imposto em dobro e um cancelamento junto
+     * à SEFAZ para desfazer.
+     */
+    const handleReprint = async (sale) => {
+        setWorkingOn(sale.id);
+        try {
+            const items = await itemsOf(sale);
+            await print({
+                sale: {
+                    total: sale.total,
+                    discount: sale.discount,
+                    sold_at: sale.sold_at,
+                    customer_name: sale.customers?.name ?? null,
+                },
+                items,
+                payments: sale.sale_payments ?? [{ method: sale.payment_method, amount: sale.total }],
+                invoice: invoices[sale.id] ?? null,
+                change: 0,
+            });
+        } catch (err) {
+            console.error(err);
+            alert('Não consegui montar o cupom.');
+        } finally {
+            setWorkingOn(null);
+        }
+    };
+
+    const handleEmit = async (sale) => {
+        setWorkingOn(sale.id);
+        try {
+            let invoice = await emitInvoice(sale.id);
+
+            for (let tries = 0; invoice?.status === 'processando' && tries < 6; tries++) {
+                await new Promise((r) => setTimeout(r, 1500));
+                invoice = await refreshInvoice(invoice.id);
+            }
+
+            setInvoices((prev) => ({ ...prev, [sale.id]: invoice }));
+
+            if (invoice?.status === 'autorizada') {
+                const items = await itemsOf(sale);
+                await print({
+                    sale: {
+                        total: sale.total,
+                        discount: sale.discount,
+                        sold_at: sale.sold_at,
+                        customer_name: sale.customers?.name ?? null,
+                    },
+                    items,
+                    payments: sale.sale_payments ?? [],
+                    invoice,
+                    change: 0,
+                });
+            } else if (invoice?.status === 'rejeitada') {
+                alert(`A SEFAZ rejeitou a nota:\n\n${invoice.mensagem ?? 'sem detalhe'}`);
+            } else {
+                alert('A nota ainda está sendo autorizada. Atualize a tela em instantes.');
+            }
+        } catch (err) {
+            console.error(err);
+            alert(err?.message ?? 'Não consegui emitir a nota.');
+        } finally {
+            setWorkingOn(null);
+        }
+    };
+
     const handleDelete = async (sale) => {
         const ok = window.confirm(
             `Estornar a venda de ${formatCurrency(sale.total)}?\n\n` +
@@ -146,7 +244,10 @@ export function SalesHistoryPage() {
             setSales((prev) => prev.filter((s) => s.id !== sale.id));
         } catch (err) {
             console.error(err);
-            alert('Não consegui estornar a venda.');
+            // O banco recusa estornar venda com nota autorizada, e a mensagem
+            // dele explica o porquê e o que fazer — vale mais que um texto
+            // genérico daqui.
+            alert(err?.message ?? 'Não consegui estornar a venda.');
         }
     };
 
@@ -319,7 +420,8 @@ export function SalesHistoryPage() {
                                 <th className="text-left font-bold px-3 py-3">Observação</th>
                                 <th className="text-right font-bold px-3 py-3 w-20">Itens</th>
                                 <th className="text-right font-bold px-3 py-3 w-32">Total</th>
-                                <th className="w-12" />
+                                <th className="text-left font-bold px-3 py-3 w-28">Nota</th>
+                                <th className="w-32" />
                             </tr>
                         </thead>
                         <tbody>
@@ -327,6 +429,8 @@ export function SalesHistoryPage() {
                                 const isOpen = expanded === sale.id;
                                 const items = itemsBySale[sale.id];
                                 const pays = sale.sale_payments ?? [];
+                                const busy = workingOn === sale.id;
+                                const hasInvoice = invoices[sale.id]?.status === 'autorizada';
 
                                 return (
                                     <React.Fragment key={sale.id}>
@@ -390,20 +494,51 @@ export function SalesHistoryPage() {
                                                 )}
                                             </td>
                                             <td className="px-3 py-3">
-                                                <button
-                                                    onClick={(e) => { e.stopPropagation(); handleDelete(sale); }}
-                                                    className="h-8 w-8 rounded-lg flex items-center justify-center text-gray-300 hover:text-red-600 hover:bg-red-50 transition-colors"
-                                                    title="Estornar venda"
-                                                >
-                                                    <Trash2 className="h-4 w-4" />
-                                                </button>
+                                                <InvoiceBadge invoice={invoices[sale.id]} offline={sale.sold_offline} />
+                                            </td>
+                                            <td className="px-3 py-3">
+                                                <div className="flex items-center justify-end gap-0.5">
+                                                    {busy ? (
+                                                        <Loader2 className="h-4 w-4 animate-spin text-gray-400 mr-2" />
+                                                    ) : (
+                                                        <>
+                                                            <button
+                                                                onClick={(e) => { e.stopPropagation(); handleReprint(sale); }}
+                                                                className="h-8 w-8 rounded-lg flex items-center justify-center text-gray-300 hover:text-[#7E1A8B] hover:bg-[#7E1A8B]/5 transition-colors"
+                                                                title={hasInvoice ? 'Reimprimir a nota' : 'Imprimir comprovante'}
+                                                            >
+                                                                <Printer className="h-4 w-4" />
+                                                            </button>
+
+                                                            {/* Nota autorizada não se emite de novo: seria
+                                                                uma segunda nota para a mesma venda. */}
+                                                            {!hasInvoice && (
+                                                                <button
+                                                                    onClick={(e) => { e.stopPropagation(); handleEmit(sale); }}
+                                                                    className="h-8 w-8 rounded-lg flex items-center justify-center text-gray-300 hover:text-emerald-600 hover:bg-emerald-50 transition-colors"
+                                                                    title="Emitir nota fiscal"
+                                                                >
+                                                                    <FileText className="h-4 w-4" />
+                                                                </button>
+                                                            )}
+                                                        </>
+                                                    )}
+
+                                                    <button
+                                                        onClick={(e) => { e.stopPropagation(); handleDelete(sale); }}
+                                                        className="h-8 w-8 rounded-lg flex items-center justify-center text-gray-300 hover:text-red-600 hover:bg-red-50 transition-colors"
+                                                        title="Estornar venda"
+                                                    >
+                                                        <Trash2 className="h-4 w-4" />
+                                                    </button>
+                                                </div>
                                             </td>
                                         </tr>
 
                                         {isOpen && (
                                             <tr className="border-b border-gray-100 bg-gray-50/40">
                                                 <td />
-                                                <td colSpan={6} className="px-3 py-4">
+                                                <td colSpan={7} className="px-3 py-4">
                                                     {!items ? (
                                                         <div className="flex items-center gap-2 text-sm text-gray-400">
                                                             <Loader2 className="h-4 w-4 animate-spin" />
@@ -441,5 +576,41 @@ export function SalesHistoryPage() {
                 )}
             </div>
         </div>
+    );
+}
+
+/**
+ * Situação fiscal da venda numa olhada.
+ *
+ * "Sem nota" não é erro: no mercadinho a maioria das vendas sai sem nota
+ * porque o cliente não pede. Por isso ele é cinza e discreto — pintar de
+ * vermelho faria a tela inteira parecer um problema.
+ */
+function InvoiceBadge({ invoice, offline }) {
+    if (!invoice) {
+        return (
+            <div className="flex items-center gap-1.5">
+                <span className="text-xs text-gray-400">sem nota</span>
+                {offline && (
+                    <span title="Venda registrada sem internet e sincronizada depois">
+                        <CloudOff className="h-3.5 w-3.5 text-gray-300" />
+                    </span>
+                )}
+            </div>
+        );
+    }
+
+    const variant = {
+        autorizada: 'success',
+        processando: 'info',
+        rejeitada: 'destructive',
+        cancelada: 'warning',
+        erro: 'destructive',
+    }[invoice.status] ?? 'default';
+
+    return (
+        <Badge variant={variant} title={invoice.mensagem ?? undefined}>
+            {invoice.status === 'autorizada' ? `nº ${invoice.numero}` : invoice.status}
+        </Badge>
     );
 }

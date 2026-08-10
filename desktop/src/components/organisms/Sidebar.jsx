@@ -3,12 +3,14 @@ import { NavLink, useLocation } from 'react-router-dom';
 import { cn } from '../../lib/utils';
 import {
     LayoutDashboard, ScanBarcode, Package, PackagePlus,
-    Receipt, NotebookPen, ShoppingBasket, Users,
-    ChevronLeft, ChevronRight, LogOut,
+    Receipt, NotebookPen, ShoppingBasket, Users, Wallet, FileText,
+    ChevronLeft, ChevronRight, LogOut, CloudOff, RefreshCw, Cloud,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useProfile } from '../../contexts/ProfileContext';
+import { useConnection } from '../../contexts/ConnectionContext';
 import { ProfileSwitcher } from './ProfileSwitcher';
+import { PendingSalesModal } from './PendingSalesModal';
 
 /**
  * `adminOnly` esconde o que é financeiro do funcionário.
@@ -21,6 +23,10 @@ const MENU_ITEMS = [
     // Estoque fica só com o admin: dar entrada exige digitar o custo de compra,
     // que é exatamente o que o funcionário não deve ver.
     { path: '/estoque', label: 'Estoque', icon: PackagePlus, adminOnly: true },
+    // Abrir, sangrar e conferir caixa é mexer em dinheiro fora da venda — o
+    // banco só aceita do administrador. O funcionário continua vendendo, e as
+    // vendas dele entram no turno aberto sozinhas.
+    { path: '/caixa', label: 'Caixa', icon: Wallet, adminOnly: true },
     // Receber pagamento de fiado é mexer em dinheiro que entrou — o banco só
     // aceita do administrador. O funcionário ainda vende fiado no PDV, onde
     // escolhe ou cadastra o cliente.
@@ -31,13 +37,16 @@ const MENU_ITEMS = [
     { path: '/meu-credito', label: 'Meu crédito', icon: ShoppingBasket, employeeOnly: true },
     { path: '/creditos', label: 'Crédito da loja', icon: ShoppingBasket, adminOnly: true },
     { path: '/perfis', label: 'Perfis', icon: Users, adminOnly: true },
+    { path: '/fiscal', label: 'Nota fiscal', icon: FileText, adminOnly: true },
 ];
 
 export function Sidebar() {
     const location = useLocation();
     const [isCollapsed, setIsCollapsed] = useState(false);
+    const [pendingOpen, setPendingOpen] = useState(false);
     const { signOut } = useAuth();
     const { isAdmin } = useProfile();
+    const { online, syncing, pendingCount, blockedCount } = useConnection();
 
     const items = MENU_ITEMS.filter((item) => {
         if (item.adminOnly && !isAdmin) return false;
@@ -114,6 +123,56 @@ export function Sidebar() {
             <div className={cn("mt-auto transition-all relative", isCollapsed ? "p-4" : "p-5")}>
                 <div className="absolute inset-0 bg-gradient-to-t from-gray-50/80 to-transparent pointer-events-none" />
 
+                {/* Estado da conexão.
+                    Fica visível o tempo todo quando algo está fora do normal:
+                    o operador precisa saber que está vendendo offline ANTES de
+                    prometer nota fiscal ao cliente, e não depois. */}
+                {(!online || pendingCount > 0 || blockedCount > 0) && (
+                    <button
+                        onClick={() => setPendingOpen(true)}
+                        className={cn(
+                            "relative z-10 w-full mb-3 rounded-xl border p-2.5 flex items-center gap-2.5 transition-colors text-left",
+                            blockedCount > 0
+                                ? "bg-red-50 border-red-200 hover:bg-red-100"
+                                : !online
+                                    ? "bg-amber-50 border-amber-200 hover:bg-amber-100"
+                                    : "bg-blue-50 border-blue-200 hover:bg-blue-100"
+                        )}
+                        title="Ver as vendas que ainda não subiram"
+                    >
+                        {syncing ? (
+                            <RefreshCw className="h-4 w-4 shrink-0 animate-spin text-blue-600" />
+                        ) : !online ? (
+                            <CloudOff className="h-4 w-4 shrink-0 text-amber-600" />
+                        ) : (
+                            <Cloud className="h-4 w-4 shrink-0 text-blue-600" />
+                        )}
+
+                        {!isCollapsed && (
+                            <div className="min-w-0">
+                                <p className={cn(
+                                    "text-xs font-bold",
+                                    blockedCount > 0 ? "text-red-800"
+                                        : !online ? "text-amber-800" : "text-blue-800"
+                                )}>
+                                    {!online ? 'Sem internet' : syncing ? 'Enviando...' : 'Vendas na fila'}
+                                </p>
+                                <p className={cn(
+                                    "text-[11px] leading-tight",
+                                    blockedCount > 0 ? "text-red-600"
+                                        : !online ? "text-amber-700" : "text-blue-700"
+                                )}>
+                                    {blockedCount > 0
+                                        ? `${blockedCount} recusada${blockedCount > 1 ? 's' : ''} pelo servidor`
+                                        : pendingCount > 0
+                                            ? `${pendingCount} venda${pendingCount > 1 ? 's' : ''} aguardando`
+                                            : 'Continua vendendo normalmente'}
+                                </p>
+                            </div>
+                        )}
+                    </button>
+                )}
+
                 <ProfileSwitcher collapsed={isCollapsed} />
 
                 <div className={cn(
@@ -143,6 +202,8 @@ export function Sidebar() {
                     </button>
                 </div>
             </div>
+
+            <PendingSalesModal isOpen={pendingOpen} onClose={() => setPendingOpen(false)} />
         </aside>
     );
 }

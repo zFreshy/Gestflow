@@ -455,10 +455,13 @@ export function SalePage() {
                 cart={cart}
                 subtotal={subtotal}
                 onClose={() => { setCheckoutOpen(false); focusScan(); }}
-                onCompleted={() => {
-                    setCheckoutOpen(false);
+                // O modal continua aberto de propósito: a tela seguinte é a do
+                // cupom e da nota fiscal. Quem fecha é o "Próxima venda".
+                onCompleted={({ queued }) => {
                     clearCart();
-                    showToast('Venda registrada com sucesso.');
+                    showToast(queued
+                        ? 'Sem internet — venda guardada para enviar depois.'
+                        : 'Venda registrada com sucesso.');
                 }}
             />
         </div>

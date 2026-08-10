@@ -289,6 +289,171 @@ create index if not exists stock_entries_date_idx     on public.stock_entries (e
 create index if not exists stock_entries_product_idx  on public.stock_entries (product_id);
 create index if not exists stock_entries_supplier_idx on public.stock_entries (supplier_id);
 
+-- ----------------------------------------------------------------------------
+-- CAIXA: abertura, fechamento e conferencia
+--
+-- Um turno de caixa. `opening_amount` e o troco que entrou na gaveta na
+-- abertura; `counted_amount` e o que a pessoa contou na hora de fechar.
+--
+-- A diferenca nao e informada por ninguem: e calculada, e guardada junto com o
+-- que o sistema esperava. Guardar o esperado congelado importa porque um
+-- estorno de venda feito depois mudaria a conta e o fechamento de ontem
+-- passaria a "bater" sozinho, escondendo a falta que existiu no dia.
+-- ----------------------------------------------------------------------------
+create table if not exists public.cash_sessions (
+  id              uuid primary key default gen_random_uuid(),
+  opened_at       timestamptz not null default now(),
+  opening_amount  numeric(10,2) not null default 0 check (opening_amount >= 0),
+  opened_by       uuid references auth.users,
+  opened_by_email text,
+  closed_at       timestamptz,
+  counted_amount  numeric(10,2),                       -- o que foi contado na gaveta
+  expected_amount numeric(10,2),                       -- o que o sistema esperava, congelado
+  difference      numeric(10,2),                       -- contado - esperado (sobra + / falta -)
+  closed_by       uuid references auth.users,
+  closed_by_email text,
+  opening_note    text,
+  closing_note    text,
+  created_at      timestamptz not null default now()
+);
+
+create index if not exists cash_sessions_opened_idx on public.cash_sessions (opened_at desc);
+
+-- So um caixa aberto por vez. Dois abertos ao mesmo tempo tornariam impossivel
+-- dizer a qual turno uma venda pertence, e a conferencia perderia o sentido.
+create unique index if not exists cash_sessions_single_open_idx
+  on public.cash_sessions ((closed_at is null))
+  where closed_at is null;
+
+-- ----------------------------------------------------------------------------
+-- SANGRIA E SUPRIMENTO
+--
+-- Dinheiro que sai da gaveta sem ser troco (sangria: leva pro cofre, paga o
+-- entregador) ou que entra sem ser venda (suprimento: reforco de troco).
+--
+-- Sem isso, todo dinheiro tirado durante o dia viraria "falta" no fechamento e
+-- o operador seria cobrado por algo que ele registrou verbalmente com o dono.
+-- ----------------------------------------------------------------------------
+create table if not exists public.cash_movements (
+  id           uuid primary key default gen_random_uuid(),
+  session_id   uuid not null references public.cash_sessions(id) on delete cascade,
+  kind         text not null check (kind in ('sangria', 'suprimento')),
+  amount       numeric(10,2) not null check (amount > 0),
+  reason       text not null,
+  happened_at  timestamptz not null default now(),
+  user_id      uuid references auth.users,
+  user_email   text,
+  created_at   timestamptz not null default now()
+);
+
+create index if not exists cash_movements_session_idx on public.cash_movements (session_id);
+
+-- ----------------------------------------------------------------------------
+-- Colunas de venda que dependem das tabelas acima
+-- ----------------------------------------------------------------------------
+
+-- `client_uuid`: identificador que o PDV gera ANTES de tentar enviar. E o que
+-- permite reenviar uma venda offline sem medo de duplicar — ver create_sale.
+alter table public.sales
+  add column if not exists client_uuid     uuid,
+  add column if not exists sold_offline    boolean not null default false,
+  add column if not exists cash_session_id uuid references public.cash_sessions(id) on delete set null;
+
+create unique index if not exists sales_client_uuid_key
+  on public.sales (client_uuid)
+  where client_uuid is not null;
+
+create index if not exists sales_cash_session_idx on public.sales (cash_session_id);
+
+-- ----------------------------------------------------------------------------
+-- NOTA FISCAL (NFC-e, modelo 65)
+--
+-- Dados do emitente. Linha unica: a loja e uma so. `id` fixo em 1 para que o
+-- app leia sem precisar saber de qual linha se trata, e para que ninguem crie
+-- uma segunda configuracao por engano.
+--
+-- O que NAO mora aqui, de proposito: o token do emissor e o CSC da SEFAZ. Os
+-- dois assinam nota em nome da loja, e esta tabela e legivel pelo app instalado
+-- na maquina — eles ficam no segredo da Edge Function, no servidor.
+-- ----------------------------------------------------------------------------
+create table if not exists public.fiscal_settings (
+  id              smallint primary key default 1 check (id = 1),
+  enabled         boolean not null default false,
+  environment     text not null default 'homologacao'
+                    check (environment in ('homologacao', 'producao')),
+  cnpj            text,
+  inscricao_estadual text,
+  razao_social    text,
+  nome_fantasia   text,
+  regime_tributario text not null default 'simples'   -- simples | simples_excesso | normal
+                    check (regime_tributario in ('simples', 'simples_excesso', 'normal')),
+  logradouro      text,
+  numero          text,
+  bairro          text,
+  municipio       text,
+  codigo_municipio text,                              -- IBGE, 7 digitos
+  uf              text,
+  cep             text,
+  telefone        text,
+  serie           integer not null default 1,
+  -- Padrao aplicado ao produto que nao tem o campo preenchido. Sem isso, cada
+  -- um dos milhares de itens do mercadinho teria que ser classificado a mao
+  -- antes da primeira nota sair.
+  ncm_padrao      text default '21069090',
+  cfop_padrao     text default '5102',
+  csosn_padrao    text default '102',
+  cst_padrao      text default '00',
+  origem_padrao   smallint not null default 0,
+  updated_at      timestamptz not null default now()
+);
+
+-- Campos fiscais do produto. Ficam em `products` e nao numa tabela a parte
+-- porque sao atributos do item, e a nota precisa deles item a item.
+alter table public.products
+  add column if not exists ncm    text,
+  add column if not exists cfop   text,
+  add column if not exists cest   text,
+  add column if not exists csosn  text,
+  add column if not exists cst    text,
+  add column if not exists origem smallint;
+
+-- ----------------------------------------------------------------------------
+-- NOTAS EMITIDAS
+--
+-- Uma linha por tentativa de emissao de uma venda. `ref` e a referencia unica
+-- mandada ao emissor: reenviar a mesma ref devolve a nota que ja existe em vez
+-- de emitir outra — mesma ideia do `client_uuid` da venda, agora do lado
+-- fiscal, onde duplicar custaria uma nota a ser cancelada.
+--
+-- `chave`, `protocolo`, `qrcode` e `xml_url` sao o que a SEFAZ devolveu. Sao
+-- guardados porque a reimpressao do cupom sai deles: reimprimir NAO e emitir de
+-- novo, e sim imprimir outra vez a nota que ja existe.
+-- ----------------------------------------------------------------------------
+create table if not exists public.fiscal_invoices (
+  id            uuid primary key default gen_random_uuid(),
+  sale_id       uuid not null references public.sales(id) on delete cascade,
+  ref           text not null unique,
+  status        text not null default 'processando'
+                  check (status in ('processando', 'autorizada', 'rejeitada', 'cancelada', 'erro')),
+  numero        integer,
+  serie         integer,
+  chave         text,
+  protocolo     text,
+  qrcode        text,
+  url_consulta  text,
+  xml_url       text,
+  danfe_url     text,
+  mensagem      text,                                  -- motivo da rejeicao, quando houver
+  ambiente      text,
+  cpf           text,                                  -- do consumidor, quando ele pede na nota
+  emitted_at    timestamptz,
+  created_at    timestamptz not null default now(),
+  updated_at    timestamptz not null default now()
+);
+
+create index if not exists fiscal_invoices_sale_idx   on public.fiscal_invoices (sale_id);
+create index if not exists fiscal_invoices_status_idx on public.fiscal_invoices (status);
+
 -- ============================================================================
 -- TRANCA TUDO, AGORA
 --
@@ -312,6 +477,10 @@ alter table public.customers         enable row level security;
 alter table public.credit_payments   enable row level security;
 alter table public.employee_credits  enable row level security;
 alter table public.employee_profiles enable row level security;
+alter table public.cash_sessions     enable row level security;
+alter table public.cash_movements    enable row level security;
+alter table public.fiscal_settings   enable row level security;
+alter table public.fiscal_invoices   enable row level security;
 
 -- As views sao trancadas uma a uma, logo depois de cada CREATE VIEW — nao aqui.
 -- Elas ainda nem existem neste ponto, e um revoke em objeto inexistente e um
@@ -328,6 +497,25 @@ revoke all on public.customers         from anon;
 revoke all on public.credit_payments   from anon;
 revoke all on public.employee_credits  from anon;
 revoke all on public.employee_profiles from anon;
+revoke all on public.cash_sessions     from anon;
+revoke all on public.cash_movements    from anon;
+revoke all on public.fiscal_settings   from anon;
+revoke all on public.fiscal_invoices   from anon;
+
+-- E o `authenticated` recebe explicitamente.
+--
+-- As tabelas antigas herdaram esse privilegio do padrao que o Supabase aplica a
+-- tabela nova no schema public. Depender desse padrao e apostar numa
+-- configuracao que nao esta escrita em lugar nenhum: o dia em que o projeto for
+-- recriado com outro padrao, ou restaurado de um dump, as telas voltam vazias
+-- com "permission denied" e ninguem liga o erro a esta linha que nao existe.
+--
+-- Quem filtra linha continua sendo o RLS logo abaixo; isto so abre a porta da
+-- tabela para o papel de quem esta logado.
+grant select, insert, update, delete on public.cash_sessions   to authenticated;
+grant select, insert, update, delete on public.cash_movements  to authenticated;
+grant select, insert, update, delete on public.fiscal_settings to authenticated;
+grant select, insert, update, delete on public.fiscal_invoices to authenticated;
 
 -- ============================================================================
 -- TRIGGERS DE ESTOQUE
@@ -449,6 +637,220 @@ create trigger trg_employee_credit_stock
   for each row execute function public.apply_employee_credit_stock();
 
 -- ============================================================================
+-- VALOR DA EPOCA: o que ja foi gravado nao muda mais
+--
+-- O preco de um produto e de hoje. O que o funcionario pegou em marco e o que
+-- o cliente levou fiado em abril valem o preco daquele dia, nao o de agora.
+--
+-- Metade disso o modelo ja resolvia guardando o valor na linha (snapshot).
+-- A outra metade faltava: nada impedia um UPDATE de mexer nesse valor depois.
+-- Bastava um "corrigir preco" mal feito na tela, ou um `update` corrido no SQL
+-- Editor, para a divida de abril virar outra coisa — sem erro nenhum e sem
+-- ninguem perceber, porque nao existe copia do valor original.
+--
+-- Estes gatilhos fecham essa porta. O que pode mudar em cada tabela e uma lista
+-- curta e explicita; o resto e recusado com uma mensagem que diz o que fazer.
+-- ============================================================================
+
+-- Consumo do funcionario ------------------------------------------------------
+-- Muda so a situacao do acerto (`settled_at`) e a observacao. Produto,
+-- quantidade, preco, total e data ficam como estavam no dia.
+create or replace function public.freeze_employee_credit()
+returns trigger
+language plpgsql
+as $$
+begin
+  if new.product_id   is distinct from old.product_id
+     or new.barcode      is distinct from old.barcode
+     or new.product_name is distinct from old.product_name
+     or new.quantity     is distinct from old.quantity
+     or new.unit_price   is distinct from old.unit_price
+     or new.total        is distinct from old.total
+     or new.taken_at     is distinct from old.taken_at
+     or new.employee_profile_id is distinct from old.employee_profile_id
+  then
+    raise exception
+      'O valor de um consumo ja lancado nao muda: ele vale o preco do dia em que o produto foi pego. Para corrigir, apague o lancamento e faca outro.'
+      using errcode = 'check_violation';
+  end if;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_freeze_employee_credit on public.employee_credits;
+create trigger trg_freeze_employee_credit
+  before update on public.employee_credits
+  for each row execute function public.freeze_employee_credit();
+
+-- Itens da venda --------------------------------------------------------------
+-- Nada muda. O item vendido e um fato do passado; corrigir venda errada e
+-- estornar e vender de novo, que devolve o estoque pelo caminho certo.
+create or replace function public.freeze_sale_row()
+returns trigger
+language plpgsql
+as $$
+begin
+  raise exception
+    'Venda registrada nao se edita: os valores sao os do momento da compra. Para corrigir, estorne a venda e registre de novo.'
+    using errcode = 'check_violation';
+end;
+$$;
+
+drop trigger if exists trg_freeze_sale_items on public.sale_items;
+create trigger trg_freeze_sale_items
+  before update on public.sale_items
+  for each row execute function public.freeze_sale_row();
+
+-- Pagamentos da venda ---------------------------------------------------------
+-- E daqui que sai a divida do fiado: `customer_credit_balance` soma
+-- exatamente estas linhas. Deixar o valor mudar seria deixar a divida do
+-- cliente mudar sozinha depois da compra — que e o problema todo.
+drop trigger if exists trg_freeze_sale_payments on public.sale_payments;
+create trigger trg_freeze_sale_payments
+  before update on public.sale_payments
+  for each row execute function public.freeze_sale_row();
+
+-- Cabecalho da venda ----------------------------------------------------------
+-- Aqui a lista de permitidos nao e vazia: a nota fiscal e emitida depois da
+-- venda fechada e precisa gravar o vinculo. Dinheiro, itens e data continuam
+-- congelados.
+create or replace function public.freeze_sale_header()
+returns trigger
+language plpgsql
+as $$
+begin
+  if new.total          is distinct from old.total
+     or new.cost_total     is distinct from old.cost_total
+     or new.discount       is distinct from old.discount
+     or new.item_count     is distinct from old.item_count
+     or new.payment_method is distinct from old.payment_method
+     or new.sold_at        is distinct from old.sold_at
+     or new.customer_id    is distinct from old.customer_id
+     or new.client_uuid    is distinct from old.client_uuid
+  then
+    raise exception
+      'Venda registrada nao se edita: os valores sao os do momento da compra. Para corrigir, estorne a venda e registre de novo.'
+      using errcode = 'check_violation';
+  end if;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_freeze_sales on public.sales;
+create trigger trg_freeze_sales
+  before update on public.sales
+  for each row execute function public.freeze_sale_header();
+
+-- Venda com nota autorizada nao se estorna --------------------------------
+--
+-- O `on delete cascade` de fiscal_invoices apagaria o registro da nota junto
+-- com a venda — mas a nota continuaria existindo na SEFAZ, autorizada, no CNPJ
+-- da loja. O sistema esqueceria uma nota que o fisco lembra, e o acerto viraria
+-- problema meses depois, sem nenhum rastro de onde veio.
+--
+-- Desfazer nota autorizada e cancelamento junto a SEFAZ, com prazo e
+-- justificativa. Enquanto isso nao existir no app, o caminho e barrado aqui.
+create or replace function public.block_delete_invoiced_sale()
+returns trigger
+language plpgsql
+as $$
+begin
+  if exists (select 1 from public.fiscal_invoices
+              where sale_id = old.id and status = 'autorizada')
+  then
+    raise exception
+      'Esta venda tem nota fiscal autorizada e nao pode ser estornada. Cancele a nota na SEFAZ primeiro.'
+      using errcode = 'check_violation';
+  end if;
+
+  return old;
+end;
+$$;
+
+drop trigger if exists trg_block_delete_invoiced_sale on public.sales;
+create trigger trg_block_delete_invoiced_sale
+  before delete on public.sales
+  for each row execute function public.block_delete_invoiced_sale();
+
+-- ============================================================================
+-- RPC: lancar consumo do funcionario com o preco do dia
+--
+-- Antes o app mandava o preco junto e o banco gravava o que chegasse. Duas
+-- consequencias: o funcionario podia lancar o proprio consumo com o valor que
+-- quisesse (a policy de insert e dele), e um app desatualizado com catalogo
+-- velho gravaria um preco que nao era mais o da loja.
+--
+-- Agora quem le o preco e o banco, no instante do lancamento. E esse valor,
+-- congelado pelo gatilho acima, e o que sera descontado no fim do mes — mesmo
+-- que o produto mude de preco no dia seguinte.
+-- ============================================================================
+create or replace function public.create_employee_credit(
+  p_product_id uuid,
+  p_quantity   numeric,
+  p_taken_at   date default null,
+  p_note       text default null,
+  p_profile_id uuid default null
+)
+returns uuid
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_profile_id uuid;
+  v_product    public.products%rowtype;
+  v_price      numeric(10,2);
+  v_id         uuid;
+begin
+  if auth.uid() is null then
+    raise exception 'Precisa estar autenticado';
+  end if;
+
+  -- O administrador lanca para qualquer um (ele acerta a folha e as vezes
+  -- anota pelo funcionario). O funcionario, so para si: ninguem poe consumo na
+  -- conta do colega.
+  if public.is_admin() then
+    v_profile_id := coalesce(p_profile_id, public.current_employee_profile_id());
+  else
+    v_profile_id := public.current_employee_profile_id();
+  end if;
+
+  if v_profile_id is null then
+    raise exception 'Nao sei de quem e este consumo';
+  end if;
+
+  if p_quantity is null or p_quantity <= 0 then
+    raise exception 'Informe a quantidade';
+  end if;
+
+  select * into v_product from public.products where id = p_product_id;
+  if not found then
+    raise exception 'Produto nao encontrado';
+  end if;
+  if not v_product.active then
+    raise exception 'Produto inativo';
+  end if;
+
+  v_price := v_product.sale_price;
+
+  insert into public.employee_credits (
+    employee_profile_id, product_id, barcode, product_name,
+    quantity, unit_price, total, taken_at, note
+  )
+  values (
+    v_profile_id, v_product.id, v_product.barcode, v_product.name,
+    p_quantity, v_price, round(p_quantity * v_price, 2),
+    coalesce(p_taken_at, current_date), nullif(btrim(coalesce(p_note, '')), '')
+  )
+  returning id into v_id;
+
+  return v_id;
+end;
+$$;
+
+-- ============================================================================
 -- RPC: finalizar venda de forma atomica
 --
 -- O PDV manda o carrinho inteiro numa chamada so. Ou grava tudo (venda +
@@ -468,13 +870,16 @@ create trigger trg_employee_credit_stock
 -- anterior precisa ser removida explicitamente.
 drop function if exists public.create_sale(jsonb, text, numeric, text);
 drop function if exists public.create_sale(jsonb, jsonb, numeric, text);
+drop function if exists public.create_sale(jsonb, jsonb, numeric, text, uuid);
 
 create or replace function public.create_sale(
   p_items       jsonb,
   p_payments    jsonb,
   p_discount    numeric default 0,
   p_note        text default null,
-  p_customer_id uuid default null
+  p_customer_id uuid default null,
+  p_client_uuid uuid default null,
+  p_sold_at     timestamptz default null
 )
 returns uuid
 language plpgsql
@@ -490,12 +895,29 @@ declare
   v_count      integer       := 0;
   v_email      text;
   v_summary    text;
+  v_sold_at    timestamptz;
+  v_offline    boolean := false;
+  v_session_id uuid;
 begin
   -- Cinto e suspensorio: o GRANT ja limita a chamada a quem esta logado, mas a
   -- funcao e SECURITY DEFINER e grava venda — se um dia alguem afrouxar a
   -- permissao sem perceber, esta linha ainda segura.
   if auth.uid() is null then
     raise exception 'Precisa estar autenticado';
+  end if;
+
+  -- Venda que ja entrou. A fila de vendas offline reenvia ate ter certeza de
+  -- que chegou, e "ter certeza" e justamente o que falta quando a conexao cai
+  -- no meio da resposta: o banco gravou, o app nao soube. Sem esta checagem o
+  -- reenvio viraria uma segunda venda, com estoque baixado duas vezes.
+  --
+  -- Devolver o id que ja existe faz o reenvio ser inofensivo, quantas vezes
+  -- for preciso.
+  if p_client_uuid is not null then
+    select id into v_sale_id from public.sales where client_uuid = p_client_uuid;
+    if v_sale_id is not null then
+      return v_sale_id;
+    end if;
   end if;
 
   if p_items is null or jsonb_array_length(p_items) = 0 then
@@ -518,19 +940,44 @@ begin
 
   select email into v_email from auth.users where id = auth.uid();
 
+  -- Venda que ficou esperando na fila enquanto a internet estava fora.
+  --
+  -- So conta como offline se vier com identificador proprio E com uma data
+  -- que ja passou faz tempo. Nao e uma tranca (quem chama a API escolhe o que
+  -- manda), e sim um limite: o caminho normal do balcao nunca cai aqui por
+  -- acidente, e toda venda que cai fica marcada em `sold_offline` para o
+  -- administrador conferir.
+  v_offline := p_client_uuid is not null
+               and p_sold_at is not null
+               and p_sold_at < now() - interval '60 seconds';
+
+  -- Data da venda: a de quando ela aconteceu no balcao, nao a de quando a
+  -- conexao voltou. Presa entre um mes atras e agora, porque data no futuro
+  -- bagunçaria o fechamento do caixa e o historico.
+  v_sold_at := least(greatest(coalesce(p_sold_at, now()), now() - interval '30 days'), now());
+
   -- Precos vem da tabela de produtos, nao do que o app mandou.
   --
   -- O app envia preco junto so para montar a tela; confiar nele deixaria
   -- qualquer um registrar uma venda de R$ 0,01 chamando a API direto. Item sem
   -- product_id (granel, produto nao cadastrado) e a unica excecao, porque nao
   -- ha de onde buscar.
+  --
+  -- Na venda offline vale o preco que o app mandou, e nao o de agora: o cliente
+  -- ja pagou aquele valor e ja levou o cupom. Se o preco do produto mudou
+  -- enquanto a loja estava sem internet, recalcular aqui gravaria uma venda que
+  -- nunca aconteceu.
+  --
+  -- O custo continua vindo do cadastro nos dois casos: ele so serve para a
+  -- margem do administrador, e o app do funcionario nem enxerga essa coluna.
   select coalesce(sum(qty * price), 0),
          coalesce(sum(qty * cost), 0),
          count(*)
     into v_subtotal, v_cost_total, v_count
     from (
       select (i->>'quantity')::numeric as qty,
-             coalesce(p.sale_price, (i->>'unit_price')::numeric) as price,
+             case when v_offline then (i->>'unit_price')::numeric
+                  else coalesce(p.sale_price, (i->>'unit_price')::numeric) end as price,
              coalesce(p.cost_price, coalesce((i->>'unit_cost')::numeric, 0)) as cost
         from jsonb_array_elements(p_items) as i
         left join public.products p on p.id = nullif(i->>'product_id', '')::uuid
@@ -554,10 +1001,21 @@ begin
     into v_summary
     from jsonb_array_elements(p_payments) as p;
 
-  insert into public.sales (total, cost_total, discount, payment_method, item_count, note,
-                            customer_id, user_id, user_email)
-  values (v_total, v_cost_total, coalesce(p_discount, 0), v_summary, v_count, p_note,
-          p_customer_id, auth.uid(), v_email)
+  -- Caixa aberto no momento em que a venda entra no banco. Nulo quando ninguem
+  -- abriu caixa — o PDV nao para por causa disso; a conferencia e que fica sem
+  -- essa venda.
+  select id into v_session_id
+    from public.cash_sessions
+   where closed_at is null
+   order by opened_at desc
+   limit 1;
+
+  insert into public.sales (sold_at, total, cost_total, discount, payment_method, item_count, note,
+                            customer_id, user_id, user_email,
+                            client_uuid, sold_offline, cash_session_id)
+  values (v_sold_at, v_total, v_cost_total, coalesce(p_discount, 0), v_summary, v_count, p_note,
+          p_customer_id, auth.uid(), v_email,
+          p_client_uuid, v_offline, v_session_id)
   returning id into v_sale_id;
 
   -- O trigger em sale_items cuida da baixa de estoque.
@@ -570,10 +1028,12 @@ begin
          coalesce(p.barcode, item->>'barcode'),
          coalesce(p.name, item->>'product_name'),
          (item->>'quantity')::numeric,
-         coalesce(p.sale_price, (item->>'unit_price')::numeric),
+         case when v_offline then (item->>'unit_price')::numeric
+              else coalesce(p.sale_price, (item->>'unit_price')::numeric) end,
          coalesce(p.cost_price, coalesce((item->>'unit_cost')::numeric, 0)),
          (item->>'quantity')::numeric
-           * coalesce(p.sale_price, (item->>'unit_price')::numeric)
+           * case when v_offline then (item->>'unit_price')::numeric
+                  else coalesce(p.sale_price, (item->>'unit_price')::numeric) end
     from jsonb_array_elements(p_items) as item
     left join public.products p on p.id = nullif(item->>'product_id', '')::uuid;
 
@@ -582,6 +1042,20 @@ begin
     from jsonb_array_elements(p_payments) as p;
 
   return v_sale_id;
+
+-- A checagem no comeco resolve o reenvio normal, mas nao o caso de duas chamadas
+-- da mesma venda chegarem ao mesmo tempo: as duas leriam "nao existe" antes de
+-- qualquer uma gravar. Quem decide o empate e o indice unico, e o perdedor cai
+-- aqui e devolve o id de quem ganhou.
+exception
+  when unique_violation then
+    if p_client_uuid is not null then
+      select id into v_sale_id from public.sales where client_uuid = p_client_uuid;
+      if v_sale_id is not null then
+        return v_sale_id;
+      end if;
+    end if;
+    raise;
 end;
 $$;
 
@@ -717,7 +1191,9 @@ declare
 begin
   foreach t in array array['products', 'sales', 'sale_items', 'sale_payments',
                            'stock_entries', 'customers', 'credit_payments',
-                           'employee_credits', 'employee_profiles'] loop
+                           'employee_credits', 'employee_profiles',
+                           'cash_sessions', 'cash_movements',
+                           'fiscal_settings', 'fiscal_invoices'] loop
     foreach p in array array['select', 'insert', 'update', 'delete'] loop
       execute format('drop policy if exists "auth_%s_%s" on public.%I', p, t, t);
       execute format('drop policy if exists "admin_%s_%s" on public.%I', p, t, t);
@@ -824,15 +1300,16 @@ create policy "emp_select_employee_credits" on public.employee_credits
   for select to authenticated
   using (public.is_admin() or employee_profile_id = public.current_employee_profile_id());
 
--- Lancar so para si mesmo: ninguem poe consumo na conta do colega.
-create policy "emp_insert_employee_credits" on public.employee_credits
+-- Insercao direta so do administrador. O funcionario lanca pelo
+-- `create_employee_credit`, que roda como dono e passa por cima desta policy.
+--
+-- A diferenca importa: pela policy o funcionario escolheria o valor do proprio
+-- consumo, porque `unit_price` e `total` viriam do app. Pela funcao, quem le o
+-- preco e o banco. Fechar o caminho direto e o que torna a funcao a unica
+-- porta — deixar os dois abertos seria o mesmo que nao ter fechado nada.
+create policy "admin_insert_employee_credits" on public.employee_credits
   for insert to authenticated
-  with check (
-    public.is_admin() or (
-      employee_profile_id = public.current_employee_profile_id()
-      and settled_at is null   -- funcionario nao nasce lancamento ja quitado
-    )
-  );
+  with check (public.is_admin());
 
 -- Marcar como descontado e ato do administrador: e o acerto do pagamento.
 create policy "admin_update_employee_credits" on public.employee_credits
@@ -868,6 +1345,255 @@ create policy "admin_update_employee_profiles" on public.employee_profiles
 create policy "admin_delete_employee_profiles" on public.employee_profiles
   for delete to authenticated using (public.is_admin());
 
+-- ----------------------------------------------------------------------------
+-- CAIXA: so administrador, ponto
+--
+-- Abrir, sangrar e fechar caixa e conferir dinheiro — o oposto do que se
+-- delega a quem opera o caixa. O funcionario continua vendendo normalmente; a
+-- venda dele entra no turno aberto sem que ele precise (ou consiga) ver o
+-- turno.
+--
+-- Sem policy de delete: turno de caixa nao se apaga. Fechamento que some leva
+-- junto a prova da falta que apareceu naquele dia.
+-- ----------------------------------------------------------------------------
+create policy "admin_select_cash_sessions" on public.cash_sessions
+  for select to authenticated using (public.is_admin());
+create policy "admin_insert_cash_sessions" on public.cash_sessions
+  for insert to authenticated with check (public.is_admin());
+create policy "admin_update_cash_sessions" on public.cash_sessions
+  for update to authenticated using (public.is_admin());
+
+create policy "admin_select_cash_movements" on public.cash_movements
+  for select to authenticated using (public.is_admin());
+create policy "admin_insert_cash_movements" on public.cash_movements
+  for insert to authenticated with check (public.is_admin());
+create policy "admin_delete_cash_movements" on public.cash_movements
+  for delete to authenticated using (public.is_admin());
+
+-- ----------------------------------------------------------------------------
+-- FISCAL
+--
+-- A configuracao do emitente e legivel por quem esta logado porque o cupom
+-- impresso mostra CNPJ, razao social e endereco da loja — dados que ja saem
+-- impressos no papel que o cliente leva. Mexer nela e do administrador.
+--
+-- As notas emitidas so o administrador le: elas carregam o valor de cada venda.
+-- Quem emite e a Edge Function, com poderes de servico, entao o funcionario
+-- consegue emitir a nota da venda que acabou de fazer sem enxergar nenhuma.
+-- ----------------------------------------------------------------------------
+create policy "auth_select_fiscal_settings" on public.fiscal_settings
+  for select to authenticated using (true);
+create policy "admin_insert_fiscal_settings" on public.fiscal_settings
+  for insert to authenticated with check (public.is_admin());
+create policy "admin_update_fiscal_settings" on public.fiscal_settings
+  for update to authenticated using (public.is_admin());
+
+create policy "admin_select_fiscal_invoices" on public.fiscal_invoices
+  for select to authenticated using (public.is_admin());
+create policy "admin_update_fiscal_invoices" on public.fiscal_invoices
+  for update to authenticated using (public.is_admin());
+
+-- ============================================================================
+-- RPCs DO CAIXA
+--
+-- Abertura e fechamento passam por funcao, e nao por insert/update direto, por
+-- causa do valor esperado: ele tem que ser calculado pelo banco, na hora, a
+-- partir das vendas em dinheiro do turno. Calculado no app, seria um numero
+-- que o proprio operador manda — e conferencia com numero informado pelo
+-- conferido nao confere nada.
+-- ============================================================================
+
+/**
+ * Quanto o sistema espera na gaveta agora: abertura + dinheiro + suprimentos - sangrias.
+ *
+ * SECURITY DEFINER para conseguir somar `sale_payments`, que so o administrador
+ * le. Por isso mesmo checa o papel por dentro: sem essa checagem, ela seria uma
+ * fresta pela qual o funcionario descobriria o dinheiro do dia — bastaria
+ * chamar a funcao direto pela API com o id do turno.
+ */
+create or replace function public.cash_session_expected(p_session_id uuid)
+returns numeric
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select case when not public.is_admin() then null else round(
+    coalesce((select opening_amount from public.cash_sessions where id = p_session_id), 0)
+    -- So a parte em dinheiro. Cartao, PIX e fiado nao passam pela gaveta.
+    + coalesce((select sum(sp.amount)
+                  from public.sale_payments sp
+                  join public.sales s on s.id = sp.sale_id
+                 where s.cash_session_id = p_session_id
+                   and sp.method = 'Dinheiro'), 0)
+    + coalesce((select sum(amount) from public.cash_movements
+                 where session_id = p_session_id and kind = 'suprimento'), 0)
+    - coalesce((select sum(amount) from public.cash_movements
+                 where session_id = p_session_id and kind = 'sangria'), 0)
+  , 2) end;
+$$;
+
+create or replace function public.open_cash_session(
+  p_opening_amount numeric default 0,
+  p_note           text default null
+)
+returns uuid
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_id    uuid;
+  v_email text;
+begin
+  if not public.is_admin() then
+    raise exception 'So o administrador abre o caixa';
+  end if;
+
+  if exists (select 1 from public.cash_sessions where closed_at is null) then
+    raise exception 'Ja existe um caixa aberto. Feche o atual antes de abrir outro.';
+  end if;
+
+  select email into v_email from auth.users where id = auth.uid();
+
+  insert into public.cash_sessions (opening_amount, opened_by, opened_by_email, opening_note)
+  values (coalesce(p_opening_amount, 0), auth.uid(), v_email,
+          nullif(btrim(coalesce(p_note, '')), ''))
+  returning id into v_id;
+
+  return v_id;
+end;
+$$;
+
+create or replace function public.close_cash_session(
+  p_counted_amount numeric,
+  p_note           text default null
+)
+returns uuid
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_id       uuid;
+  v_expected numeric(10,2);
+  v_email    text;
+begin
+  if not public.is_admin() then
+    raise exception 'So o administrador fecha o caixa';
+  end if;
+
+  if p_counted_amount is null or p_counted_amount < 0 then
+    raise exception 'Informe quanto foi contado na gaveta';
+  end if;
+
+  select id into v_id from public.cash_sessions where closed_at is null;
+  if v_id is null then
+    raise exception 'Nao ha caixa aberto';
+  end if;
+
+  -- Congelado agora. Um estorno feito amanha nao pode fazer o fechamento de
+  -- hoje passar a bater sozinho.
+  v_expected := public.cash_session_expected(v_id);
+
+  select email into v_email from auth.users where id = auth.uid();
+
+  update public.cash_sessions
+     set closed_at       = now(),
+         counted_amount  = round(p_counted_amount, 2),
+         expected_amount = v_expected,
+         difference      = round(p_counted_amount, 2) - v_expected,
+         closed_by       = auth.uid(),
+         closed_by_email = v_email,
+         closing_note    = nullif(btrim(coalesce(p_note, '')), '')
+   where id = v_id;
+
+  return v_id;
+end;
+$$;
+
+create or replace function public.add_cash_movement(
+  p_kind   text,
+  p_amount numeric,
+  p_reason text
+)
+returns uuid
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_session uuid;
+  v_id      uuid;
+  v_email   text;
+begin
+  if not public.is_admin() then
+    raise exception 'So o administrador registra sangria e suprimento';
+  end if;
+
+  if p_kind not in ('sangria', 'suprimento') then
+    raise exception 'Movimento invalido';
+  end if;
+
+  if p_amount is null or p_amount <= 0 then
+    raise exception 'Informe o valor';
+  end if;
+
+  -- Motivo obrigatorio: e o unico registro de para onde o dinheiro foi. Sem
+  -- ele a sangria vira so um buraco no caixa com carimbo oficial.
+  if nullif(btrim(coalesce(p_reason, '')), '') is null then
+    raise exception 'Escreva o motivo';
+  end if;
+
+  select id into v_session from public.cash_sessions where closed_at is null;
+  if v_session is null then
+    raise exception 'Abra o caixa antes de registrar movimento';
+  end if;
+
+  select email into v_email from auth.users where id = auth.uid();
+
+  insert into public.cash_movements (session_id, kind, amount, reason, user_id, user_email)
+  values (v_session, p_kind, round(p_amount, 2), btrim(p_reason), auth.uid(), v_email)
+  returning id into v_id;
+
+  return v_id;
+end;
+$$;
+
+-- ============================================================================
+-- VIEW: turnos de caixa com a conferencia pronta
+--
+-- Turno aberto mostra o esperado calculado agora; turno fechado mostra o que
+-- foi congelado no fechamento. Assim a mesma tela serve para acompanhar o dia
+-- e para revisar o passado, sem que o passado se mexa.
+-- ============================================================================
+drop view if exists public.cash_session_summary;
+create view public.cash_session_summary
+  with (security_invoker = true)
+as
+  select cs.*,
+         coalesce((select sum(sp.amount)
+                     from public.sale_payments sp
+                     join public.sales s on s.id = sp.sale_id
+                    where s.cash_session_id = cs.id
+                      and sp.method = 'Dinheiro'), 0)              as cash_sales,
+         coalesce((select sum(s.total) from public.sales s
+                    where s.cash_session_id = cs.id), 0)           as sales_total,
+         coalesce((select count(*) from public.sales s
+                    where s.cash_session_id = cs.id), 0)           as sales_count,
+         coalesce((select sum(amount) from public.cash_movements
+                    where session_id = cs.id and kind = 'sangria'), 0)    as withdrawals,
+         coalesce((select sum(amount) from public.cash_movements
+                    where session_id = cs.id and kind = 'suprimento'), 0) as deposits,
+         case when cs.closed_at is null
+              then public.cash_session_expected(cs.id)
+              else cs.expected_amount
+         end                                                       as expected_now
+    from public.cash_sessions cs;
+
+revoke all on public.cash_session_summary from anon, authenticated;
+grant select on public.cash_session_summary to authenticated;
+
 -- ============================================================================
 -- GRANTS
 --
@@ -883,18 +1609,47 @@ create policy "admin_delete_employee_profiles" on public.employee_profiles
 -- o `anon` o Supabase concede EXPLICITAMENTE, e revogar de PUBLIC nao apaga uma
 -- concessao nominal. Medido: so com `from public`, is_admin() ainda respondia
 -- para quem nao estava logado.
-revoke all on function public.create_sale(jsonb, jsonb, numeric, text, uuid) from public, anon;
+revoke all on function public.create_sale(jsonb, jsonb, numeric, text, uuid, uuid, timestamptz) from public, anon;
+revoke all on function public.create_employee_credit(uuid, numeric, date, text, uuid) from public, anon;
+revoke all on function public.open_cash_session(numeric, text) from public, anon;
+revoke all on function public.close_cash_session(numeric, text) from public, anon;
+revoke all on function public.add_cash_movement(text, numeric, text) from public, anon;
+revoke all on function public.cash_session_expected(uuid) from public, anon;
 revoke all on function public.is_admin() from public, anon;
 revoke all on function public.is_employee() from public, anon;
 revoke all on function public.current_employee_profile_id() from public, anon;
 revoke all on function public.apply_sale_item_stock() from public, anon;
 revoke all on function public.apply_stock_entry() from public, anon;
 revoke all on function public.apply_employee_credit_stock() from public, anon;
+revoke all on function public.freeze_employee_credit() from public, anon;
+revoke all on function public.freeze_sale_row() from public, anon;
+revoke all on function public.freeze_sale_header() from public, anon;
+revoke all on function public.block_delete_invoiced_sale() from public, anon;
 
-grant execute on function public.create_sale(jsonb, jsonb, numeric, text, uuid) to authenticated;
+grant execute on function public.create_sale(jsonb, jsonb, numeric, text, uuid, uuid, timestamptz) to authenticated;
+grant execute on function public.create_employee_credit(uuid, numeric, date, text, uuid) to authenticated;
 grant execute on function public.is_admin() to authenticated;
 grant execute on function public.is_employee() to authenticated;
 grant execute on function public.current_employee_profile_id() to authenticated;
+
+-- As do caixa checam is_admin() por dentro e ainda assim so o logado alcanca:
+-- a checagem interna e o que vale, o grant e a primeira porta.
+grant execute on function public.open_cash_session(numeric, text) to authenticated;
+grant execute on function public.close_cash_session(numeric, text) to authenticated;
+grant execute on function public.add_cash_movement(text, numeric, text) to authenticated;
+grant execute on function public.cash_session_expected(uuid) to authenticated;
+
+-- `cash_session_expected` e usada dentro da view `cash_session_summary`, que e
+-- security_invoker: sem este grant a tela do caixa abriria com erro de
+-- permissao mesmo para o administrador.
+
+-- ============================================================================
+-- CONFIGURACAO FISCAL: a linha unica precisa existir
+--
+-- A tela le e atualiza a linha 1. Se ela nao existir, o UPDATE nao acha nada e
+-- a configuracao some sem erro — o app diria "salvo" e nada teria sido salvo.
+-- ============================================================================
+insert into public.fiscal_settings (id) values (1) on conflict (id) do nothing;
 
 -- As quatro views ja foram revogadas de `anon` e liberadas para
 -- `authenticated` logo apos cada CREATE VIEW, e nao aqui: entre a criacao e o

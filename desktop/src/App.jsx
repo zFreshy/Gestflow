@@ -2,6 +2,8 @@ import React from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { ProfileProvider, useProfile } from './contexts/ProfileContext';
+import { ConnectionProvider } from './contexts/ConnectionContext';
+import { ReceiptProvider } from './contexts/ReceiptContext';
 import { DashboardTemplate } from './components/templates/DashboardTemplate';
 import { LoginPage } from './components/pages/LoginPage';
 import { DashboardPage } from './components/pages/DashboardPage';
@@ -12,6 +14,8 @@ import { SalesHistoryPage } from './components/pages/SalesHistoryPage';
 import { StoreCreditPage } from './components/pages/StoreCreditPage';
 import { EmployeeProfilesPage } from './components/pages/EmployeeProfilesPage';
 import { EmployeeCreditPage } from './components/pages/EmployeeCreditPage';
+import { CashRegisterPage } from './components/pages/CashRegisterPage';
+import { FiscalSettingsPage } from './components/pages/FiscalSettingsPage';
 
 /**
  * Rota que só o administrador abre. Não é segurança — é o mesmo cuidado do
@@ -47,6 +51,8 @@ function AppContent() {
                 <Route path="/estoque" element={<AdminRoute><StockPage /></AdminRoute>} />
                 <Route path="/fiado" element={<AdminRoute><StoreCreditPage /></AdminRoute>} />
                 <Route path="/vendas" element={<AdminRoute><SalesHistoryPage /></AdminRoute>} />
+                <Route path="/caixa" element={<AdminRoute><CashRegisterPage /></AdminRoute>} />
+                <Route path="/fiscal" element={<AdminRoute><FiscalSettingsPage /></AdminRoute>} />
 
                 <Route
                     path="/meu-credito"
@@ -71,7 +77,13 @@ export default function App() {
     return (
         <AuthProvider>
             <ProfileProvider>
-                <AppContent />
+                {/* Conexão por fora do recibo: a fila de vendas offline precisa
+                    continuar rodando mesmo nas telas que nunca imprimem nada. */}
+                <ConnectionProvider>
+                    <ReceiptProvider>
+                        <AppContent />
+                    </ReceiptProvider>
+                </ConnectionProvider>
             </ProfileProvider>
         </AuthProvider>
     );

@@ -152,3 +152,58 @@
 .scan-flash {
   animation: scanFlash 0.7s ease-out;
 }
+
+/* ---------------------------------------------------------------------------
+ * Impressao do cupom
+ *
+ * A impressora do balcao e uma bobina de 80mm: nao tem "pagina", o papel corre
+ * ate o cupom acabar. Por isso `size: 80mm auto` — altura fixa deixaria folha
+ * em branco saindo depois de cada venda.
+ *
+ * A tela inteira e escondida na impressao e so o cupom aparece. Renderizar o
+ * cupom numa janela separada seria mais limpo, mas dentro do WebView do Tauri a
+ * janela nova nasce sem o CSS do app e sai sem formatacao nenhuma.
+ * ------------------------------------------------------------------------- */
+@media print {
+  @page {
+    size: 80mm auto;
+    margin: 0;
+  }
+
+  body * {
+    visibility: hidden;
+  }
+
+  #cupom, #cupom * {
+    visibility: visible;
+  }
+
+  #cupom {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 72mm;      /* 80mm menos a margem que a mecanica nao alcanca */
+    padding: 0 2mm;
+    font-family: 'Courier New', monospace;
+    font-size: 11px;
+    line-height: 1.35;
+    color: #000;
+  }
+
+  /* Cor de fundo nao sai em impressora termica: o que marca o papel e o calor.
+     Contorno preto e o unico jeito de destacar um bloco. */
+  #cupom .cupom-destaque {
+    border: 1px solid #000;
+  }
+}
+
+/* Fora da impressao o cupom nao ocupa espaco nenhum na tela. */
+#cupom {
+  display: none;
+}
+
+@media print {
+  #cupom {
+    display: block;
+  }
+}

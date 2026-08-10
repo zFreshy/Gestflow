@@ -17,6 +17,15 @@ const EMPTY = {
     min_stock: '',
     category: '',
     supplier_id: '',
+    // Classificação fiscal. Vazio significa "usa o padrão da configuração
+    // fiscal" — o mercadinho tem milhares de itens e classificar todos à mão
+    // antes da primeira nota travaria o uso do sistema inteiro.
+    ncm: '',
+    cfop: '',
+    cest: '',
+    csosn: '',
+    cst: '',
+    origem: '',
 };
 
 /**
@@ -52,6 +61,12 @@ export function ProductFormModal({ isOpen, onClose, onSaved, product = null, ini
                 min_stock: product.min_stock ?? '',
                 category: product.category ?? '',
                 supplier_id: product.supplier_id ?? '',
+                ncm: product.ncm ?? '',
+                cfop: product.cfop ?? '',
+                cest: product.cest ?? '',
+                csosn: product.csosn ?? '',
+                cst: product.cst ?? '',
+                origem: product.origem ?? '',
             }
             : { ...EMPTY, barcode: initialBarcode });
 
@@ -81,6 +96,14 @@ export function ProductFormModal({ isOpen, onClose, onSaved, product = null, ini
                 min_stock: Number(form.min_stock) || 0,
                 category: form.category.trim() || null,
                 supplier_id: form.supplier_id || null,
+                // Nulo e não string vazia: é assim que a emissão sabe que deve
+                // cair no padrão da configuração fiscal.
+                ncm: form.ncm.trim() || null,
+                cfop: form.cfop.trim() || null,
+                cest: form.cest.trim() || null,
+                csosn: form.csosn.trim() || null,
+                cst: form.cst.trim() || null,
+                origem: form.origem === '' ? null : Number(form.origem),
             };
 
             const saved = isEditing
@@ -243,6 +266,52 @@ export function ProductFormModal({ isOpen, onClose, onSaved, product = null, ini
                                 </Select>
                             </div>
                         </div>
+
+                        {/* Classificação fiscal, recolhida.
+                            Fica fechada porque a venda no balcão não depende
+                            dela: sem preencher, a nota sai com o padrão da
+                            configuração fiscal. Abrir só quando este produto
+                            tributa diferente do resto da loja. */}
+                        <details className="rounded-xl border border-gray-100 bg-gray-50/60">
+                            <summary className="cursor-pointer select-none px-4 py-3 text-sm font-semibold text-gray-700">
+                                Classificação fiscal (opcional)
+                            </summary>
+                            <div className="px-4 pb-4 space-y-3">
+                                <p className="text-[11px] text-gray-500">
+                                    Em branco, vale o padrão definido na tela de Nota fiscal.
+                                    Preencha só o que for diferente para este produto.
+                                </p>
+                                <div className="grid grid-cols-3 gap-3">
+                                    {[
+                                        { key: 'ncm', label: 'NCM', placeholder: '21069090' },
+                                        { key: 'cfop', label: 'CFOP', placeholder: '5102' },
+                                        { key: 'cest', label: 'CEST', placeholder: '—' },
+                                        { key: 'csosn', label: 'CSOSN', placeholder: '102' },
+                                        { key: 'cst', label: 'CST', placeholder: '00' },
+                                    ].map((field) => (
+                                        <div key={field.key} className="space-y-1.5">
+                                            <label className="text-xs font-semibold text-gray-600">
+                                                {field.label}
+                                            </label>
+                                            <Input
+                                                value={form[field.key]}
+                                                onChange={set(field.key)}
+                                                placeholder={field.placeholder}
+                                            />
+                                        </div>
+                                    ))}
+                                    <div className="space-y-1.5">
+                                        <label className="text-xs font-semibold text-gray-600">Origem</label>
+                                        <Select value={String(form.origem)} onChange={set('origem')}>
+                                            <option value="">Padrão</option>
+                                            <option value="0">0 — Nacional</option>
+                                            <option value="1">1 — Importação direta</option>
+                                            <option value="2">2 — Adquirido no mercado interno</option>
+                                        </Select>
+                                    </div>
+                                </div>
+                            </div>
+                        </details>
 
                         <div className="flex justify-end gap-3 pt-2">
                             <Button type="button" variant="outline" onClick={onClose}>Cancelar</Button>

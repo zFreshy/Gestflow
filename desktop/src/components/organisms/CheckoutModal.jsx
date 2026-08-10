@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-    X, Loader2, CheckCircle2, Split, Plus, Trash2,
+    X, Loader2, CheckCircle2, Split, Plus, Trash2, Printer, FileText, CloudOff,
+    AlertTriangle,
 } from 'lucide-react';
 import { Button } from '../atoms/Button';
 import { Input } from '../atoms/Input';
@@ -8,11 +9,22 @@ import { Select } from '../atoms/Select';
 import { cn, formatCurrency } from '../../lib/utils';
 import { PAYMENT_METHODS, STORE_CREDIT } from '../../lib/payments';
 import { CustomerPicker } from '../molecules/CustomerPicker';
-import { createSale } from '../../services/mercadinhoService';
+import { createSale, emitInvoice, refreshInvoice } from '../../services/mercadinhoService';
+import { useReceipt } from '../../contexts/ReceiptContext';
 
 const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
 
 export function CheckoutModal({ isOpen, cart, subtotal, onClose, onCompleted }) {
+    const { print } = useReceipt();
+
+    // Depois de confirmada, a venda não fecha o modal na hora: o cliente ainda
+    // está na frente, e é aqui que se decide imprimir o cupom e emitir a nota.
+    // Fechar direto obrigaria a caçar a venda no histórico para isso.
+    const [done, setDone] = useState(null);
+    const [invoice, setInvoice] = useState(null);
+    const [emitting, setEmitting] = useState(false);
+    const [invoiceError, setInvoiceError] = useState('');
+    const [cpf, setCpf] = useState('');
     const [paymentMethod, setPaymentMethod] = useState('Dinheiro');
     const [split, setSplit] = useState(false);
     const [lines, setLines] = useState([]);       // [{ method, amount }] no modo combinado
@@ -36,6 +48,10 @@ export function CheckoutModal({ isOpen, cart, subtotal, onClose, onCompleted }) 
         setNote('');
         setCustomerId(null);
         setError('');
+        setDone(null);
+        setInvoice(null);
+        setInvoiceError('');
+        setCpf('');
     }, [isOpen]);
 
     // ------------------------------------------------------------------
@@ -122,23 +138,190 @@ export function CheckoutModal({ isOpen, cart, subtotal, onClose, onCompleted }) 
 
         setSaving(true);
         try {
-            await createSale({
+            const result = await createSale({
                 items: cart,
                 payments,
                 discount: discountValue,
                 note: note.trim() || null,
                 customerId,
             });
-            onCompleted?.();
+
+            // O carrinho é limpo agora, mas o modal fica: a tela seguinte é a
+            // do cupom e da nota, e ela precisa dos itens que acabaram de sair.
+            setDone({
+                ...result,
+                snapshot: {
+                    sale: {
+                        total,
+                        discount: discountValue,
+                        sold_at: result.soldAt,
+                    },
+                    items: cart.map((i) => ({
+                        barcode: i.barcode,
+                        product_name: i.product_name,
+                        quantity: i.quantity,
+                        unit_price: i.unit_price,
+                        subtotal: round2(i.quantity * i.unit_price),
+                    })),
+                    payments,
+                    change: hasCash && received !== '' && change > 0 ? change : 0,
+                },
+            });
+            onCompleted?.({ queued: result.queued });
         } catch (err) {
             console.error(err);
-            setError('Não consegui registrar a venda. Confira a conexão e tente de novo.');
+            setError(
+                err?.message?.includes('Pagamentos somam')
+                    ? 'Os pagamentos não fecham com o total da venda.'
+                    : 'Não consegui registrar a venda. Confira a conexão e tente de novo.'
+            );
         } finally {
             setSaving(false);
         }
     };
 
+    const handlePrint = () => {
+        print({ ...done.snapshot, invoice });
+    };
+
+    /**
+     * Emite a nota da venda que acabou de fechar.
+     *
+     * A SEFAZ não responde na hora: a primeira resposta quase sempre é
+     * "processando". Por isso a consulta é refeita algumas vezes antes de
+     * desistir — imprimir um cupom sem o protocolo e sem o QR Code entregaria
+     * ao cliente um papel que não serve para consultar nota nenhuma.
+     */
+    const handleEmit = async () => {
+        setInvoiceError('');
+        setEmitting(true);
+
+        try {
+            let current = await emitInvoice(done.saleId, { cpf: cpf.trim() || null });
+
+            for (let tries = 0; current?.status === 'processando' && tries < 6; tries++) {
+                await new Promise((r) => setTimeout(r, 1500));
+                current = await refreshInvoice(current.id);
+            }
+
+            setInvoice(current);
+
+            if (current?.status === 'autorizada') {
+                print({ ...done.snapshot, invoice: current });
+            } else if (current?.status === 'rejeitada') {
+                setInvoiceError(current.mensagem || 'A SEFAZ rejeitou a nota.');
+            } else if (current?.status === 'processando') {
+                setInvoiceError(
+                    'A nota ainda está sendo autorizada. Ela aparece no histórico assim que sair.'
+                );
+            }
+        } catch (err) {
+            console.error(err);
+            setInvoiceError(err?.message ?? 'Não consegui emitir a nota.');
+        } finally {
+            setEmitting(false);
+        }
+    };
+
     if (!isOpen) return null;
+
+    // ------------------------------------------------------------------
+    // Venda fechada: cupom e nota
+    // ------------------------------------------------------------------
+    if (done) {
+        return (
+            <div className="modal-overlay">
+                <div
+                    className="modal-content bg-white rounded-2xl shadow-2xl w-full max-w-lg"
+                    onClick={(e) => e.stopPropagation()}
+                >
+                    <div className="px-6 py-6 space-y-5">
+                        <div className="flex items-center gap-3">
+                            <div className={cn(
+                                "h-12 w-12 rounded-2xl flex items-center justify-center shrink-0",
+                                done.queued ? "bg-amber-50" : "bg-emerald-50"
+                            )}>
+                                {done.queued
+                                    ? <CloudOff className="h-6 w-6 text-amber-600" />
+                                    : <CheckCircle2 className="h-6 w-6 text-emerald-600" />}
+                            </div>
+                            <div>
+                                <h3 className="font-bold text-gray-900 text-lg">
+                                    {done.queued ? 'Venda guardada' : 'Venda registrada'}
+                                </h3>
+                                <p className="text-sm text-gray-500">
+                                    {done.queued
+                                        ? 'Sem internet agora. Ela sobe sozinha quando a conexão voltar.'
+                                        : formatCurrency(done.snapshot.sale.total)}
+                                </p>
+                            </div>
+                        </div>
+
+                        {invoiceError && (
+                            <div className="bg-amber-50 text-amber-800 p-3 rounded-xl text-sm font-medium border border-amber-100 flex gap-2">
+                                <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+                                <span>{invoiceError}</span>
+                            </div>
+                        )}
+
+                        {invoice?.status === 'autorizada' && (
+                            <div className="bg-emerald-50 text-emerald-800 p-3 rounded-xl text-sm font-medium border border-emerald-100">
+                                Nota autorizada — nº {invoice.numero}, série {invoice.serie}.
+                            </div>
+                        )}
+
+                        {/* CPF na nota: só aparece antes de emitir, porque
+                            depois de autorizada não dá mais para incluir. */}
+                        {!done.queued && !invoice && (
+                            <div className="space-y-2">
+                                <label className="text-sm font-semibold text-gray-700">
+                                    CPF na nota (opcional)
+                                </label>
+                                <Input
+                                    value={cpf}
+                                    onChange={(e) => setCpf(e.target.value)}
+                                    placeholder="Só se o cliente pedir"
+                                />
+                            </div>
+                        )}
+
+                        <div className="grid grid-cols-2 gap-3">
+                            <Button variant="outline" size="lg" onClick={handlePrint}>
+                                <Printer className="h-4 w-4 mr-2" />
+                                Imprimir cupom
+                            </Button>
+
+                            {/* Nota exige a venda no servidor: a NFC-e leva o
+                                número e o protocolo da SEFAZ, que não existem
+                                enquanto a venda está só na fila daqui. */}
+                            <Button
+                                variant="brand"
+                                size="lg"
+                                onClick={handleEmit}
+                                disabled={done.queued || emitting || invoice?.status === 'autorizada'}
+                                title={done.queued
+                                    ? 'Só depois que a venda subir para o servidor'
+                                    : undefined}
+                            >
+                                {emitting
+                                    ? <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                    : <FileText className="h-4 w-4 mr-2" />}
+                                {invoice?.status === 'autorizada' ? 'Nota emitida' : 'Emitir nota'}
+                            </Button>
+                        </div>
+
+                        <Button variant="success" size="xl" className="w-full" onClick={onClose}>
+                            Próxima venda
+                        </Button>
+
+                        <p className="text-center text-xs text-gray-400">
+                            Dá para emitir e reimprimir depois pelo Histórico de vendas.
+                        </p>
+                    </div>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="modal-overlay" onClick={saving ? undefined : onClose}>

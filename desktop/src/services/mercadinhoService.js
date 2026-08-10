@@ -1,5 +1,25 @@
 import { supabase } from '../lib/supabase';
 import { STORE_CREDIT as STORE_CREDIT_METHOD } from '../lib/payments';
+import { cachedProductByBarcode, cachedSearchProducts, cachedCustomers } from '../lib/catalogCache';
+import { enqueueSale } from '../lib/salesOutbox';
+
+/**
+ * A chamada falhou por falta de conexão (e não porque o servidor recusou)?
+ *
+ * A diferença decide o que a tela faz: sem conexão, o PDV segue pela cópia
+ * local; recusa do servidor é erro de verdade e precisa aparecer.
+ */
+function isOffline(err) {
+    const message = String(err?.message ?? '').toLowerCase();
+    return (
+        err?.name === 'TypeError' ||
+        err?.name === 'AbortError' ||
+        message.includes('fetch') ||
+        message.includes('network') ||
+        message.includes('failed to send') ||
+        message.includes('timeout')
+    );
+}
 
 // ---------------------------------------------------------------------------
 // Produtos
@@ -39,30 +59,47 @@ export async function listProducts({ includeInactive = false, withCost = true } 
  */
 const productSource = (withCost) => (withCost ? 'products' : 'products_pos');
 
-/** Busca exata pelo codigo de barras. Retorna null se nao existir. */
+/**
+ * Busca exata pelo codigo de barras. Retorna null se nao existir.
+ *
+ * Sem conexao, responde pela copia local do catalogo — e o que mantem o leitor
+ * funcionando no balcao com a internet fora. O caminho do administrador
+ * (`withCost`) nao tem essa volta: a copia local nao guarda custo de compra,
+ * e cadastro de produto offline nao existe.
+ */
 export async function findProductByBarcode(barcode, { withCost = false } = {}) {
-    const { data, error } = await supabase
-        .from(productSource(withCost))
-        .select('*')
-        .eq('barcode', barcode)
-        .eq('active', true)
-        .maybeSingle();
+    try {
+        const { data, error } = await supabase
+            .from(productSource(withCost))
+            .select('*')
+            .eq('barcode', barcode)
+            .eq('active', true)
+            .maybeSingle();
 
-    if (error) throw error;
-    return data;
+        if (error) throw error;
+        return data;
+    } catch (err) {
+        if (withCost || !isOffline(err)) throw err;
+        return cachedProductByBarcode(barcode);
+    }
 }
 
 export async function searchProducts(term, { withCost = false } = {}) {
-    const { data, error } = await supabase
-        .from(productSource(withCost))
-        .select('*')
-        .eq('active', true)
-        .or(`name.ilike.%${term}%,barcode.ilike.%${term}%`)
-        .order('name')
-        .limit(20);
+    try {
+        const { data, error } = await supabase
+            .from(productSource(withCost))
+            .select('*')
+            .eq('active', true)
+            .or(`name.ilike.%${term}%,barcode.ilike.%${term}%`)
+            .order('name')
+            .limit(20);
 
-    if (error) throw error;
-    return data ?? [];
+        if (error) throw error;
+        return data ?? [];
+    } catch (err) {
+        if (withCost || !isOffline(err)) throw err;
+        return cachedSearchProducts(term);
+    }
 }
 
 export async function createProduct(product) {
@@ -247,16 +284,43 @@ export async function createSale({ items, payments, discount = 0, note = null, c
         amount: Number(Number(p.amount).toFixed(2)),
     }));
 
-    const { data, error } = await supabase.rpc('create_sale', {
-        p_items: itemPayload,
-        p_payments: paymentPayload,
-        p_discount: Number(discount) || 0,
-        p_note: note,
-        p_customer_id: customerId,
-    });
+    // `client_uuid` sai daqui mesmo na venda online. Se a conexão cair depois
+    // de o banco gravar mas antes de a resposta chegar, este identificador é o
+    // que permite reenviar sem duplicar — e é exatamente esse o caso em que a
+    // venda cai na fila logo abaixo.
+    const clientUuid = crypto.randomUUID();
+    const soldAt = new Date().toISOString();
 
-    if (error) throw error;
-    return data; // uuid da venda
+    try {
+        const { data, error } = await supabase.rpc('create_sale', {
+            p_items: itemPayload,
+            p_payments: paymentPayload,
+            p_discount: Number(discount) || 0,
+            p_note: note,
+            p_customer_id: customerId,
+            p_client_uuid: clientUuid,
+            p_sold_at: soldAt,
+        });
+
+        if (error) throw error;
+        return { saleId: data, queued: false, clientUuid, soldAt };
+    } catch (err) {
+        // Recusa do servidor (carrinho vazio, pagamento que não fecha) tem que
+        // aparecer na tela. Só falta de conexão vira fila.
+        if (!isOffline(err)) throw err;
+
+        const entry = await enqueueSale({
+            items: itemPayload,
+            payments: paymentPayload,
+            discount: Number(discount) || 0,
+            note,
+            customerId,
+            clientUuid,
+            soldAt,
+        });
+
+        return { saleId: null, queued: true, clientUuid: entry.client_uuid, soldAt: entry.sold_at };
+    }
 }
 
 export async function listSalePayments(saleId) {
@@ -384,13 +448,27 @@ export async function deleteStockEntry(id) {
 // Clientes e fiado (Credito Loja)
 // ---------------------------------------------------------------------------
 
+/**
+ * Clientes cadastrados.
+ *
+ * Sem conexao responde pela copia local, porque vender fiado offline exige
+ * escolher de quem e a divida — fiado sem dono e divida que ninguem cobra.
+ * Cadastrar cliente novo offline nao entra nessa volta: o cliente precisa de um
+ * id do banco para a venda apontar, e inventar um aqui daria dois cadastros da
+ * mesma pessoa assim que a fila subisse.
+ */
 export async function listCustomers({ includeInactive = false } = {}) {
-    let query = supabase.from('customers').select('*').order('name');
-    if (!includeInactive) query = query.eq('active', true);
+    try {
+        let query = supabase.from('customers').select('*').order('name');
+        if (!includeInactive) query = query.eq('active', true);
 
-    const { data, error } = await query;
-    if (error) throw error;
-    return data ?? [];
+        const { data, error } = await query;
+        if (error) throw error;
+        return data ?? [];
+    } catch (err) {
+        if (!isOffline(err)) throw err;
+        return cachedCustomers();
+    }
 }
 
 export async function createCustomer({ name, phone = null, note = null }) {
@@ -593,30 +671,31 @@ export async function deleteEmployeeProfile(profileId) {
 // Credito da loja (consumo do funcionario)
 // ---------------------------------------------------------------------------
 
+/**
+ * Anota um produto que o funcionario pegou para descontar no pagamento.
+ *
+ * O preco NAO vai daqui: quem le e o banco, no instante do lancamento. O app
+ * manda so o produto e a quantidade.
+ *
+ * Antes o valor era calculado aqui e gravado direto na tabela — o que deixava
+ * o proprio funcionario escolher quanto o consumo dele custaria, bastando
+ * chamar a API com outro numero. Do lado do banco, o valor gravado fica
+ * congelado: se o produto subir de preco no mes seguinte, o desconto continua
+ * sendo o do dia em que ele pegou.
+ */
 export async function createEmployeeCredit({
     employeeProfileId, product, quantity, takenAt, note,
 }) {
-    const qty = Number(quantity);
-    const unitPrice = Number(product.sale_price) || 0;
-
-    const { data, error } = await supabase
-        .from('employee_credits')
-        .insert([{
-            employee_profile_id: employeeProfileId,
-            product_id: product.id,
-            barcode: product.barcode,
-            product_name: product.name,
-            quantity: qty,
-            unit_price: unitPrice,
-            total: Number((qty * unitPrice).toFixed(2)),
-            taken_at: takenAt,
-            note: note?.trim() || null,
-        }])
-        .select()
-        .single();
+    const { data, error } = await supabase.rpc('create_employee_credit', {
+        p_product_id: product.id,
+        p_quantity: Number(quantity),
+        p_taken_at: takenAt,
+        p_note: note?.trim() || null,
+        p_profile_id: employeeProfileId ?? null,
+    });
 
     if (error) throw error;
-    return data;
+    return data; // uuid do lancamento
 }
 
 export async function listEmployeeCredits({ profileId, from, to } = {}) {
@@ -657,6 +736,190 @@ export async function unsettleEmployeeCredits(ids) {
         .in('id', ids);
 
     if (error) throw error;
+}
+
+// ---------------------------------------------------------------------------
+// Caixa: abertura, sangria e fechamento
+//
+// Tudo passa por RPC de proposito. O valor esperado na gaveta e calculado pelo
+// banco a partir das vendas em dinheiro do turno — calculado aqui, seria um
+// numero informado pela mesma pessoa que esta sendo conferida.
+// ---------------------------------------------------------------------------
+
+/** Turno aberto agora, ou null se ninguem abriu o caixa. */
+export async function getOpenCashSession() {
+    const { data, error } = await supabase
+        .from('cash_session_summary')
+        .select('*')
+        .is('closed_at', null)
+        .maybeSingle();
+
+    if (error) throw error;
+    return data;
+}
+
+export async function listCashSessions({ from, to, limit = 100 } = {}) {
+    let query = supabase
+        .from('cash_session_summary')
+        .select('*')
+        .order('opened_at', { ascending: false })
+        .limit(limit);
+
+    if (from) query = query.gte('opened_at', from);
+    if (to) query = query.lte('opened_at', to);
+
+    const { data, error } = await query;
+    if (error) throw error;
+    return data ?? [];
+}
+
+export async function listCashMovements(sessionId) {
+    const { data, error } = await supabase
+        .from('cash_movements')
+        .select('*')
+        .eq('session_id', sessionId)
+        .order('happened_at', { ascending: false });
+
+    if (error) throw error;
+    return data ?? [];
+}
+
+export async function openCashSession({ openingAmount = 0, note = null } = {}) {
+    const { data, error } = await supabase.rpc('open_cash_session', {
+        p_opening_amount: Number(openingAmount) || 0,
+        p_note: note,
+    });
+
+    if (error) throw error;
+    return data;
+}
+
+export async function closeCashSession({ countedAmount, note = null }) {
+    const { data, error } = await supabase.rpc('close_cash_session', {
+        p_counted_amount: Number(countedAmount),
+        p_note: note,
+    });
+
+    if (error) throw error;
+    return data;
+}
+
+/** `kind`: 'sangria' (sai da gaveta) ou 'suprimento' (entra). */
+export async function addCashMovement({ kind, amount, reason }) {
+    const { data, error } = await supabase.rpc('add_cash_movement', {
+        p_kind: kind,
+        p_amount: Number(amount),
+        p_reason: reason,
+    });
+
+    if (error) throw error;
+    return data;
+}
+
+// ---------------------------------------------------------------------------
+// Nota fiscal (NFC-e)
+//
+// A emissao NAO sai daqui direto para a SEFAZ nem para o emissor: vai pela
+// Edge Function `emit-nfce`. O token do emissor assina nota em nome da loja, e
+// nao pode viajar dentro de um app instalado na maquina do cliente — mesmo
+// motivo da service_role key em `create-employee`.
+// ---------------------------------------------------------------------------
+
+export async function getFiscalSettings() {
+    const { data, error } = await supabase
+        .from('fiscal_settings')
+        .select('*')
+        .eq('id', 1)
+        .maybeSingle();
+
+    if (error) throw error;
+    return data;
+}
+
+export async function updateFiscalSettings(changes) {
+    const { data, error } = await supabase
+        .from('fiscal_settings')
+        .update({ ...changes, updated_at: new Date().toISOString() })
+        .eq('id', 1)
+        .select()
+        .single();
+
+    if (error) throw error;
+    return data;
+}
+
+/** Nota de uma venda, se ja houver. Uma venda tem no maximo uma autorizada. */
+export async function getInvoiceForSale(saleId) {
+    const { data, error } = await supabase
+        .from('fiscal_invoices')
+        .select('*')
+        .eq('sale_id', saleId)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+    if (error) throw error;
+    return data;
+}
+
+export async function listInvoicesForSales(saleIds) {
+    if (saleIds.length === 0) return {};
+
+    const { data, error } = await supabase
+        .from('fiscal_invoices')
+        .select('*')
+        .in('sale_id', saleIds);
+
+    if (error) throw error;
+
+    // Uma por venda, a mais recente. A tela so precisa saber "esta venda tem
+    // nota?" e, se tiver, qual — o historico de tentativas nao interessa ali.
+    const byId = {};
+    for (const invoice of data ?? []) {
+        const current = byId[invoice.sale_id];
+        if (!current || new Date(invoice.created_at) > new Date(current.created_at)) {
+            byId[invoice.sale_id] = invoice;
+        }
+    }
+    return byId;
+}
+
+/**
+ * Emite a NFC-e de uma venda.
+ *
+ * Chamar de novo para a mesma venda nao emite outra: a funcao usa a venda como
+ * referencia unica no emissor e devolve a nota que ja existe. Emitir em
+ * duplicidade custaria um cancelamento junto a SEFAZ.
+ */
+export async function emitInvoice(saleId, { cpf = null } = {}) {
+    const { data, error } = await supabase.functions.invoke('emit-nfce', {
+        body: { sale_id: saleId, cpf },
+    });
+
+    if (error) {
+        let message = 'Não consegui emitir a nota.';
+        try {
+            const body = await error.context?.json?.();
+            if (body?.error) message = body.error;
+        } catch {
+            // Sem corpo legível — fica a mensagem genérica.
+        }
+        throw new Error(message);
+    }
+
+    if (data?.error) throw new Error(data.error);
+    return data?.invoice;
+}
+
+/** Reconsulta o emissor: a autorizacao da SEFAZ leva alguns segundos. */
+export async function refreshInvoice(invoiceId) {
+    const { data, error } = await supabase.functions.invoke('emit-nfce', {
+        body: { invoice_id: invoiceId, action: 'status' },
+    });
+
+    if (error) throw new Error('Não consegui consultar a nota.');
+    if (data?.error) throw new Error(data.error);
+    return data?.invoice;
 }
 
 // ---------------------------------------------------------------------------

@@ -261,6 +261,97 @@ supabase functions deploy create-employee
 Trocar a senha de um funcionário é feito pelo painel do Supabase, em
 **Authentication → Users**.
 
+**Valor gravado é valor da época.** O que o funcionário pegou em março e o que o
+cliente levou fiado em abril valem o preço daquele dia — mesmo que o produto
+mude de preço amanhã. Metade disso o modelo já resolvia guardando o valor na
+linha; a outra metade faltava, porque nada impedia um `UPDATE` de mexer nesse
+valor depois. Um "corrigir preço" mal feito, ou um update corrido no SQL Editor,
+mudava a dívida de abril sem erro nenhum e sem cópia do valor original.
+
+Agora gatilhos recusam alterar o que já foi gravado em `employee_credits`,
+`sale_items`, `sale_payments` e nos valores de `sales`. O que ainda pode mudar é
+uma lista curta e explícita: marcar o consumo como descontado, e a observação.
+Para corrigir de verdade, apaga e lança de novo — que é o caminho que devolve o
+estoque pelo lugar certo.
+
+O consumo do funcionário também deixou de confiar no app: quem lê o preço é o
+banco, dentro do `create_employee_credit`. Antes o valor vinha da tela, o que na
+prática deixava o funcionário escolher quanto o próprio consumo custaria.
+
+**Vender sem internet.** O caixa não para quando a conexão cai. A venda é
+fechada na hora, gravada em disco (`vendas-pendentes.json`, na pasta de dados do
+app) e sobe sozinha quando a conexão volta — inclusive se o app for fechado e
+aberto no meio. O catálogo é copiado para a máquina a cada sincronização, que é
+o que mantém o leitor de código de barras funcionando offline.
+
+Duas coisas seguram a corretude:
+
+1. Cada venda nasce com um `client_uuid` gerado no app, antes da primeira
+   tentativa. O banco tem índice único nessa coluna e o `create_sale` devolve o
+   id que já existe em vez de gravar outra. Sem isso, o caso mais comum de falha
+   — o banco grava e a resposta se perde no caminho — viraria venda duplicada
+   com estoque baixado duas vezes.
+2. Nada sai da fila sem confirmação do servidor. Venda recusada por regra fica
+   marcada e aparece na tela de pendentes; nunca é descartada em silêncio,
+   porque é dinheiro que já entrou na gaveta.
+
+Na venda offline o preço gravado é o que o app cobrou, e não o do momento em que
+a conexão voltou — o cliente já pagou aquele valor e já levou o cupom. Essas
+vendas ficam marcadas em `sales.sold_offline` para conferência.
+
+Cadastrar cliente novo não funciona offline, de propósito: o fiado precisa de um
+id do banco para apontar, e inventar um aqui daria dois cadastros da mesma
+pessoa assim que a fila subisse.
+
+**Caixa: abertura, sangria e fechamento.** Tela só de administrador — abrir,
+sangrar e conferir é mexer em dinheiro fora da venda. O funcionário continua
+vendendo, e as vendas dele entram no turno aberto sozinhas.
+
+O valor esperado na gaveta é calculado pelo banco (abertura + vendas em
+dinheiro + suprimentos − sangrias), nunca pelo app: conferência com número
+informado pela mesma pessoa que está sendo conferida não confere nada. No
+fechamento esse valor é **congelado** junto com o que foi contado, senão um
+estorno feito amanhã faria o fechamento de hoje passar a bater sozinho,
+escondendo a falta que existiu no dia.
+
+Só um caixa aberto por vez, garantido por índice único — dois abertos ao mesmo
+tempo tornariam impossível dizer a qual turno uma venda pertence. Motivo é
+obrigatório na sangria: é o único registro de para onde o dinheiro foi.
+
+**Nota fiscal (NFC-e).** Ao fechar a venda aparecem os botões de imprimir cupom
+e emitir nota; no Histórico dá para emitir depois e reimprimir quantas vezes
+quiser. Reimprimir **não** é emitir de novo: sai o mesmo DANFE, com a mesma
+chave e o mesmo protocolo. Emitir outra nota para a mesma venda seria imposto em
+dobro e um cancelamento junto à SEFAZ para desfazer — por isso venda com nota
+autorizada também não pode ser estornada.
+
+O cupom sai em 80mm pelo diálogo de impressão do Windows, no layout do DANFE
+NFC-e (Manual de Padrões Técnicos): cabeçalho do emitente, itens, totais, formas
+de pagamento, chave de acesso e QR Code. Venda sem nota imprime o mesmo corpo
+sob o título de **comprovante**, deixando explícito que não é documento fiscal.
+
+A emissão passa pela Edge Function `emit-nfce`, e não sai do app direto para o
+emissor, pelo mesmo motivo do `create-employee`: o token assina nota em nome da
+loja e não pode viajar dentro de um app instalado no balcão. Os valores da nota
+são lidos do banco, nunca do corpo da requisição — se viessem de fora, daria
+para emitir nota de R$ 1 para uma venda de R$ 300.
+
+```bash
+supabase secrets set FOCUS_NFE_TOKEN=seu_token_do_emissor
+supabase functions deploy emit-nfce
+```
+
+Falta ainda, do lado de fora do código: contratar o emissor (Focus NFe),
+cadastrar o certificado digital A1 lá, e preencher a tela **Nota fiscal** com
+CNPJ, IE, endereço e código IBGE do município. Enquanto o CSC/certificado não
+estiver configurado, o botão de emitir responde dizendo o que falta e a venda
+segue normalmente com o comprovante impresso.
+
+Produto sem classificação fiscal usa o padrão da configuração (NCM, CFOP,
+CSOSN/CST). É o que torna a coisa usável: classificar milhares de itens à mão
+antes da primeira nota travaria o sistema inteiro. Quem tributa diferente ganha
+os campos próprios no cadastro do produto.
+
 **Crédito da loja (consumo do funcionário).** É coisa diferente do fiado do
 cliente: o devedor é o funcionário e a quitação acontece na folha, não no caixa.
 O funcionário anota o que pegou, **o produto sai do estoque igual a uma venda**

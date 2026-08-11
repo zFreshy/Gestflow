@@ -739,6 +739,103 @@ export async function unsettleEmployeeCredits(ids) {
 }
 
 // ---------------------------------------------------------------------------
+// Dashboard
+//
+// As contas sao feitas no banco, e nao aqui. Antes a tela baixava as vendas do
+// mes e somava em memoria — funciona com pouca venda e para de funcionar sem
+// avisar: o termometro de 12 semanas precisaria de dezenas de milhares de
+// linhas trafegadas para desenhar 84 quadradinhos.
+//
+// Todas devolvem vazio para o funcionario, porque checam is_admin() por dentro.
+// ---------------------------------------------------------------------------
+
+/** Totais do periodo: faturamento, custo, lucro, ticket medio. */
+export async function getDashboardTotals({ from, to }) {
+    const { data, error } = await supabase.rpc('dashboard_totals', {
+        p_from: from,
+        p_to: to,
+    });
+
+    if (error) throw error;
+
+    // `returns table` sempre volta como lista, mesmo com uma linha so.
+    const row = (data ?? [])[0];
+    return {
+        revenue: Number(row?.revenue ?? 0),
+        cost: Number(row?.cost ?? 0),
+        profit: Number(row?.profit ?? 0),
+        discount: Number(row?.discount ?? 0),
+        saleCount: Number(row?.sale_count ?? 0),
+        itemCount: Number(row?.item_count ?? 0),
+        avgTicket: Number(row?.avg_ticket ?? 0),
+        offlineCount: Number(row?.offline_count ?? 0),
+        invoicedCount: Number(row?.invoiced_count ?? 0),
+    };
+}
+
+/** Faturamento por dia, com os dias parados preenchidos com zero. */
+export async function getDashboardDaily({ from, to }) {
+    const { data, error } = await supabase.rpc('dashboard_daily', {
+        p_from: from,
+        p_to: to,
+    });
+
+    if (error) throw error;
+    return (data ?? []).map((d) => ({
+        day: d.day,
+        revenue: Number(d.revenue),
+        cost: Number(d.cost),
+        profit: Number(d.profit),
+        saleCount: Number(d.sale_count),
+    }));
+}
+
+/** Movimento por hora do dia — a que horas a loja enche. */
+export async function getDashboardHourly({ from, to }) {
+    const { data, error } = await supabase.rpc('dashboard_hourly', {
+        p_from: from,
+        p_to: to,
+    });
+
+    if (error) throw error;
+    return (data ?? []).map((h) => ({
+        hour: Number(h.hour),
+        revenue: Number(h.revenue),
+        saleCount: Number(h.sale_count),
+    }));
+}
+
+export async function getDashboardPaymentMix({ from, to }) {
+    const { data, error } = await supabase.rpc('dashboard_payment_mix', {
+        p_from: from,
+        p_to: to,
+    });
+
+    if (error) throw error;
+    return (data ?? []).map((p) => ({
+        method: p.method,
+        amount: Number(p.amount),
+        uses: Number(p.uses),
+    }));
+}
+
+export async function getDashboardTopProducts({ from, to, limit = 8 }) {
+    const { data, error } = await supabase.rpc('dashboard_top_products', {
+        p_from: from,
+        p_to: to,
+        p_limit: limit,
+    });
+
+    if (error) throw error;
+    return (data ?? []).map((p) => ({
+        name: p.product_name,
+        quantity: Number(p.quantity),
+        revenue: Number(p.revenue),
+        profit: Number(p.profit),
+    }));
+}
+
+// ---------------------------------------------------------------------------
 // Caixa: abertura, sangria e fechamento
 //
 // Tudo passa por RPC de proposito. O valor esperado na gaveta e calculado pelo

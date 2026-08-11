@@ -374,6 +374,29 @@ R$ 20 no fiado, deve R$ 20. Recebimentos são independentes de venda, porque que
 deve três compras e paga R$ 50 não diz qual delas está quitando — pagamento
 parcial funciona naturalmente.
 
+**O dashboard soma no banco, não no app.** Antes a tela baixava as vendas do mês
+e somava em memória. Isso funciona com pouca venda e para de funcionar sem
+avisar: um mercadinho movimentado faz umas 300 vendas por dia, e o termômetro de
+12 semanas precisaria de ~25 mil linhas trafegadas para desenhar 84
+quadradinhos. As funções `dashboard_*` devolvem só o resultado, e cada uma
+confere `is_admin()` por dentro — para o funcionário elas respondem vazio.
+
+Os números vêm sempre com o período anterior do mesmo tamanho ao lado, porque
+"R$ 8.400 este mês" não informa nada sozinho. Quando não dá para comparar
+(período anterior zerado), a variação some em vez de mostrar "+100%".
+
+O **termômetro de vendas** responde uma pergunta diferente do gráfico: não
+"quanto vendi", e sim **qual dia da semana rende** — o que decide escala de
+funcionário e quanta massa deixar pronta. A escala de cor é relativa ao melhor
+dia do próprio período, senão uma loja de R$ 300/dia ficaria toda clara e uma de
+R$ 8.000 toda escura. Dias sem movimento não entram na média: loja fechada
+entraria como "vendeu zero" e afundaria a média daquele dia.
+
+O ranking de produtos tem três leituras (faturamento, lucro, quantidade) porque
+não são a mesma lista. O campeão de quantidade numa padaria é o pão, de margem
+apertada; quem paga as contas costuma ser outro item, vendido bem menos. Ver só
+"mais vendidos" leva a proteger o produto errado numa negociação com fornecedor.
+
 **Lucro bruto ≠ caixa do mês.** O dashboard mostra faturamento menos o custo do
 que saiu da prateleira. O gasto com reposição aparece num card separado, porque
 comprar 200 caixas hoje não é prejuízo de hoje — é estoque.

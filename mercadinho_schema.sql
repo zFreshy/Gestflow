@@ -1595,6 +1595,197 @@ revoke all on public.cash_session_summary from anon, authenticated;
 grant select on public.cash_session_summary to authenticated;
 
 -- ============================================================================
+-- DASHBOARD
+--
+-- Contas prontas para a tela do administrador. Poderiam ser feitas no app, e
+-- eram: ele baixava as vendas do mes e somava em memoria. Isso funciona com
+-- uma loja pequena e para de funcionar sem avisar — um mercadinho movimentado
+-- faz umas 300 vendas por dia, e o termometro de 12 semanas precisaria de
+-- ~25 mil linhas trafegadas para desenhar 84 quadradinhos.
+--
+-- Aqui o banco devolve so o resultado. Cada funcao checa `is_admin()` por
+-- dentro, e nao apenas confia no GRANT: sao numeros de faturamento e lucro, o
+-- que o funcionario justamente nao pode ver, e SECURITY DEFINER passa por cima
+-- do RLS de `sales` de proposito para conseguir somar.
+-- ============================================================================
+
+/** Totais do periodo. Chamado duas vezes pela tela, para comparar com o anterior. */
+create or replace function public.dashboard_totals(
+  p_from timestamptz,
+  p_to   timestamptz
+)
+returns table (
+  revenue      numeric,
+  cost         numeric,
+  profit       numeric,
+  discount     numeric,
+  sale_count   bigint,
+  item_count   numeric,
+  avg_ticket   numeric,
+  offline_count bigint,
+  invoiced_count bigint
+)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select coalesce(sum(s.total), 0),
+         coalesce(sum(s.cost_total), 0),
+         coalesce(sum(s.total - s.cost_total), 0),
+         coalesce(sum(s.discount), 0),
+         count(*),
+         coalesce(sum(s.item_count), 0),
+         -- Ticket medio precisa da divisao protegida: periodo sem venda
+         -- nenhuma daria divisao por zero e a tela inteira quebraria.
+         case when count(*) = 0 then 0 else round(sum(s.total) / count(*), 2) end,
+         count(*) filter (where s.sold_offline),
+         count(*) filter (where exists (
+           select 1 from public.fiscal_invoices f
+            where f.sale_id = s.id and f.status = 'autorizada'
+         ))
+    from public.sales s
+   where public.is_admin()
+     and s.sold_at >= p_from
+     and s.sold_at <= p_to;
+$$;
+
+/**
+ * Faturamento por dia.
+ *
+ * `generate_series` preenche os dias sem venda com zero. Sem isso o grafico
+ * ligaria segunda direto em quarta como se terca nao existisse, e o termometro
+ * de 12 semanas ficaria com buracos no lugar dos dias parados.
+ */
+create or replace function public.dashboard_daily(
+  p_from date,
+  p_to   date
+)
+returns table (
+  day        date,
+  revenue    numeric,
+  cost       numeric,
+  profit     numeric,
+  sale_count bigint
+)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select d::date,
+         coalesce(sum(s.total), 0),
+         coalesce(sum(s.cost_total), 0),
+         coalesce(sum(s.total - s.cost_total), 0),
+         count(s.id)
+    from generate_series(p_from, p_to, interval '1 day') as d
+    left join public.sales s
+      -- Fuso de Sao Paulo, e nao UTC: uma venda das 21h entraria no dia
+      -- seguinte e o faturamento do sabado apareceria no domingo.
+      on (s.sold_at at time zone 'America/Sao_Paulo')::date = d::date
+   where public.is_admin()
+   group by d
+   order by d;
+$$;
+
+/**
+ * Vendas por hora do dia, somando todos os dias do periodo.
+ *
+ * E o que responde "a que horas a loja enche" — a pergunta que decide escala de
+ * funcionario e hora de assar mais pao.
+ */
+create or replace function public.dashboard_hourly(
+  p_from timestamptz,
+  p_to   timestamptz
+)
+returns table (
+  hour       integer,
+  revenue    numeric,
+  sale_count bigint
+)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select h::integer,
+         coalesce(sum(s.total), 0),
+         count(s.id)
+    from generate_series(0, 23) as h
+    left join public.sales s
+      on extract(hour from s.sold_at at time zone 'America/Sao_Paulo') = h
+     and s.sold_at >= p_from
+     and s.sold_at <= p_to
+   where public.is_admin()
+   group by h
+   order by h;
+$$;
+
+/** Quanto entrou por forma de pagamento. Sai do detalhe, nao do resumo textual. */
+create or replace function public.dashboard_payment_mix(
+  p_from timestamptz,
+  p_to   timestamptz
+)
+returns table (
+  method text,
+  amount numeric,
+  uses   bigint
+)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select sp.method,
+         sum(sp.amount),
+         count(*)
+    from public.sale_payments sp
+    join public.sales s on s.id = sp.sale_id
+   where public.is_admin()
+     and s.sold_at >= p_from
+     and s.sold_at <= p_to
+   group by sp.method
+   order by sum(sp.amount) desc;
+$$;
+
+/**
+ * Ranking de produtos, com quantidade E lucro.
+ *
+ * Os dois juntos porque nao sao a mesma lista: o item mais vendido costuma ser
+ * o de margem menor (pao, leite), e quem paga as contas e outro. Ver so a
+ * quantidade esconde isso.
+ */
+create or replace function public.dashboard_top_products(
+  p_from  timestamptz,
+  p_to    timestamptz,
+  p_limit integer default 8
+)
+returns table (
+  product_name text,
+  quantity     numeric,
+  revenue      numeric,
+  profit       numeric
+)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select si.product_name,
+         sum(si.quantity),
+         sum(si.subtotal),
+         sum(si.subtotal - (si.unit_cost * si.quantity))
+    from public.sale_items si
+    join public.sales s on s.id = si.sale_id
+   where public.is_admin()
+     and s.sold_at >= p_from
+     and s.sold_at <= p_to
+   group by si.product_name
+   order by sum(si.subtotal) desc
+   limit greatest(coalesce(p_limit, 8), 1);
+$$;
+
+-- ============================================================================
 -- GRANTS
 --
 -- O Postgres da EXECUTE de funcao para PUBLIC por padrao, e PUBLIC inclui o
@@ -1615,6 +1806,11 @@ revoke all on function public.open_cash_session(numeric, text) from public, anon
 revoke all on function public.close_cash_session(numeric, text) from public, anon;
 revoke all on function public.add_cash_movement(text, numeric, text) from public, anon;
 revoke all on function public.cash_session_expected(uuid) from public, anon;
+revoke all on function public.dashboard_totals(timestamptz, timestamptz) from public, anon;
+revoke all on function public.dashboard_daily(date, date) from public, anon;
+revoke all on function public.dashboard_hourly(timestamptz, timestamptz) from public, anon;
+revoke all on function public.dashboard_payment_mix(timestamptz, timestamptz) from public, anon;
+revoke all on function public.dashboard_top_products(timestamptz, timestamptz, integer) from public, anon;
 revoke all on function public.is_admin() from public, anon;
 revoke all on function public.is_employee() from public, anon;
 revoke all on function public.current_employee_profile_id() from public, anon;
@@ -1638,6 +1834,14 @@ grant execute on function public.open_cash_session(numeric, text) to authenticat
 grant execute on function public.close_cash_session(numeric, text) to authenticated;
 grant execute on function public.add_cash_movement(text, numeric, text) to authenticated;
 grant execute on function public.cash_session_expected(uuid) to authenticated;
+
+-- As do dashboard tambem checam is_admin() por dentro: para o funcionario elas
+-- respondem vazio, e nao com erro — a tela dele simplesmente nao as chama.
+grant execute on function public.dashboard_totals(timestamptz, timestamptz) to authenticated;
+grant execute on function public.dashboard_daily(date, date) to authenticated;
+grant execute on function public.dashboard_hourly(timestamptz, timestamptz) to authenticated;
+grant execute on function public.dashboard_payment_mix(timestamptz, timestamptz) to authenticated;
+grant execute on function public.dashboard_top_products(timestamptz, timestamptz, integer) to authenticated;
 
 -- `cash_session_expected` e usada dentro da view `cash_session_summary`, que e
 -- security_invoker: sem este grant a tela do caixa abriria com erro de

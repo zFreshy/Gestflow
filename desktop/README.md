@@ -261,6 +261,37 @@ supabase functions deploy create-employee
 Trocar a senha de um funcionário é feito pelo painel do Supabase, em
 **Authentication → Users**.
 
+**A conta continua onde estava.** Fechar o app, desligar o computador e voltar
+no dia seguinte mantém quem estava usando — administrador continua
+administrador, perfil de funcionário continua no perfil. Três coisas seguram
+isso, e as três já falharam em versões anteriores:
+
+1. **A sessão vai para arquivo, não para o localStorage** (ver `authStorage.js`),
+   e é gravada **na hora**. O `autoSave` do plugin de store tem 100ms de atraso,
+   e era justamente aí que morava o risco: o Supabase troca o token de renovação
+   de tempos em tempos e invalida o anterior no servidor. Desligar a máquina
+   dentro dessa janela deixava no disco um token que já não valia, e a próxima
+   abertura caía na tela de login sem ninguém ter saído da conta.
+2. **O papel de cada conta fica lembrado em disco** (`profileCache.js`). Quem
+   decide se alguém é administrador é o banco, e essa pergunta precisa de
+   internet — desde que o app passou a vender offline, abrir sem conexão virou
+   rotina. Antes, a falha da pergunta era tratada como "não é administrador", e
+   o dono abria o sistema rebaixado a funcionário: sem dashboard, sem caixa, sem
+   fiado, e a tela de crédito quebrava por falta de perfil.
+3. **O papel lembrado é por conta**, com a chave no id do usuário. Sem isso, sair
+   de uma conta de administrador e entrar numa de funcionário herdaria o papel
+   anterior.
+
+Enquanto estiver valendo o papel lembrado, o app segue perguntando ao banco em
+segundo plano; assim que a internet volta, a resposta real substitui a lembrada
+sozinha.
+
+Isso **não** enfraquece a separação de papéis, e vale dizer por quê: o papel
+guardado no disco decide só o que aparece no menu. Quem protege o dado é o RLS,
+no servidor. Alguém que edite esse arquivo à mão para virar "administrador" vê
+as telas — e todas voltam vazias, porque o banco continua respondendo conforme o
+login de verdade.
+
 **Valor gravado é valor da época.** O que o funcionário pegou em março e o que o
 cliente levou fiado em abril valem o preço daquele dia — mesmo que o produto
 mude de preço amanhã. Metade disso o modelo já resolvia guardando o valor na

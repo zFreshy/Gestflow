@@ -9,7 +9,7 @@ import { Button } from '../atoms/Button';
 import { Input } from '../atoms/Input';
 import { cn } from '../../lib/utils';
 import { useAuth } from '../../contexts/AuthContext';
-import { useProfile, rememberedAdminEmail } from '../../contexts/ProfileContext';
+import { useProfile } from '../../contexts/ProfileContext';
 import { listEmployeeProfiles } from '../../services/mercadinhoService';
 
 const NAMES_BY_EMAIL = {
@@ -20,7 +20,10 @@ const NAMES_BY_EMAIL = {
 
 export function ProfileSwitcher({ collapsed }) {
     const { getUserEmail } = useAuth();
-    const { profile, isAdmin, switchToEmployee, switchToAdmin } = useProfile();
+    const {
+        profile, isAdmin, switchToEmployee, switchToAdmin,
+        adminEmail: rememberedEmail,
+    } = useProfile();
     const navigate = useNavigate();
 
     const [open, setOpen] = useState(false);
@@ -34,7 +37,7 @@ export function ProfileSwitcher({ collapsed }) {
 
     // Dentro de um perfil de funcionário, getUserEmail() é o e-mail sintético
     // dele — o nome do administrador tem que vir do que ficou lembrado.
-    const adminEmail = isAdmin ? getUserEmail() : rememberedAdminEmail();
+    const adminEmail = isAdmin ? getUserEmail() : rememberedEmail;
     const adminName = NAMES_BY_EMAIL[adminEmail] || 'Administrador';
     const currentName = isAdmin ? adminName : (profile?.name ?? 'Funcionário');
 

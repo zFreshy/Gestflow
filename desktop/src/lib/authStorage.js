@@ -46,6 +46,17 @@ export const tauriAuthStorage = {
         try {
             const store = await getStore();
             await store.set(key, value);
+
+            // `autoSave` grava sozinho, mas com 100ms de atraso — e é justamente
+            // nesse intervalo que o risco mora. O Supabase troca o token de
+            // renovação de tempos em tempos e invalida o anterior no servidor;
+            // se o computador for desligado antes da gravação sair, o disco fica
+            // com um token que já não vale mais, e a próxima abertura cai na
+            // tela de login sem ninguém ter saído da conta.
+            //
+            // Salvar na hora custa uma escrita a cada renovação (uma por hora,
+            // mais ou menos) e elimina a janela.
+            await store.save();
         } catch (err) {
             // Se gravar falhar, o login vale só até fechar o app. Melhor do que
             // derrubar a tela na cara de quem está no meio de uma venda.
@@ -57,6 +68,9 @@ export const tauriAuthStorage = {
         try {
             const store = await getStore();
             await store.delete(key);
+            // Mesmo motivo do setItem, ao contrário: sair da conta tem que valer
+            // mesmo se o app for fechado no segundo seguinte.
+            await store.save();
         } catch (err) {
             console.error('Falha ao apagar a sessão:', err);
         }

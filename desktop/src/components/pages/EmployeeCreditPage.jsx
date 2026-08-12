@@ -57,7 +57,10 @@ export function EmployeeCreditPage() {
                 listEmployeeCredits({
                     // No perfil de funcionário só entra o que é dele: ninguém
                     // precisa ver o que o colega pegou.
-                    profileId: isAdmin ? (filterProfile || undefined) : profile.id,
+                    // `profile?.id`: sem internet o app pode estar valendo-se do
+                    // papel lembrado e ainda não ter carregado o perfil. Sem o
+                    // `?`, a tela quebrava justamente na abertura offline.
+                    profileId: isAdmin ? (filterProfile || undefined) : profile?.id,
                     from: range.from,
                     to: range.to,
                 }),

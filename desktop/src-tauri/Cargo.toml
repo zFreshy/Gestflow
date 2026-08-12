@@ -26,9 +26,14 @@ serde_json = "1"
 # cima, o que deixa a chamada igual a documentacao da Microsoft e evita
 # surpresa de assinatura a cada versao.
 [target.'cfg(windows)'.dependencies]
+# Gdi e Security entram porque o PRINTER_INFO_2W depende dos dois — e e ele que
+# traz porta e driver, o unico jeito de saber se a impressora e de verdade ou
+# virtual (Print to PDF, XPS).
 windows-sys = { version = "0.59", features = [
   "Win32_Foundation",
+  "Win32_Graphics_Gdi",
   "Win32_Graphics_Printing",
+  "Win32_Security",
 ] }
 
 [profile.release]

@@ -44,7 +44,33 @@ export async function savePrinterConfig(config) {
 export async function listPrinters() {
     if (!isTauri()) return [];
     const { invoke } = await import('@tauri-apps/api/core');
-    return invoke('list_printers');
+    const printers = await invoke('list_printers');
+    return printers.map((p) => ({ ...p, virtual: isVirtualPrinter(p) }));
+}
+
+/**
+ * É uma impressora de mentira?
+ *
+ * "Microsoft Print to PDF", "Salvar como XPS" e afins são drivers que geram
+ * arquivo, não papel. Elas aparecem na lista do Windows igual às outras, e é
+ * fácil escolher uma sem perceber — foi o que aconteceu no primeiro teste.
+ *
+ * O problema é que o cupom vai em modo RAW, que existe justamente para o
+ * driver NÃO interpretar nada: os bytes passam direto para a porta. Numa
+ * térmica isso é o que faz os comandos funcionarem; numa virtual, o arquivo
+ * gerado recebe bytes ESC/POS crus e não abre em lugar nenhum.
+ *
+ * A porta é o sinal mais confiável — `PORTPROMPT:` é literalmente "pergunte
+ * onde salvar". O driver entra como reforço, porque impressora virtual de
+ * terceiro (PDFCreator, doPDF) usa porta própria.
+ */
+export function isVirtualPrinter({ port = '', driver = '', name = '' } = {}) {
+    const haystack = `${port} ${driver} ${name}`.toLowerCase();
+
+    return (
+        /portprompt|^nul:|\bnul:|xpsport|shrfax|^file:/i.test(port)
+        || /pdf|xps|onenote|fax|document writer|microsoft print to/.test(haystack)
+    );
 }
 
 async function sendRaw(printer, bytes) {
@@ -94,7 +120,11 @@ export function renderReceipt({ store: shop, sale, items, payments, invoice, cha
     if (shop?.logradouro) {
         r.wrap([shop.logradouro, shop.numero, shop.bairro].filter(Boolean).join(', '));
     }
-    if (shop?.municipio) r.line(`${shop.municipio}${shop.uf ? `/${shop.uf}` : ''}`);
+    if (shop?.municipio) {
+        const cep = String(shop.cep ?? '').replace(/\D/g, '');
+        r.line(`${shop.municipio}${shop.uf ? `/${shop.uf}` : ''}`
+            + (cep.length === 8 ? ` - ${cep.slice(0, 5)}-${cep.slice(5)}` : ''));
+    }
     if (shop?.telefone) r.line(`Fone ${shop.telefone}`);
 
     r.divider('=');
@@ -219,33 +249,54 @@ export async function printThermal(receipt) {
     return true;
 }
 
-/** Cupom de teste, para conferir a impressora sem precisar fazer uma venda. */
+/**
+ * Venda de mentira para conferir a impressão sem precisar vender de verdade.
+ *
+ * É uma só, usada pelos dois testes — o que sai na bobina e o que vira PDF.
+ * Se fossem exemplos diferentes, a prévia em PDF poderia sair bonita enquanto o
+ * papel sai torto, e o teste não provaria nada.
+ *
+ * Os itens são escolhidos a dedo para exercitar o que costuma quebrar: acento,
+ * nome comprido que precisa quebrar linha, quantidade fracionada de balança e
+ * pagamento dividido com troco.
+ */
+export function sampleReceipt() {
+    return {
+        store: {
+            razao_social: 'PADARIA E MERCADINHO LTDA',
+            nome_fantasia: 'Mercadinho',
+            cnpj: '12345678000199',
+            inscricao_estadual: '110042490114',
+            logradouro: 'Rua das Flores', numero: '250', bairro: 'Centro',
+            municipio: 'Campinas', uf: 'SP', cep: '13010100',
+            telefone: '(19) 3232-1010',
+        },
+        // Os números fecham de propósito: itens somam 49,36, menos 2,00 de
+        // desconto dá 47,36, e os pagamentos somam exatamente isso. Um exemplo
+        // que não fecha treina a pessoa a ignorar o total do cupom.
+        sale: {
+            total: 47.36,
+            discount: 2.00,
+            sold_at: new Date().toISOString(),
+            customer_name: null,
+        },
+        items: [
+            { barcode: '7891000315507', product_name: 'Leite Integral 1L', quantity: 2, unit_price: 5.49, subtotal: 10.98 },
+            { barcode: '7896005800011', product_name: 'Pão de Forma Tradicional Integral', quantity: 1, unit_price: 12.99, subtotal: 12.99 },
+            { barcode: null, product_name: 'Banana Prata (granel)', quantity: 1.235, unit_price: 8.90, subtotal: 10.99 },
+            { barcode: '7891910000197', product_name: 'Açúcar Refinado 1kg', quantity: 3, unit_price: 4.80, subtotal: 14.40 },
+        ],
+        payments: [
+            { method: 'Dinheiro', amount: 30.00 },
+            { method: 'PIX', amount: 17.36 },
+        ],
+        change: 5.00,
+        invoice: null,
+    };
+}
+
+/** Manda o cupom de teste para a bobina. */
 export async function printTestPage(config) {
-    const r = new Receipt({ width: config.width });
-
-    r.align('center').bold(true).line('TESTE DE IMPRESSAO').bold(false);
-    r.line('Mercadinho').divider('=');
-    r.align('left');
-    r.line('Se voce esta lendo isto, a');
-    r.line('impressora esta configurada.');
-    r.line();
-    r.line('Confira:');
-    r.line('- os acentos: acao, pao, feijao');
-    r.line('- a largura da linha abaixo');
-    r.divider();
-    r.columns('EXEMPLO DE VALOR', formatCurrency(12.99));
-    r.bold(true).size(2).columns('TOTAL', formatCurrency(47.35)).size(1).bold(false);
-    r.line();
-    r.align('center');
-
-    try {
-        r.qrcode(qrMatrix('https://github.com/zFreshy/Gestflow'), config.width === 58 ? 3 : 4);
-    } catch {
-        r.line('(QR Code nao pode ser gerado)');
-    }
-
-    if (config.openDrawer) r.openDrawer();
-    if (config.autoCut) r.cut(); else r.feed(5);
-
-    return sendRaw(config.printer, r.build());
+    const bytes = renderReceipt(sampleReceipt(), config);
+    return sendRaw(config.printer, bytes);
 }

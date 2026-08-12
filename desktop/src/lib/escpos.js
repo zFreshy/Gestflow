@@ -32,6 +32,15 @@ const CP850 = {
     'Â': 0xb6, 'Ê': 0xd2, 'Ô': 0xe2, 'Ã': 0xc7, 'Õ': 0xe5,
     'À': 0xb7, 'Ç': 0x80, 'Ü': 0x9a, 'Ñ': 0xa5,
     'º': 0xa7, 'ª': 0xa6, '°': 0xf8, '§': 0x15,
+
+    // Espaços invisíveis que o Intl.NumberFormat coloca sozinho: "R$ 5,49" do
+    // pt-BR vem com espaço não-quebrável, não com espaço comum. Sem esta
+    // linha o papel sairia "R$?5,49" em todo valor do cupom — e o bug só
+    // apareceria depois de impresso.
+    ' ': 0x20, ' ': 0x20, ' ': 0x20,
+    // Travessão e aspas curvas, que às vezes entram por copiar e colar em
+    // nome de produto ou observação.
+    '–': 0x2d, '—': 0x2d, '’': 0x27, '‘': 0x27, '“': 0x22, '”': 0x22,
 };
 
 /** Larguras em caracteres na fonte A. É o que decide onde a linha quebra. */

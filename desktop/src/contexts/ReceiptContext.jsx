@@ -29,7 +29,15 @@ export function ReceiptProvider({ children }) {
     // servidor no pior momento possível, com o cliente esperando o papel.
     const storeCache = useRef(null);
 
-    const print = useCallback(async (receipt) => {
+    /**
+     * `forceDialog` pula a impressora térmica e vai pelo diálogo do Windows.
+     *
+     * É o que permite gerar um PDF do cupom para conferir o layout sem ter a
+     * bobina à mão — no diálogo dá para escolher "Microsoft Print to PDF".
+     * Esse caminho existe só para teste: no dia a dia, quem decide é a
+     * configuração.
+     */
+    const print = useCallback(async (receipt, { forceDialog = false } = {}) => {
         let store = storeCache.current;
         if (!store) {
             try {
@@ -47,7 +55,7 @@ export function ReceiptProvider({ children }) {
         // Impressora térmica configurada resolve tudo aqui: sai na hora, sem
         // diálogo e sem passar pelo documento em tela.
         try {
-            if (await printThermal({ ...receipt, store })) return;
+            if (!forceDialog && await printThermal({ ...receipt, store })) return;
         } catch (err) {
             // Impressora desligada, sem papel, cabo solto. Não dá para engolir:
             // o cliente está esperando o papel. Cai no diálogo do Windows, que

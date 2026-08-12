@@ -1,13 +1,14 @@
 import React, { useEffect, useState } from 'react';
-import { Printer, Loader2, Check, AlertTriangle, RefreshCw } from 'lucide-react';
+import { Printer, Loader2, Check, AlertTriangle, RefreshCw, FileText } from 'lucide-react';
 import { Button } from '../atoms/Button';
 import { Select } from '../atoms/Select';
 import { Input } from '../atoms/Input';
 import { cn } from '../../lib/utils';
 import {
-    getPrinterConfig, savePrinterConfig, listPrinters, printTestPage,
+    getPrinterConfig, savePrinterConfig, listPrinters, printTestPage, sampleReceipt,
 } from '../../lib/thermalPrinter';
 import { isTauri } from '../../lib/authStorage';
+import { useReceipt } from '../../contexts/ReceiptContext';
 
 /**
  * Configuração da impressora de cupom.
@@ -23,6 +24,7 @@ import { isTauri } from '../../lib/authStorage';
  * descobrir no papel, com o cliente na frente.
  */
 export function PrinterSettingsCard() {
+    const { print } = useReceipt();
     const [config, setConfig] = useState(null);
     const [printers, setPrinters] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -56,6 +58,24 @@ export function PrinterSettingsCard() {
         setSaved(true);
     };
 
+    /**
+     * Prévia em PDF: mesmo cupom de teste, pelo diálogo do Windows.
+     *
+     * Serve para conferir o layout sem ter a bobina ligada — no diálogo dá para
+     * escolher "Microsoft Print to PDF" e abrir o arquivo. É o único caminho em
+     * que aquela impressora funciona, porque aí quem desenha a página é o
+     * Windows, e não os comandos ESC/POS.
+     */
+    const handlePreview = async () => {
+        setMessage(null);
+        try {
+            await print(sampleReceipt(), { forceDialog: true });
+        } catch (err) {
+            console.error(err);
+            setMessage({ ok: false, text: 'Não consegui abrir a prévia.' });
+        }
+    };
+
     const handleTest = async () => {
         setTesting(true);
         setMessage(null);
@@ -76,6 +96,8 @@ export function PrinterSettingsCard() {
             setTesting(false);
         }
     };
+
+    const selected = printers.find((p) => p.name === config?.printer);
 
     if (loading || !config) {
         return (
@@ -122,7 +144,9 @@ export function PrinterSettingsCard() {
                     <option value="">Usar o diálogo de impressão do Windows</option>
                     {printers.map((p) => (
                         <option key={p.name} value={p.name}>
-                            {p.name}{p.is_default ? ' (padrão do Windows)' : ''}
+                            {p.name}
+                            {p.virtual ? ' — não serve (gera arquivo)' : ''}
+                            {p.is_default ? ' (padrão do Windows)' : ''}
                         </option>
                     ))}
                 </Select>
@@ -132,6 +156,26 @@ export function PrinterSettingsCard() {
                         ? 'O cupom sai sozinho ao fechar a venda, sem precisar clicar.'
                         : 'Sem escolher, cada cupom abre a janela de impressão do Windows.'}
                 </p>
+
+                {/* Escolher uma virtual aqui é o erro mais fácil de cometer: ela
+                    aparece na lista igual às outras e costuma ser a padrão do
+                    Windows. O aviso explica o porquê e aponta a saída. */}
+                {selected?.virtual && (
+                    <div className="bg-red-50 border border-red-200 text-red-700 p-3 rounded-xl text-sm flex gap-2">
+                        <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+                        <div className="space-y-1">
+                            <p className="font-semibold">
+                                Essa não é uma impressora de papel.
+                            </p>
+                            <p>
+                                Ela gera arquivo, e o cupom é enviado em modo bruto para a
+                                térmica entender os comandos — o arquivo sairia ilegível.
+                                Para gerar um PDF de teste, deixe a opção do diálogo do
+                                Windows e use o botão <strong>Ver prévia em PDF</strong>.
+                            </p>
+                        </div>
+                    </div>
+                )}
 
                 {isTauri() && printers.length === 0 && (
                     <div className="bg-amber-50 border border-amber-200 text-amber-800 p-3 rounded-xl text-sm flex gap-2">
@@ -144,7 +188,7 @@ export function PrinterSettingsCard() {
                 )}
             </div>
 
-            {config.printer && (
+            {config.printer && !selected?.virtual && (
                 <>
                     <div className="grid grid-cols-2 gap-5">
                         <div className="space-y-2">
@@ -216,15 +260,28 @@ export function PrinterSettingsCard() {
                 </span>
 
                 <div className="flex gap-3">
+                    {/* Sempre disponível: é o teste que funciona sem ter a
+                        bobina ligada, e o único caminho em que "Print to PDF"
+                        gera um arquivo que abre. */}
+                    <Button variant="outline" onClick={handlePreview}>
+                        <FileText className="h-4 w-4 mr-2" />
+                        Ver prévia em PDF
+                    </Button>
+
                     <Button
                         variant="outline"
                         onClick={handleTest}
-                        disabled={testing || !config.printer}
-                        title={!config.printer ? 'Escolha uma impressora primeiro' : undefined}
+                        disabled={testing || !config.printer || selected?.virtual}
+                        title={
+                            !config.printer ? 'Escolha uma impressora primeiro'
+                                : selected?.virtual ? 'Essa impressora gera arquivo, não papel'
+                                    : undefined
+                        }
                     >
                         {testing && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                        Imprimir teste
+                        Imprimir na bobina
                     </Button>
+
                     <Button variant="brand" onClick={handleSave}>Salvar</Button>
                 </div>
             </div>

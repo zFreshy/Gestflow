@@ -18,6 +18,9 @@ use serde::Serialize;
 pub struct PrinterInfo {
     pub name: String,
     pub is_default: bool,
+    /// Porta do Windows (USB001, PORTPROMPT:, NUL:...).
+    pub port: String,
+    pub driver: String,
 }
 
 #[cfg(windows)]
@@ -29,7 +32,7 @@ mod win {
     use windows_sys::Win32::Graphics::Printing::{
         ClosePrinter, EndDocPrinter, EndPagePrinter, EnumPrintersW, GetDefaultPrinterW,
         OpenPrinterW, StartDocPrinterW, StartPagePrinter, WritePrinter, DOC_INFO_1W,
-        PRINTER_ENUM_CONNECTIONS, PRINTER_ENUM_LOCAL, PRINTER_INFO_4W,
+        PRINTER_ENUM_CONNECTIONS, PRINTER_ENUM_LOCAL, PRINTER_INFO_2W,
     };
 
     /// Converte para UTF-16 terminado em zero, como a API do Windows espera.
@@ -72,9 +75,13 @@ mod win {
         let mut needed: u32 = 0;
         let mut returned: u32 = 0;
 
+        // Nivel 2 e nao 4: e o unico que traz porta e driver, e sem eles nao da
+        // para distinguir uma impressora de verdade de uma virtual (Print to
+        // PDF, XPS, OneNote). Mandar ESC/POS cru para uma virtual gera um
+        // arquivo ilegivel, e quem escolheu so descobre com o cliente na frente.
         unsafe {
-            // Mesmo padrao de duas passadas: a primeira mede, a segunda le.
-            EnumPrintersW(flags, ptr::null(), 4, ptr::null_mut(), 0, &mut needed, &mut returned);
+            // Duas passadas: a primeira mede, a segunda le.
+            EnumPrintersW(flags, ptr::null(), 2, ptr::null_mut(), 0, &mut needed, &mut returned);
 
             if needed == 0 {
                 return Ok(Vec::new());
@@ -84,7 +91,7 @@ mod win {
             let ok = EnumPrintersW(
                 flags,
                 ptr::null(),
-                4,
+                2,
                 buffer.as_mut_ptr(),
                 needed,
                 &mut needed,
@@ -96,17 +103,20 @@ mod win {
             }
 
             let default = default_printer();
-            let entries = buffer.as_ptr() as *const PRINTER_INFO_4W;
+            let entries = buffer.as_ptr() as *const PRINTER_INFO_2W;
 
             let mut printers = Vec::with_capacity(returned as usize);
             for i in 0..returned as usize {
-                let name = from_wide((*entries.add(i)).pPrinterName);
+                let entry = &*entries.add(i);
+                let name = from_wide(entry.pPrinterName);
                 if name.is_empty() {
                     continue;
                 }
                 printers.push(PrinterInfo {
                     is_default: name == default,
                     name,
+                    port: from_wide(entry.pPortName),
+                    driver: from_wide(entry.pDriverName),
                 });
             }
 

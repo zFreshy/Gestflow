@@ -325,10 +325,37 @@ chave e o mesmo protocolo. Emitir outra nota para a mesma venda seria imposto em
 dobro e um cancelamento junto à SEFAZ para desfazer — por isso venda com nota
 autorizada também não pode ser estornada.
 
-O cupom sai em 80mm pelo diálogo de impressão do Windows, no layout do DANFE
-NFC-e (Manual de Padrões Técnicos): cabeçalho do emitente, itens, totais, formas
-de pagamento, chave de acesso e QR Code. Venda sem nota imprime o mesmo corpo
-sob o título de **comprovante**, deixando explícito que não é documento fiscal.
+O cupom sai no layout do DANFE NFC-e (Manual de Padrões Técnicos): cabeçalho do
+emitente, itens, totais, formas de pagamento, chave de acesso e QR Code. Venda
+sem nota imprime o mesmo corpo sob o título de **comprovante**, deixando
+explícito que não é documento fiscal.
+
+**Impressora: dois caminhos, e isso é de propósito.** Em **Nota e impressora** dá
+para escolher uma térmica de bobina; a partir daí o cupom sai sozinho ao fechar a
+venda, corta o papel e abre a gaveta. Sem nada escolhido, cai no diálogo de
+impressão do Windows — que funciona com qualquer impressora, inclusive folha A4,
+e é o que garante que dá para imprimir no primeiro dia, antes de configurar coisa
+nenhuma. Falha na térmica (desligada, sem papel) também cai no diálogo, em vez de
+deixar o cliente sem comprovante.
+
+A impressão direta usa ESC/POS, o dialeto que Bematech, Epson, Elgin e Daruma
+entendem. Os bytes vão ao spooler do Windows com o tipo de dado **RAW** — sem
+isso o Windows trataria os comandos como texto e eles sairiam impressos como lixo
+no papel. É também a única forma de acionar guilhotina e gaveta, que não existem
+no modelo de imprimir documento.
+
+Dois detalhes que só aparecem no papel:
+
+- **Acentos.** A impressora não fala UTF-8: tem uma tabela de 256 caracteres.
+  O texto é convertido para CP850 antes de sair, senão "Pão" viraria "PÃ£o".
+- **QR Code como imagem**, e não pelo comando nativo (`GS ( k`). O nativo existe,
+  mas cada fabricante implementa uma variação e algumas ignoram em silêncio — o
+  cupom sairia sem o código e ninguém perceberia até o cliente tentar consultar a
+  nota. Imagem rasterizada é o denominador comum.
+
+O botão **Imprimir teste** não é enfeite: é o único jeito de descobrir se a
+largura e os acentos estão certos sem fazer uma venda de verdade para descobrir
+no papel, com o cliente na frente.
 
 A emissão passa pela Edge Function `emit-nfce`, e não sai do app direto para o
 emissor, pelo mesmo motivo do `create-employee`: o token assina nota em nome da

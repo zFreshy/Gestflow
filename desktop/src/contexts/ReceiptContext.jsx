@@ -4,6 +4,7 @@ import React, {
 import QRCode from 'qrcode';
 import { ReceiptDocument } from '../components/organisms/ReceiptDocument';
 import { getFiscalSettings } from '../services/mercadinhoService';
+import { printThermal } from '../lib/thermalPrinter';
 
 const ReceiptContext = createContext({});
 
@@ -41,6 +42,17 @@ export function ReceiptProvider({ children }) {
                 console.error('Não consegui ler os dados da loja:', err);
                 store = null;
             }
+        }
+
+        // Impressora térmica configurada resolve tudo aqui: sai na hora, sem
+        // diálogo e sem passar pelo documento em tela.
+        try {
+            if (await printThermal({ ...receipt, store })) return;
+        } catch (err) {
+            // Impressora desligada, sem papel, cabo solto. Não dá para engolir:
+            // o cliente está esperando o papel. Cai no diálogo do Windows, que
+            // ao menos deixa escolher outra impressora ou salvar em PDF.
+            console.error('Falha na impressora térmica, caindo no diálogo:', err);
         }
 
         let qrUrl = null;

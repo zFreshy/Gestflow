@@ -27,6 +27,7 @@ const KEY = 'config';
 const DEFAULTS = {
     printer: '',      // vazio = usa o diálogo do Windows
     width: 80,        // mm da bobina
+    codepage: 'cp850',
     autoCut: true,
     openDrawer: false,
     copies: 1,
@@ -107,7 +108,7 @@ const formatCnpj = (v) => {
  * do que nenhum.
  */
 export function renderReceipt({ store: shop, sale, items, payments, invoice, change }, config) {
-    const r = new Receipt({ width: config.width });
+    const r = new Receipt({ width: config.width, codepage: config.codepage });
     const authorized = invoice?.status === 'autorizada';
 
     // Cabeçalho do emitente
@@ -298,5 +299,54 @@ export function sampleReceipt() {
 /** Manda o cupom de teste para a bobina. */
 export async function printTestPage(config) {
     const bytes = renderReceipt(sampleReceipt(), config);
+    return sendRaw(config.printer, bytes);
+}
+
+/**
+ * Teste cru: texto ASCII e quebras de linha, mais nada.
+ *
+ * Nenhum comando ESC/POS — nem o de inicializar. Serve para separar dois
+ * problemas que parecem iguais no papel em branco:
+ *
+ * - **Sai texto aqui, mas o cupom sai em branco**: o caminho até a impressora
+ *   funciona, e o que ela não engoliu foi algum comando. Aí a saída é trocar a
+ *   tabela de acentos ou desligar o corte automático.
+ * - **Sai branco aqui também**: o problema é antes do ESC/POS — driver que não
+ *   repassa dados brutos, porta errada, ou a bobina colocada com o lado térmico
+ *   virado para baixo, que é a causa mais comum e não tem nada de software.
+ */
+export async function printPlainTest(config) {
+    const linhas = [
+        '================================',
+        '     TESTE DE TEXTO SIMPLES',
+        '================================',
+        '',
+        'Se voce esta lendo esta linha,',
+        'a impressora recebe dados brutos',
+        'e o caminho ate ela funciona.',
+        '',
+        '0123456789012345678901234567890123456789012345678',
+        'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvw',
+        '',
+        'A regua acima mostra onde a linha',
+        'corta: conte ate onde ela aparece',
+        'e escolha a largura por isso.',
+        '',
+        '',
+        '',
+        '',
+    ];
+
+    // Só ASCII: qualquer byte acima de 127 dependeria de tabela de caractere,
+    // que é justamente uma das coisas que este teste quer descartar.
+    const bytes = [];
+    for (const linha of linhas) {
+        for (const char of linha) {
+            const code = char.charCodeAt(0);
+            bytes.push(code < 128 ? code : 0x3f);
+        }
+        bytes.push(0x0a);
+    }
+
     return sendRaw(config.printer, bytes);
 }

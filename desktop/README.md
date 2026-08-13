@@ -261,6 +261,19 @@ supabase functions deploy create-employee
 Trocar a senha de um funcionário é feito pelo painel do Supabase, em
 **Authentication → Users**.
 
+**Apagar uma conta no painel do Supabase.** As colunas que guardam quem fez cada
+lançamento (`user_id`, `opened_by`, `created_by`) nasceram sem dizer o que fazer
+quando a conta some — e o padrão do Postgres nesse caso é **proibir**. Na prática
+bastava o dono ter cadastrado um produto para a própria conta virar indelével, e
+o erro que aparece no painel não explica nada. Agora são `on delete set null`: o
+dado continua lá, com valor e data intactos, e o `user_email` gravado junto
+preserva o registro de quem fez.
+
+**Esqueceu a senha do administrador?** O e-mail de recuperação depende de SMTP
+configurado no projeto — o servidor embutido do Supabase é limitado e costuma não
+entregar. O caminho que sempre funciona é o painel: **Authentication → Users**,
+abrir o usuário e definir a senha ali. Não depende de e-mail nenhum.
+
 **A conta continua onde estava.** Fechar o app, desligar o computador e voltar
 no dia seguinte mantém quem estava usando — administrador continua
 administrador, perfil de funcionário continua no perfil. Três coisas seguram

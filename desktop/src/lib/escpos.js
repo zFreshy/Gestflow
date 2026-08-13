@@ -43,15 +43,44 @@ const CP850 = {
     '–': 0x2d, '—': 0x2d, '’': 0x27, '‘': 0x27, '“': 0x22, '”': 0x22,
 };
 
+/**
+ * CP437 é a outra tabela comum nas térmicas vendidas aqui, e é a padrão de
+ * fábrica de várias Bematech. Ela não tem `ã` nem `õ`: nesses casos vale mais
+ * imprimir "pao" do que um símbolo aleatório no meio da palavra.
+ */
+const CP437 = {
+    ...CP850,
+    'ã': 0x61, 'Ã': 0x41, 'õ': 0x6f, 'Õ': 0x4f,
+    'â': 0x83, 'ê': 0x88, 'ô': 0x93, 'à': 0x85,
+    'Â': 0x41, 'Ê': 0x45, 'Ô': 0x4f, 'À': 0x41,
+    'Á': 0x41, 'É': 0x90, 'Í': 0x49, 'Ó': 0x4f, 'Ú': 0x55,
+};
+
+/**
+ * Tabelas de caractere que a impressora pode estar usando.
+ *
+ * `nenhuma` não manda comando de página de código e derruba todo acento para a
+ * letra sem acento. Serve para impressora que não entende `ESC t` — melhor um
+ * cupom sem acento do que um cupom com símbolo estranho no meio das palavras.
+ */
+export const CODEPAGES = {
+    cp850:   { command: 0x02, table: CP850, label: 'CP850 (padrão)' },
+    cp437:   { command: 0x00, table: CP437, label: 'CP437' },
+    nenhuma: { command: null, table: null,  label: 'Sem acentos' },
+};
+
 /** Larguras em caracteres na fonte A. É o que decide onde a linha quebra. */
 export const COLUMNS = { 80: 48, 58: 32 };
 
 export class Receipt {
-    constructor({ width = 80 } = {}) {
+    constructor({ width = 80, codepage = 'cp850' } = {}) {
         this.cols = COLUMNS[width] ?? COLUMNS[80];
+        this.page = CODEPAGES[codepage] ?? CODEPAGES.cp850;
         this.bytes = [];
         this.raw(ESC, 0x40);        // inicializa: limpa formatação de outro cupom
-        this.raw(ESC, 0x74, 0x02);  // seleciona CP850
+        if (this.page.command !== null) {
+            this.raw(ESC, 0x74, this.page.command);
+        }
     }
 
     raw(...values) {
@@ -59,13 +88,32 @@ export class Receipt {
         return this;
     }
 
-    /** Texto com os acentos convertidos; o que não estiver na tabela vira '?'. */
+    /**
+     * Texto com os acentos convertidos para a tabela da impressora.
+     *
+     * O que não estiver na tabela cai para a letra sem acento — nunca para '?'.
+     * Um '?' no meio do nome do produto parece defeito do sistema; "Acucar"
+     * parece só um cupom sem acento, que é o que é.
+     */
     text(value) {
         for (const char of String(value ?? '')) {
             const code = char.charCodeAt(0);
-            if (code < 128) this.bytes.push(code);
-            else if (CP850[char] !== undefined) this.bytes.push(CP850[char]);
-            else this.bytes.push(0x3f);
+
+            if (code < 128) {
+                this.bytes.push(code);
+                continue;
+            }
+
+            const mapped = this.page.table?.[char];
+            if (mapped !== undefined) {
+                this.bytes.push(mapped);
+                continue;
+            }
+
+            // NFD separa a letra do acento; ficando só a letra, ela é ASCII.
+            const plain = char.normalize('NFD').replace(/[̀-ͯ]/g, '');
+            const fallback = plain.charCodeAt(0);
+            this.bytes.push(fallback < 128 ? fallback : 0x20);
         }
         return this;
     }

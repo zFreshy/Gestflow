@@ -23,7 +23,7 @@ create table if not exists public.products (
   category       text,
   supplier_id    uuid references public.suppliers(id) on delete set null,
   active         boolean not null default true,
-  user_id        uuid references auth.users,
+  user_id        uuid references auth.users on delete set null,
   user_email     text,
   created_at     timestamptz not null default now(),
   updated_at     timestamptz not null default now()
@@ -60,7 +60,7 @@ create table if not exists public.employee_profiles (
   name        text not null unique,
   login_email text unique,
   active      boolean not null default true,
-  created_by  uuid references auth.users,
+  created_by  uuid references auth.users on delete set null,
   created_at  timestamptz not null default now(),
   updated_at  timestamptz not null default now()
 );
@@ -133,7 +133,7 @@ create table if not exists public.customers (
   phone      text,
   note       text,
   active     boolean not null default true,
-  user_id    uuid references auth.users,
+  user_id    uuid references auth.users on delete set null,
   user_email text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
@@ -155,7 +155,7 @@ create table if not exists public.sales (
   item_count     integer not null default 0,
   note           text,
   customer_id    uuid references public.customers(id) on delete set null,
-  user_id        uuid references auth.users,
+  user_id        uuid references auth.users on delete set null,
   user_email     text,
   created_at     timestamptz not null default now()
 );
@@ -227,7 +227,7 @@ create table if not exists public.credit_payments (
   method      text not null default 'Dinheiro',
   paid_at     date not null default current_date,
   note        text,
-  user_id     uuid references auth.users,
+  user_id     uuid references auth.users on delete set null,
   user_email  text,
   created_at  timestamptz not null default now()
 );
@@ -280,7 +280,7 @@ create table if not exists public.stock_entries (
   entry_date     date not null default current_date,
   payment_method text,
   note           text,
-  user_id        uuid references auth.users,
+  user_id        uuid references auth.users on delete set null,
   user_email     text,
   created_at     timestamptz not null default now()
 );
@@ -304,13 +304,13 @@ create table if not exists public.cash_sessions (
   id              uuid primary key default gen_random_uuid(),
   opened_at       timestamptz not null default now(),
   opening_amount  numeric(10,2) not null default 0 check (opening_amount >= 0),
-  opened_by       uuid references auth.users,
+  opened_by       uuid references auth.users on delete set null,
   opened_by_email text,
   closed_at       timestamptz,
   counted_amount  numeric(10,2),                       -- o que foi contado na gaveta
   expected_amount numeric(10,2),                       -- o que o sistema esperava, congelado
   difference      numeric(10,2),                       -- contado - esperado (sobra + / falta -)
-  closed_by       uuid references auth.users,
+  closed_by       uuid references auth.users on delete set null,
   closed_by_email text,
   opening_note    text,
   closing_note    text,
@@ -341,7 +341,7 @@ create table if not exists public.cash_movements (
   amount       numeric(10,2) not null check (amount > 0),
   reason       text not null,
   happened_at  timestamptz not null default now(),
-  user_id      uuid references auth.users,
+  user_id      uuid references auth.users on delete set null,
   user_email   text,
   created_at   timestamptz not null default now()
 );
@@ -453,6 +453,70 @@ create table if not exists public.fiscal_invoices (
 
 create index if not exists fiscal_invoices_sale_idx   on public.fiscal_invoices (sale_id);
 create index if not exists fiscal_invoices_status_idx on public.fiscal_invoices (status);
+
+-- ============================================================================
+-- APAGAR UMA CONTA TEM QUE SER POSSIVEL
+--
+-- As colunas `user_id` / `opened_by` / `created_by` guardam quem fez cada
+-- lancamento. Elas nasceram como `references auth.users` sem dizer o que fazer
+-- quando a conta some — e o padrao do Postgres nesse caso e NO ACTION, ou seja:
+-- proibir.
+--
+-- Na pratica isso travava o painel do Supabase. Bastava o dono ter cadastrado
+-- um produto para a propria conta virar indelevel, e o erro que aparece la nao
+-- explica nada — some o botao e ninguem sabe por que.
+--
+-- `set null` e o certo aqui: estas colunas sao rastro, nao dono do dado. A
+-- venda continua existindo, com valor e data intactos, e o `user_email` gravado
+-- junto preserva o registro de quem fez, mesmo depois de a conta sumir.
+--
+-- As tabelas ja existem em quem instalou antes, e `create table if not exists`
+-- nao volta atras: a constraint precisa ser trocada uma a uma.
+-- ============================================================================
+do $$
+declare
+  alvo record;
+  nome text;
+begin
+  for alvo in
+    select * from (values
+      ('products',          'user_id'),
+      ('customers',         'user_id'),
+      ('sales',             'user_id'),
+      ('stock_entries',     'user_id'),
+      ('credit_payments',   'user_id'),
+      ('cash_sessions',     'opened_by'),
+      ('cash_sessions',     'closed_by'),
+      ('cash_movements',    'user_id'),
+      ('employee_profiles', 'created_by')
+    ) as t(tabela, coluna)
+  loop
+    -- Nome da constraint e gerado pelo Postgres, entao e preciso descobrir
+    -- qual e a que liga esta coluna a auth.users.
+    select con.conname into nome
+      from pg_constraint con
+      join pg_class rel   on rel.oid = con.conrelid
+      join pg_namespace ns on ns.oid = rel.relnamespace
+      join pg_attribute att on att.attrelid = con.conrelid
+                           and att.attnum = con.conkey[1]
+     where con.contype = 'f'
+       and ns.nspname = 'public'
+       and rel.relname = alvo.tabela
+       and att.attname = alvo.coluna
+       and con.confrelid = 'auth.users'::regclass
+       and con.confdeltype = 'a'   -- 'a' = NO ACTION, o padrao que trava
+     limit 1;
+
+    if nome is not null then
+      execute format('alter table public.%I drop constraint %I', alvo.tabela, nome);
+      execute format(
+        'alter table public.%I add constraint %I foreign key (%I) references auth.users(id) on delete set null',
+        alvo.tabela, nome, alvo.coluna);
+    end if;
+
+    nome := null;
+  end loop;
+end $$;
 
 -- ============================================================================
 -- TRANCA TUDO, AGORA

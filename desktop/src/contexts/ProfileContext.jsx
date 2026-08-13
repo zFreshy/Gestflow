@@ -17,6 +17,16 @@ export { rememberedAdminEmail };
 const RECHECK_MS = 30_000;
 
 /**
+ * Todo funcionário tem e-mail sintético terminado assim (ver `create-employee`).
+ * Quem entra com qualquer outro e-mail é administrador — e isso dá para saber
+ * olhando só a sessão, sem perguntar nada ao banco.
+ */
+const EMPLOYEE_DOMAIN = '@funcionario.local';
+
+const isAdminEmail = (email) =>
+    Boolean(email) && !String(email).toLowerCase().endsWith(EMPLOYEE_DOMAIN);
+
+/**
  * Quem está usando o app agora.
  *
  * A troca de perfil é um login de verdade: cada funcionário tem conta Supabase
@@ -112,29 +122,70 @@ export function ProfileProvider({ children }) {
     useEffect(() => { hydrateAdminEmail().then(setAdminEmail); }, []);
 
     /**
+     * Aprende o e-mail do administrador só de olhar quem está logado.
+     *
+     * Antes isso só acontecia depois de o banco confirmar `is_admin()`. Se essa
+     * pergunta falhasse — internet fora, servidor lento — o e-mail nunca era
+     * guardado, e o caminho de volta ficava quebrado: o seletor mandava
+     * `switchToAdmin` com e-mail vazio, o login nem era tentado, e a tela
+     * respondia "senha incorreta" com a senha certa.
+     *
+     * O e-mail sintético do funcionário é reconhecível pelo domínio, então dá
+     * para saber quem é administrador sem perguntar nada a ninguém.
+     */
+    useEffect(() => {
+        if (!user?.email || !isAdminEmail(user.email)) return;
+        rememberAdminEmail(user.email);
+        setAdminEmail(user.email);
+    }, [user?.email]);
+
+    /**
      * Entra num perfil de funcionário — na prática, faz login na conta dele.
      * O e-mail sintético vem do cadastro; o funcionário só digita a senha.
      */
     const switchToEmployee = async (employeeProfile, password) => {
         const email = employeeProfile.login_email;
-        if (!email) return false;
+        if (!email) return { ok: false, reason: 'sem-email' };
 
         const { error } = await supabase.auth.signInWithPassword({ email, password });
-        if (error) return false;
+        if (error) {
+            return {
+                ok: false,
+                reason: /fetch|network|failed to send/i.test(error.message ?? '')
+                    ? 'sem-conexao'
+                    : 'senha',
+            };
+        }
 
         await refresh();
-        return true;
+        return { ok: true };
     };
 
-    /** Volta para o administrador: login na conta dele, com a senha dele. */
+    /**
+     * Volta para o administrador: login na conta dele, com a senha dele.
+     *
+     * Devolve o motivo da recusa, e não só `false`. A diferença importa porque
+     * "não sei o e-mail" e "a senha não confere" pedem coisas diferentes de
+     * quem está na frente da tela — e antes as duas apareciam como
+     * "senha incorreta", mandando a pessoa digitar de novo uma senha que já
+     * estava certa.
+     */
     const switchToAdmin = async (password, email = rememberedAdminEmail()) => {
-        if (!email) return false;
+        if (!email) return { ok: false, reason: 'sem-email' };
 
         const { error } = await supabase.auth.signInWithPassword({ email, password });
-        if (error) return false;
+        if (error) {
+            return {
+                ok: false,
+                // Sem internet o login falha por rede, não por senha errada.
+                reason: /fetch|network|failed to send/i.test(error.message ?? '')
+                    ? 'sem-conexao'
+                    : 'senha',
+            };
+        }
 
         await refresh();
-        return true;
+        return { ok: true };
     };
 
     const value = useMemo(() => ({

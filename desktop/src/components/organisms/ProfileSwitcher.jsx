@@ -32,6 +32,9 @@ export function ProfileSwitcher({ collapsed }) {
     const [profiles, setProfiles] = useState([]);
     const [target, setTarget] = useState(null); // null | 'admin' | perfil
     const [password, setPassword] = useState('');
+    // Só aparece quando o app não sabe o e-mail do administrador — numa
+    // máquina onde ele nunca entrou, por exemplo.
+    const [typedEmail, setTypedEmail] = useState('');
     const [checking, setChecking] = useState(false);
     const [error, setError] = useState('');
 
@@ -69,23 +72,39 @@ export function ProfileSwitcher({ collapsed }) {
     const startSwitch = (to) => {
         setTarget(to);
         setPassword('');
+        setTypedEmail('');
         setError('');
         setOpen(false);
     };
+
+    /** Voltando para o administrador sem o app saber quem ele é. */
+    const needsEmail = target === 'admin' && !rememberedEmail;
 
     const confirmSwitch = async (e) => {
         e?.preventDefault();
         if (!password) { setError('Digite a senha.'); return; }
 
+        const goingToAdmin = target === 'admin';
+        // Só é exigido quando o app não sabe qual é — ver `needsEmail`.
+        const email = typedEmail.trim() || rememberedEmail;
+
+        if (goingToAdmin && !email) {
+            setError('Digite o e-mail do administrador.');
+            return;
+        }
+
         setChecking(true);
         setError('');
         try {
-            const ok = target === 'admin'
-                ? await switchToAdmin(password)
+            const result = goingToAdmin
+                ? await switchToAdmin(password, email)
                 : await switchToEmployee(target, password);
 
-            if (!ok) {
-                setError('Senha incorreta.');
+            if (!result.ok) {
+                setError({
+                    'sem-email': 'Não sei qual é a conta do administrador. Digite o e-mail dele.',
+                    'sem-conexao': 'Sem internet. Trocar de perfil é um login, e ele precisa de conexão.',
+                }[result.reason] ?? 'Senha incorreta.');
                 return;
             }
 
@@ -254,6 +273,29 @@ export function ProfileSwitcher({ collapsed }) {
                             </button>
                         </div>
 
+                        {/* O e-mail só é pedido quando o app não sabe qual é:
+                            numa máquina onde o administrador nunca entrou, ou
+                            se o registro se perdeu. Nas outras vezes segue
+                            valendo a ideia de "só a senha". */}
+                        {needsEmail && (
+                            <div className="space-y-2">
+                                <label className="text-sm font-semibold text-gray-700">
+                                    E-mail do administrador
+                                </label>
+                                <Input
+                                    type="email"
+                                    value={typedEmail}
+                                    onChange={(e) => setTypedEmail(e.target.value)}
+                                    placeholder="dono@email.com"
+                                    autoFocus
+                                />
+                                <p className="text-xs text-gray-400">
+                                    Este computador ainda não sabe qual é a conta. Depois desta
+                                    vez, só a senha basta.
+                                </p>
+                            </div>
+                        )}
+
                         <div className="space-y-2">
                             <label className="text-sm font-semibold text-gray-700">
                                 {target === 'admin' ? 'Senha da conta de administrador' : 'Senha do perfil'}
@@ -266,7 +308,7 @@ export function ProfileSwitcher({ collapsed }) {
                                     onChange={(e) => setPassword(e.target.value)}
                                     placeholder="••••••••"
                                     className="pl-10"
-                                    autoFocus
+                                    autoFocus={!needsEmail}
                                 />
                             </div>
                             {error && <p className="text-xs font-semibold text-red-600">{error}</p>}

@@ -5,8 +5,10 @@ import { Select } from '../atoms/Select';
 import { Input } from '../atoms/Input';
 import { cn } from '../../lib/utils';
 import {
-    getPrinterConfig, savePrinterConfig, listPrinters, printTestPage, sampleReceipt,
+    getPrinterConfig, savePrinterConfig, listPrinters, printTestPage,
+    printPlainTest, sampleReceipt,
 } from '../../lib/thermalPrinter';
+import { CODEPAGES } from '../../lib/escpos';
 import { isTauri } from '../../lib/authStorage';
 import { useReceipt } from '../../contexts/ReceiptContext';
 
@@ -76,7 +78,7 @@ export function PrinterSettingsCard() {
         }
     };
 
-    const handleTest = async () => {
+    const runTest = async (fn, sucesso) => {
         setTesting(true);
         setMessage(null);
         try {
@@ -84,8 +86,8 @@ export function PrinterSettingsCard() {
             // gravada faria o teste passar e a venda sair errada.
             await savePrinterConfig(config);
             setSaved(true);
-            await printTestPage(config);
-            setMessage({ ok: true, text: 'Cupom de teste enviado. Confira o papel.' });
+            await fn(config);
+            setMessage({ ok: true, text: sucesso });
         } catch (err) {
             console.error(err);
             setMessage({
@@ -96,6 +98,16 @@ export function PrinterSettingsCard() {
             setTesting(false);
         }
     };
+
+    const handleTest = () => runTest(
+        printTestPage,
+        'Cupom de teste enviado. Confira o papel.',
+    );
+
+    const handlePlainTest = () => runTest(
+        printPlainTest,
+        'Texto simples enviado. Se sair em branco, o problema não é o cupom.',
+    );
 
     const selected = printers.find((p) => p.name === config?.printer);
 
@@ -217,6 +229,24 @@ export function PrinterSettingsCard() {
                                 onChange={(e) => set('copies', Number(e.target.value) || 1)}
                             />
                         </div>
+
+                        <div className="space-y-2 col-span-2">
+                            <label className="text-sm font-semibold text-gray-700">
+                                Tabela de acentos
+                            </label>
+                            <Select
+                                value={config.codepage}
+                                onChange={(e) => set('codepage', e.target.value)}
+                            >
+                                {Object.entries(CODEPAGES).map(([key, page]) => (
+                                    <option key={key} value={key}>{page.label}</option>
+                                ))}
+                            </Select>
+                            <p className="text-xs text-gray-400">
+                                Se sair "P?o" no lugar de "Pão", troque aqui. "Sem acentos"
+                                imprime "Pao" e funciona em qualquer impressora.
+                            </p>
+                        </div>
                     </div>
 
                     <div className="space-y-3">
@@ -234,6 +264,45 @@ export function PrinterSettingsCard() {
                         />
                     </div>
                 </>
+            )}
+
+            {/* Sai papel em branco é o defeito mais comum, e quase nunca é o
+                app. Fica escrito aqui porque quem está no balcão às 7h da
+                manhã não vai abrir manual nenhum. */}
+            {config.printer && !selected?.virtual && (
+                <details className="rounded-xl border border-gray-100 bg-gray-50/60">
+                    <summary className="cursor-pointer select-none px-4 py-3 text-sm font-semibold text-gray-700">
+                        Está saindo papel em branco?
+                    </summary>
+                    <div className="px-4 pb-4 text-sm text-gray-600 space-y-2">
+                        <p>Clique em <strong>Teste simples</strong> e veja o que acontece:</p>
+                        <p>
+                            <strong>Saiu texto</strong> — a impressora está certa e o problema é
+                            algum comando. Troque a <em>tabela de acentos</em> para CP437, ou
+                            desligue o <em>corte automático</em>, e teste de novo.
+                        </p>
+                        <p>
+                            <strong>Saiu em branco de novo</strong> — o problema é antes do app.
+                            Confira, nesta ordem:
+                        </p>
+                        <ol className="list-decimal ml-5 space-y-1">
+                            <li>
+                                <strong>O lado da bobina.</strong> Papel térmico só marca de um
+                                lado. Colocado ao contrário, ele sai limpinho como se nada
+                                tivesse sido impresso. Vire o rolo e teste.
+                            </li>
+                            <li>
+                                <strong>A impressora escolhida.</strong> Se houver mais de uma
+                                instalada, pode estar imprimindo na errada.
+                            </li>
+                            <li>
+                                <strong>Imprima a página de teste do Windows</strong>, em
+                                Dispositivos e Impressoras. Se nem ela sair, o problema é o
+                                driver ou o cabo, não o sistema.
+                            </li>
+                        </ol>
+                    </div>
+                </details>
             )}
 
             {message && (
@@ -266,6 +335,18 @@ export function PrinterSettingsCard() {
                     <Button variant="outline" onClick={handlePreview}>
                         <FileText className="h-4 w-4 mr-2" />
                         Ver prévia em PDF
+                    </Button>
+
+                    {/* Diagnóstico: texto puro, sem nenhum comando. Separa
+                        "a impressora não entendeu um comando" de "os dados nem
+                        chegaram nela". */}
+                    <Button
+                        variant="outline"
+                        onClick={handlePlainTest}
+                        disabled={testing || !config.printer || selected?.virtual}
+                        title="Manda só texto, sem nenhum comando de impressora"
+                    >
+                        Teste simples
                     </Button>
 
                     <Button

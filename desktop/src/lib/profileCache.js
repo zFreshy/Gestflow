@@ -60,6 +60,13 @@ export const rememberedAdminEmail = () => adminEmailCache;
 export async function hydrateAdminEmail() {
     const saved = await store.get(ADMIN_EMAIL_KEY, null);
 
+    // Se alguém já gravou enquanto a leitura do disco estava a caminho, o que
+    // está em memória é mais novo. Sobrescrever aqui apagaria o e-mail recém
+    // descoberto — e o efeito disso não aparece na hora: só quando alguém
+    // tenta voltar para o administrador e leva "senha incorreta" com a senha
+    // certa, porque sem e-mail o login nem chega a ser tentado.
+    if (!saved && adminEmailCache) return adminEmailCache;
+
     // Migração de quem já usava a versão anterior: o valor morava no
     // localStorage, que pertence à origem do WebView e some numa limpeza de
     // cache. Passa para o arquivo na primeira abertura e não se perde mais.

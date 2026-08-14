@@ -527,3 +527,37 @@ conferir um formato que estava certo.
 O mapeamento de colunas também entende cabeçalho em inglês (`code`,
 `product_name`, `price`), com o português tendo prioridade quando o arquivo tem
 os dois.
+
+### Produto vendido por peso
+
+Bipar um produto em kg, g, l ou ml abre o campo de quantidade em vez de somar
+uma unidade. Antes entrava como "1", o que cobrava 1 kg de quem levava 300 g.
+Os botões de mais e menos andam de 100 em 100 g nesses produtos — somar 1 kg de
+queijo por clique erra por um fator de dez.
+
+### Etiqueta de balança
+
+Quando o produto é pesado, a balança imprime um EAN-13 gerado na hora,
+começando com **2** — prefixo que o padrão GS1 reserva para uso interno da loja,
+justamente porque o número muda a cada pesagem.
+
+O miolo carrega o código do produto e um valor, e é aí que mora a pegadinha: o
+valor pode ser o **preço total** já calculado pela balança, ou o **peso**, para o
+PDV multiplicar pelo preço por quilo. Qual dos dois é configuração da balança, e
+quase ninguém sabe de cabeça.
+
+Por isso a tela não pergunta — ela **testa**. Em *Nota e equipamentos*, você bipa
+uma etiqueta de verdade e vê as duas leituras lado a lado; a que bater com o
+valor impresso no papel é a sua. Isso importa porque as duas parecem plausíveis:
+`2000123010991` vale R$ 10,99 num modo e 1,099 kg no outro.
+
+O produto pesado ganha um campo **código na balança** (o "PLU"), que é o que liga
+a etiqueta impressa ao cadastro — o código de barras não serve, porque muda a
+cada pesagem.
+
+Quando a etiqueta traz o preço fechado, o preço unitário do item é recalculado a
+partir dele. Sem isso, o cupom fecharia alguns centavos diferente da etiqueta
+colada no pacote, e quem confere os dois acharia que o sistema erra.
+
+Etiqueta com dígito verificador errado vira aviso, não venda: leitura ruim tem
+que aparecer na hora.

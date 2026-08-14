@@ -1,6 +1,8 @@
 import { supabase } from '../lib/supabase';
 import { STORE_CREDIT as STORE_CREDIT_METHOD } from '../lib/payments';
-import { cachedProductByBarcode, cachedSearchProducts, cachedCustomers } from '../lib/catalogCache';
+import {
+    cachedProductByBarcode, cachedProductByScaleCode, cachedSearchProducts, cachedCustomers,
+} from '../lib/catalogCache';
 import { enqueueSale } from '../lib/salesOutbox';
 
 /**
@@ -81,6 +83,33 @@ export async function findProductByBarcode(barcode, { withCost = false } = {}) {
     } catch (err) {
         if (withCost || !isOffline(err)) throw err;
         return cachedProductByBarcode(barcode);
+    }
+}
+
+/**
+ * Acha o produto pelo codigo interno da balanca (o "PLU").
+ *
+ * Produto pesado nao tem codigo de barras fixo — a balanca imprime um novo a
+ * cada pesagem. O que identifica o produto e este numero curto, configurado na
+ * propria balanca e cadastrado no produto.
+ */
+export async function findProductByScaleCode(scaleCode, { withCost = false } = {}) {
+    const clean = String(scaleCode ?? '').trim();
+    if (!clean) return null;
+
+    try {
+        const { data, error } = await supabase
+            .from(productSource(withCost))
+            .select('*')
+            .eq('scale_code', clean)
+            .eq('active', true)
+            .maybeSingle();
+
+        if (error) throw error;
+        return data;
+    } catch (err) {
+        if (withCost || !isOffline(err)) throw err;
+        return cachedProductByScaleCode(clean);
     }
 }
 

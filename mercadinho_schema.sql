@@ -34,6 +34,19 @@ create unique index if not exists products_barcode_key
   on public.products (barcode)
   where barcode is not null;
 
+-- Codigo interno da balanca (o "PLU").
+--
+-- Produto pesado nao tem codigo de barras fixo: a balanca imprime um a cada
+-- pesagem, com o peso ou o preco embutido. O que identifica o produto ali
+-- dentro e um numero curto configurado na propria balanca — e ele nao cabe na
+-- coluna `barcode`, que guarda o EAN da embalagem e tem indice unico proprio.
+alter table public.products
+  add column if not exists scale_code text;
+
+create unique index if not exists products_scale_code_key
+  on public.products (scale_code)
+  where scale_code is not null;
+
 create index if not exists products_name_idx     on public.products (lower(name));
 create index if not exists products_active_idx   on public.products (active);
 create index if not exists products_supplier_idx on public.products (supplier_id);
@@ -1358,7 +1371,7 @@ create policy "admin_delete_products" on public.products
 -- catalogo, e nele o custo simplesmente nao existe.
 drop view if exists public.products_pos;
 create view public.products_pos as
-  select id, barcode, name, unit, sale_price, stock_quantity, min_stock,
+  select id, barcode, scale_code, name, unit, sale_price, stock_quantity, min_stock,
          category, supplier_id, active
     from public.products
    where active;

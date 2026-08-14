@@ -29,7 +29,7 @@ export async function refreshCatalog() {
     const [products, customers] = await Promise.all([
         supabase
             .from('products_pos')
-            .select('id, barcode, name, unit, sale_price, stock_quantity, category')
+            .select('id, barcode, scale_code, name, unit, sale_price, stock_quantity, category')
             .eq('active', true)
             .order('name'),
         supabase.from('customers').select('id, name, phone').eq('active', true).order('name'),
@@ -63,6 +63,12 @@ export async function catalogUpdatedAt() {
 export async function cachedProductByBarcode(barcode) {
     const list = await products();
     return list.find((p) => p.barcode === barcode) ?? null;
+}
+
+/** Mesma busca pelo codigo interno da balanca, para etiqueta lida offline. */
+export async function cachedProductByScaleCode(scaleCode) {
+    const list = await products();
+    return list.find((p) => p.scale_code === scaleCode) ?? null;
 }
 
 /** Mesma busca da tela online: por nome ou por código, sem diferenciar acento. */

@@ -285,7 +285,7 @@ export function sampleReceipt() {
         },
         items: [
             { barcode: '7891000315507', product_name: 'Leite Integral 1L', quantity: 2, unit_price: 5.49, subtotal: 10.98 },
-            { barcode: '7896005800011', product_name: 'Pão de Forma Tradicional Integral', quantity: 1, unit_price: 12.99, subtotal: 12.99 },
+            { barcode: '7896005800010', product_name: 'Pão de Forma Tradicional Integral', quantity: 1, unit_price: 12.99, subtotal: 12.99 },
             { barcode: null, product_name: 'Banana Prata (granel)', quantity: 1.235, unit_price: 8.90, subtotal: 10.99 },
             { barcode: '7891910000197', product_name: 'Açúcar Refinado 1kg', quantity: 3, unit_price: 4.80, subtotal: 14.40 },
         ],

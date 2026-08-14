@@ -6,6 +6,7 @@ import { Select } from '../atoms/Select';
 import { getFiscalSettings, updateFiscalSettings } from '../../services/mercadinhoService';
 import { useReceipt } from '../../contexts/ReceiptContext';
 import { PrinterSettingsCard } from '../organisms/PrinterSettingsCard';
+import { ScaleSettingsCard } from '../organisms/ScaleSettingsCard';
 
 /**
  * Dados que vão na nota fiscal.
@@ -105,10 +106,10 @@ export function FiscalSettingsPage() {
         <div className="space-y-6 max-w-4xl">
             <div>
                 <h1 className="text-2xl font-extrabold text-gray-900 tracking-tight">
-                    Nota fiscal e impressão
+                    Nota fiscal e equipamentos
                 </h1>
                 <p className="text-sm text-gray-500 mt-0.5">
-                    Dados do emitente e a impressora do balcão
+                    Dados do emitente e os equipamentos do balcão
                 </p>
             </div>
 
@@ -116,6 +117,10 @@ export function FiscalSettingsPage() {
                 nada de fiscal configurado, e é o que a loja usa desde o
                 primeiro dia. */}
             <PrinterSettingsCard />
+
+            {/* Balanca junto da impressora: sao os dois equipamentos do
+                balcao, e quem configura um costuma configurar o outro. */}
+            <ScaleSettingsCard />
 
             {error && (
                 <div className="bg-red-50 text-red-600 p-4 rounded-xl text-sm font-medium border border-red-100">

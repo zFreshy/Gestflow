@@ -37,7 +37,7 @@ const MENU_ITEMS = [
     { path: '/meu-credito', label: 'Meu crédito', icon: ShoppingBasket, employeeOnly: true },
     { path: '/creditos', label: 'Crédito da loja', icon: ShoppingBasket, adminOnly: true },
     { path: '/perfis', label: 'Perfis', icon: Users, adminOnly: true },
-    { path: '/fiscal', label: 'Nota e impressora', icon: FileText, adminOnly: true },
+    { path: '/fiscal', label: 'Nota e equipamentos', icon: FileText, adminOnly: true },
 ];
 
 export function Sidebar() {

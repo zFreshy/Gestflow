@@ -18,6 +18,7 @@ const EMPTY = {
     min_stock: '',
     category: '',
     supplier_id: '',
+    scale_code: '',
     // Classificação fiscal. Vazio significa "usa o padrão da configuração
     // fiscal" — o mercadinho tem milhares de itens e classificar todos à mão
     // antes da primeira nota travaria o uso do sistema inteiro.
@@ -67,6 +68,7 @@ export function ProductFormModal({ isOpen, onClose, onSaved, product = null, ini
                 min_stock: product.min_stock ?? '',
                 category: product.category ?? '',
                 supplier_id: product.supplier_id ?? '',
+                scale_code: product.scale_code ?? '',
                 ncm: product.ncm ?? '',
                 cfop: product.cfop ?? '',
                 cest: product.cest ?? '',
@@ -129,6 +131,9 @@ export function ProductFormModal({ isOpen, onClose, onSaved, product = null, ini
                 min_stock: Number(form.min_stock) || 0,
                 category: form.category.trim() || null,
                 supplier_id: form.supplier_id || null,
+                // Nulo e nao string vazia: o indice unico permite varios
+                // produtos sem codigo de balanca, mas nao dois com o mesmo.
+                scale_code: form.scale_code.trim() || null,
                 // Nulo e não string vazia: é assim que a emissão sabe que deve
                 // cair no padrão da configuração fiscal.
                 ncm: form.ncm.trim() || null,
@@ -323,6 +328,27 @@ export function ProductFormModal({ isOpen, onClose, onSaved, product = null, ini
                                     placeholder="Ex.: Bebidas"
                                 />
                             </div>
+                            {/* Só faz sentido em produto pesado: o código da
+                                balança é o que liga a etiqueta impressa a este
+                                cadastro. Em produto de unidade, o campo só
+                                confundiria. */}
+                            {['kg', 'g', 'l', 'ml'].includes(form.unit) && (
+                                <div className="space-y-2">
+                                    <label className="text-sm font-semibold text-gray-700">
+                                        Código na balança
+                                    </label>
+                                    <Input
+                                        value={form.scale_code}
+                                        onChange={set('scale_code')}
+                                        placeholder="Ex.: 45"
+                                        className="font-mono"
+                                    />
+                                    <p className="text-[11px] text-gray-400">
+                                        O mesmo número cadastrado na balança para este produto.
+                                    </p>
+                                </div>
+                            )}
+
                             <div className="space-y-2">
                                 <label className="text-sm font-semibold text-gray-700">Fornecedor</label>
                                 <Select value={form.supplier_id} onChange={set('supplier_id')}>

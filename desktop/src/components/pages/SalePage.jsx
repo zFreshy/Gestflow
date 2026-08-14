@@ -7,10 +7,23 @@ import { Button } from '../atoms/Button';
 import { Input } from '../atoms/Input';
 import { Badge } from '../atoms/Badge';
 import { cn, formatCurrency } from '../../lib/utils';
-import { findProductByBarcode, searchProducts } from '../../services/mercadinhoService';
+import {
+    findProductByBarcode, findProductByScaleCode, searchProducts,
+} from '../../services/mercadinhoService';
+import { decodificar, getScaleConfig, DEFAULTS as SCALE_DEFAULTS } from '../../lib/scaleLabel';
 import { CameraScannerModal } from '../organisms/CameraScannerModal';
 import { ProductFormModal } from '../organisms/ProductFormModal';
 import { CheckoutModal } from '../organisms/CheckoutModal';
+import { WeightPromptModal } from '../organisms/WeightPromptModal';
+
+/**
+ * Unidades que se vendem por peso ou volume.
+ *
+ * Para elas, "1" quase nunca é a quantidade certa: quem leva 300 g de queijo
+ * não leva 1 kg. Bipar um desses abre o campo de quantidade em vez de somar
+ * uma unidade.
+ */
+const PESADOS = new Set(['kg', 'g', 'l', 'ml']);
 
 export function SalePage() {
     const [cart, setCart] = useState([]);
@@ -24,6 +37,11 @@ export function SalePage() {
     const [quickAddOpen, setQuickAddOpen] = useState(false);
     const [checkoutOpen, setCheckoutOpen] = useState(false);
     const [toast, setToast] = useState('');
+    // Produto por peso esperando a quantidade; null quando não há nenhum.
+    const [pesando, setPesando] = useState(null);
+    const [scaleConfig, setScaleConfig] = useState(SCALE_DEFAULTS);
+
+    useEffect(() => { getScaleConfig().then(setScaleConfig); }, []);
 
     const scanRef = useRef(null);
 
@@ -60,7 +78,20 @@ export function SalePage() {
     // Carrinho
     // -----------------------------------------------------------------------
 
-    const addProduct = useCallback((product, quantity = 1) => {
+    /**
+     * Põe o produto no carrinho.
+     *
+     * `precoTotal` só aparece na etiqueta de balança que já traz o valor
+     * fechado. Nesse caso o preço unitário é recalculado a partir dele, para
+     * que quantidade × unitário bata exatamente com o que a balança imprimiu —
+     * arredondar por conta própria faria o cupom fechar um centavo diferente da
+     * etiqueta colada no pacote.
+     */
+    const addProduct = useCallback((product, quantity = 1, { precoTotal } = {}) => {
+        const unitPrice = precoTotal !== undefined && quantity > 0
+            ? precoTotal / quantity
+            : Number(product.sale_price) || 0;
+
         setCart((prev) => {
             const idx = prev.findIndex((i) => i.product_id === product.id);
 
@@ -77,7 +108,7 @@ export function SalePage() {
                 product_name: product.name,
                 unit: product.unit || 'un',
                 quantity,
-                unit_price: Number(product.sale_price) || 0,
+                unit_price: unitPrice,
                 unit_cost: Number(product.cost_price) || 0,
                 stock_quantity: Number(product.stock_quantity) || 0,
             }];
@@ -96,7 +127,8 @@ export function SalePage() {
     };
 
     const setQuantity = (key, value) => {
-        const q = Number(value);
+        // Vírgula: é o que se digita aqui, e é como o campo mostra o peso.
+        const q = Number(String(value).replace(',', '.'));
         if (Number.isNaN(q) || q < 0) return;
         setCart((prev) => prev.map((i) => (i.key === key ? { ...i, quantity: q } : i)));
     };
@@ -123,9 +155,52 @@ export function SalePage() {
         setNotFoundCode('');
 
         try {
+            // Etiqueta de balança primeiro: ela é um EAN-13 como qualquer
+            // outro, e procurá-la no cadastro não acharia nada — o número muda
+            // a cada pesagem.
+            const etiqueta = decodificar(code, scaleConfig);
+
+            if (etiqueta?.erro) {
+                showToast(etiqueta.erro);
+                return;
+            }
+
+            if (etiqueta) {
+                const produto = await findProductByScaleCode(etiqueta.codigoProduto);
+                if (!produto) {
+                    showToast(
+                        `Etiqueta de balança do produto ${etiqueta.codigoProduto}, `
+                        + 'que não está cadastrado com esse código.'
+                    );
+                    return;
+                }
+
+                if (etiqueta.peso !== null) {
+                    // Peso na etiqueta: o valor sai do preço por quilo.
+                    addProduct(produto, etiqueta.peso);
+                } else {
+                    // Preço na etiqueta: a balança já fechou a conta. O peso é
+                    // deduzido para o cupom mostrar "1,235 kg" em vez de "1".
+                    const precoKg = Number(produto.sale_price) || 0;
+                    const peso = precoKg > 0
+                        ? Math.round((etiqueta.precoTotal / precoKg) * 1000) / 1000
+                        : 1;
+                    addProduct(produto, peso, { precoTotal: etiqueta.precoTotal });
+                }
+                return;
+            }
+
             const product = await findProductByBarcode(code);
-            if (product) addProduct(product);
-            else setNotFoundCode(code);
+            if (!product) { setNotFoundCode(code); return; }
+
+            // Produto vendido por peso sem etiqueta: o cliente pesa no caixa.
+            // Entrar com 1 seria cobrar 1 kg de quem levou 300 g.
+            if (PESADOS.has(product.unit)) {
+                setPesando(product);
+                return;
+            }
+
+            addProduct(product);
         } catch (err) {
             console.error(err);
             showToast('Erro ao buscar o produto. Confira a conexão.');
@@ -134,7 +209,7 @@ export function SalePage() {
             setScanValue('');
             focusScan();
         }
-    }, [addProduct, focusScan]);
+    }, [addProduct, focusScan, scaleConfig]);
 
     // Busca por nome, com atraso pra não disparar a cada tecla.
     useEffect(() => {
@@ -257,7 +332,10 @@ export function SalePage() {
                                     <button
                                         key={p.id}
                                         onClick={() => {
-                                            addProduct(p);
+                                            // Mesma regra do bipe: produto por
+                                            // peso pergunta a quantidade.
+                                            if (PESADOS.has(p.unit)) setPesando(p);
+                                            else addProduct(p);
                                             setSearchTerm('');
                                             setSearchResults([]);
                                         }}
@@ -348,20 +426,33 @@ export function SalePage() {
                                                 </td>
                                                 <td className="px-3 py-3">
                                                     <div className="flex items-center justify-center gap-1">
+                                                        {/* Produto por peso anda de 100 em 100 g:
+                                                            somar 1 kg por clique num queijo é o
+                                                            passo errado. */}
                                                         <button
-                                                            onClick={() => changeQuantity(item.key, -1)}
+                                                            onClick={() => changeQuantity(item.key, -pesoPasso(item))}
                                                             className="h-7 w-7 rounded-lg border border-gray-200 flex items-center justify-center text-gray-500 hover:bg-gray-50 transition-colors"
                                                         >
                                                             <Minus className="h-3.5 w-3.5" />
                                                         </button>
-                                                        <input
-                                                            value={item.quantity}
-                                                            onChange={(e) => setQuantity(item.key, e.target.value)}
-                                                            onBlur={refocusIfIdle}
-                                                            className="w-14 h-7 text-center text-sm font-bold rounded-lg border border-gray-200 focus:outline-none focus:border-[#7E1A8B]"
-                                                        />
+                                                        <div className="relative">
+                                                            <input
+                                                                value={formatarQtd(item.quantity)}
+                                                                onChange={(e) => setQuantity(item.key, e.target.value)}
+                                                                onBlur={refocusIfIdle}
+                                                                className={cn(
+                                                                    "h-7 text-center text-sm font-bold rounded-lg border border-gray-200 focus:outline-none focus:border-[#7E1A8B]",
+                                                                    PESADOS.has(item.unit) ? "w-20 pr-6" : "w-14"
+                                                                )}
+                                                            />
+                                                            {PESADOS.has(item.unit) && (
+                                                                <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[10px] font-bold text-gray-400 pointer-events-none">
+                                                                    {item.unit}
+                                                                </span>
+                                                            )}
+                                                        </div>
                                                         <button
-                                                            onClick={() => changeQuantity(item.key, 1)}
+                                                            onClick={() => changeQuantity(item.key, pesoPasso(item))}
                                                             className="h-7 w-7 rounded-lg border border-gray-200 flex items-center justify-center text-gray-500 hover:bg-gray-50 transition-colors"
                                                         >
                                                             <Plus className="h-3.5 w-3.5" />
@@ -430,6 +521,20 @@ export function SalePage() {
                 </div>
             )}
 
+            {/* `key` no id: cada produto monta o modal do zero, então o campo
+                nasce vazio sem ninguém precisar limpá-lo. */}
+            {pesando && (
+                <WeightPromptModal
+                    key={pesando.id}
+                    product={pesando}
+                    onConfirm={(produto, quantidade) => {
+                        addProduct(produto, quantidade);
+                        setPesando(null);
+                    }}
+                    onCancel={() => { setPesando(null); focusScan(); }}
+                />
+            )}
+
             <CameraScannerModal
                 isOpen={cameraOpen}
                 onClose={() => { setCameraOpen(false); focusScan(); }}
@@ -467,3 +572,23 @@ export function SalePage() {
         </div>
     );
 }
+
+/**
+ * De quanto em quanto o botão anda.
+ *
+ * Peso vai de 100 g por clique; unidade vai de 1. Um botão que soma 1 kg de
+ * queijo por toque erra por um fator de dez em quase toda venda.
+ */
+const pesoPasso = (item) => (PESADOS.has(item.unit) ? 0.1 : 1);
+
+/**
+ * Mostra a quantidade sem casas decimais inúteis.
+ *
+ * 2 aparece como "2", e 0,35 como "0,35". Somar 0.1 repetidas vezes em ponto
+ * flutuante produz coisas como 0.30000000000000004 — arredondar na exibição
+ * evita isso aparecer no meio de uma venda.
+ */
+const formatarQtd = (n) => {
+    const v = Math.round((Number(n) || 0) * 1000) / 1000;
+    return Number.isInteger(v) ? String(v) : String(v).replace('.', ',');
+};

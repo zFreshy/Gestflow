@@ -140,13 +140,29 @@ export async function updateProduct(id, changes) {
     return data;
 }
 
-/** Desativa em vez de apagar: senao o historico de vendas perde a referencia. */
+/** Tira do catalogo sem apagar. Serve para produto que vai voltar (sazonal). */
 export async function deactivateProduct(id) {
     const { error } = await supabase
         .from('products')
         .update({ active: false, updated_at: new Date().toISOString() })
         .eq('id', id);
 
+    if (error) throw error;
+}
+
+/**
+ * Apaga o produto de vez.
+ *
+ * O historico NAO vai junto. Venda, consumo de funcionario e entrada de estoque
+ * guardam nome, quantidade e preco desde o momento em que foram gravados — o
+ * vinculo com o produto e so um atalho, e ele fica nulo. Faturamento, lucro e
+ * as contas do dashboard continuam iguais depois da exclusao.
+ *
+ * O codigo de barras volta a ficar livre, o que e o motivo mais comum de querer
+ * apagar em vez de desativar: reaproveitar o codigo num produto novo.
+ */
+export async function deleteProduct(id) {
+    const { error } = await supabase.from('products').delete().eq('id', id);
     if (error) throw error;
 }
 

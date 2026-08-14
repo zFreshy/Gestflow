@@ -18,7 +18,7 @@ import QRCode from 'qrcode';
 import { Receipt } from './escpos';
 import { createStore } from './localStore';
 import { isTauri } from './authStorage';
-import { formatCurrency } from './utils';
+import { formatCurrency, STORE_NAME } from './utils';
 import { paymentLabel } from './payments';
 
 const store = createStore('impressora.json');
@@ -113,7 +113,9 @@ export function renderReceipt({ store: shop, sale, items, payments, invoice, cha
 
     // Cabeçalho do emitente
     r.align('center').bold(true);
-    r.line(shop?.razao_social || shop?.nome_fantasia || 'MERCADINHO');
+    // A razão social cadastrada manda no cupom: é ela que a nota fiscal exige.
+    // O nome da loja só entra enquanto nada estiver preenchido na tela fiscal.
+    r.line(shop?.razao_social || shop?.nome_fantasia || STORE_NAME);
     r.bold(false);
     if (shop?.nome_fantasia && shop?.razao_social) r.line(shop.nome_fantasia);
     if (shop?.cnpj) r.line(`CNPJ ${formatCnpj(shop.cnpj)}`);
@@ -264,8 +266,8 @@ export async function printThermal(receipt) {
 export function sampleReceipt() {
     return {
         store: {
-            razao_social: 'PADARIA E MERCADINHO LTDA',
-            nome_fantasia: 'Mercadinho',
+            razao_social: 'MERCADINHO DA FAMILIA LTDA',
+            nome_fantasia: 'Mercadinho da Família',
             cnpj: '12345678000199',
             inscricao_estadual: '110042490114',
             logradouro: 'Rua das Flores', numero: '250', bairro: 'Centro',

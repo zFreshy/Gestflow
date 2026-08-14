@@ -1,5 +1,5 @@
 import React from 'react';
-import { formatCurrency } from '../../lib/utils';
+import { formatCurrency, STORE_NAME } from '../../lib/utils';
 import { paymentLabel } from '../../lib/payments';
 
 /**
@@ -26,7 +26,7 @@ export function ReceiptDocument({ data, qr = null }) {
     return (
         <div id="cupom">
             <div style={{ textAlign: 'center' }}>
-                <strong>{store?.razao_social || store?.nome_fantasia || 'MERCADINHO'}</strong>
+                <strong>{store?.razao_social || store?.nome_fantasia || STORE_NAME}</strong>
                 {store?.nome_fantasia && store?.razao_social && <div>{store.nome_fantasia}</div>}
                 {store?.cnpj && <div>CNPJ {formatCnpj(store.cnpj)}</div>}
                 {store?.inscricao_estadual && <div>IE {store.inscricao_estadual}</div>}

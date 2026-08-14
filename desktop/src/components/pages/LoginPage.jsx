@@ -56,7 +56,10 @@ export function LoginPage() {
                 </div>
 
                 <div className="relative z-10">
-                    <h1 className="text-4xl font-bold tracking-tight">Mercadinho</h1>
+                    <h1 className="text-4xl font-bold tracking-tight leading-none">Mercadinho</h1>
+                    <p className="mt-2 text-sm font-bold uppercase tracking-[0.32em] text-purple-200/80">
+                        da Família
+                    </p>
                 </div>
 
                 <div className="relative z-10 max-w-lg">
@@ -77,8 +80,11 @@ export function LoginPage() {
             <div className="flex-1 flex flex-col items-center justify-center p-8 sm:p-12 lg:p-24 bg-gray-50">
                 <div className="w-full max-w-sm space-y-8">
                     <div className="text-center lg:text-left">
-                        <div className="lg:hidden mb-8 flex justify-center">
-                            <span className="text-3xl font-bold text-[#7E1A8B]">Mercadinho</span>
+                        <div className="lg:hidden mb-8 flex flex-col items-center">
+                            <span className="text-3xl font-bold text-[#7E1A8B] leading-none">Mercadinho</span>
+                            <span className="mt-1.5 text-[11px] font-bold uppercase tracking-[0.28em] text-[#7E1A8B]/55">
+                                da Família
+                            </span>
                         </div>
                         <h2 className="text-3xl font-bold tracking-tight text-gray-900">Acesse sua conta</h2>
                         <p className="mt-2 text-sm text-gray-500">

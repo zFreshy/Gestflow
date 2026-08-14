@@ -1,5 +1,6 @@
 import React, { createContext, useState, useEffect, useContext } from 'react';
 import { supabase } from '../lib/supabase';
+import { STORE_NAME } from '../lib/utils';
 
 const AuthContext = createContext({});
 
@@ -67,7 +68,7 @@ function SessionSplash() {
     return (
         <div className="h-screen flex flex-col items-center justify-center gap-4 bg-background">
             <span className="text-3xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-br from-[#7E1A8B] to-purple-600">
-                Mercadinho
+                {STORE_NAME}
             </span>
             <div className="h-1 w-32 rounded-full bg-gray-200 overflow-hidden">
                 <div className="h-full w-1/2 rounded-full bg-[#7E1A8B] animate-pulse" />

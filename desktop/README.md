@@ -471,3 +471,37 @@ apertada; quem paga as contas costuma ser outro item, vendido bem menos. Ver só
 **Lucro bruto ≠ caixa do mês.** O dashboard mostra faturamento menos o custo do
 que saiu da prateleira. O gasto com reposição aparece num card separado, porque
 comprar 200 caixas hoje não é prejuízo de hoje — é estoque.
+
+### Excluir produto
+
+Excluir apaga mesmo, e o histórico não vai junto. Venda, consumo de funcionário
+e entrada de estoque guardam nome, quantidade e preço desde o momento em que
+foram gravados — o vínculo com o produto é só um atalho, e ele fica nulo.
+Faturamento, lucro e as contas do dashboard continuam idênticos depois.
+
+**Desativar** continua existindo e é coisa diferente: some da lista mas segue
+cadastrado, para o produto sazonal que vai voltar. Excluir libera o código de
+barras para reuso, que costuma ser o motivo real de querer apagar.
+
+Um detalhe que travou isso na primeira tentativa: apagar o produto faz o banco
+zerar o `product_id` de quem apontava para ele (`on delete set null`), e esse
+"zerar" chega como **UPDATE**. Os gatilhos que congelam o valor das vendas
+recusavam qualquer update, então nenhum produto já vendido podia ser excluído.
+Agora eles aceitam exatamente uma mudança — o vínculo virando nulo — e continuam
+recusando qualquer alteração de valor.
+
+### O nome da loja
+
+`STORE_NAME`, em `lib/utils.js`. Fica numa constante porque aparece na barra
+lateral, no login, na aba da janela e no cupom: espalhado pelas telas, trocar o
+nome vira caça ao texto esquecido.
+
+No cupom impresso ele é só o último recurso — a **razão social** cadastrada na
+tela de Nota fiscal tem prioridade, porque é ela que o documento fiscal exige.
+
+**Ao renomear o app, não mexa no `upgradeCode`.** O Tauri deriva esse GUID do
+`productName`, e ele é o que diz ao Windows "este instalador substitui aquele".
+Trocar o nome sem fixar o código faria cada máquina ficar com **duas** cópias
+instaladas. O valor fixado em `tauri.conf.json` é o que o nome original
+("Mercadinho") gerava — por isso a atualização continua trocando a instalação
+que já existe.

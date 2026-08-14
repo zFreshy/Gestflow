@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
-import { cn } from '../../lib/utils';
+import { cn, STORE_INITIALS } from '../../lib/utils';
 import {
     LayoutDashboard, ScanBarcode, Package, PackagePlus,
     Receipt, NotebookPen, ShoppingBasket, Users, Wallet, FileText,
@@ -72,12 +72,23 @@ export function Sidebar() {
             {/* Logo */}
             <div className={cn("h-24 flex items-center transition-all relative", isCollapsed ? "justify-center px-0" : "px-8")}>
                 <div className="absolute inset-0 bg-gradient-to-b from-[#7E1A8B]/5 to-transparent pointer-events-none" />
-                <span className={cn(
-                    "font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-br from-[#7E1A8B] to-purple-600 transition-all relative z-10",
-                    isCollapsed ? "text-2xl" : "text-3xl"
-                )}>
-                    {isCollapsed ? 'M' : 'Mercadinho'}
-                </span>
+                {/* Em duas linhas: "Mercadinho da Família" numa linha só ficaria
+                    minúsculo para caber na largura da barra. Quebrado assim, o
+                    nome grande continua grande e o complemento vira assinatura. */}
+                {isCollapsed ? (
+                    <span className="text-2xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-br from-[#7E1A8B] to-purple-600 relative z-10">
+                        {STORE_INITIALS}
+                    </span>
+                ) : (
+                    <div className="relative z-10 leading-none">
+                        <span className="block text-[28px] font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-br from-[#7E1A8B] to-purple-600">
+                            Mercadinho
+                        </span>
+                        <span className="block mt-1 text-[11px] font-bold uppercase tracking-[0.28em] text-[#7E1A8B]/55">
+                            da Família
+                        </span>
+                    </div>
+                )}
             </div>
 
             {/* Navegação */}

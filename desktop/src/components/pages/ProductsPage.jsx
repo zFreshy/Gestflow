@@ -1,14 +1,14 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
     Package, Plus, Search, Pencil, Trash2, AlertTriangle, Loader2, ScanBarcode,
-    FileSpreadsheet, FilterX, X,
+    FileSpreadsheet, FilterX, X, EyeOff,
 } from 'lucide-react';
 import { Button } from '../atoms/Button';
 import { Input } from '../atoms/Input';
 import { Select } from '../atoms/Select';
 import { Badge } from '../atoms/Badge';
 import { cn, formatCurrency, marginPercent } from '../../lib/utils';
-import { listProducts, deactivateProduct } from '../../services/mercadinhoService';
+import { listProducts, deactivateProduct, deleteProduct } from '../../services/mercadinhoService';
 import { ProductFormModal } from '../organisms/ProductFormModal';
 import { ImportProductsModal } from '../organisms/ImportProductsModal';
 import { useBarcodeScanner } from '../../hooks/useBarcodeScanner';
@@ -106,7 +106,7 @@ export function ProductsPage() {
     const handleDeactivate = async (product) => {
         const ok = window.confirm(
             `Desativar "${product.name}"?\n\n` +
-            'Ele some do PDV e da lista, mas o histórico de vendas continua intacto.'
+            'Ele some do PDV e da lista, mas continua cadastrado e pode voltar depois.'
         );
         if (!ok) return;
 
@@ -116,6 +116,33 @@ export function ProductsPage() {
         } catch (err) {
             console.error(err);
             alert('Não consegui desativar o produto.');
+        }
+    };
+
+    /**
+     * Exclusão de verdade.
+     *
+     * O histórico não vai junto: venda, consumo e entrada de estoque guardam
+     * nome e preço desde quando foram gravados, então faturamento e lucro
+     * continuam iguais depois. O aviso diz isso porque, sem dizer, ninguém
+     * clica com medo de apagar o passado.
+     */
+    const handleDelete = async (product) => {
+        const ok = window.confirm(
+            `Excluir "${product.name}" de vez?\n\n` +
+            'O histórico de vendas NÃO é afetado — nome, quantidade e valor de cada '
+            + 'venda antiga continuam como estão.\n\n'
+            + `O código de barras${product.barcode ? ` (${product.barcode})` : ''} volta a ficar livre.\n\n`
+            + 'Se for só para tirar da lista por um tempo, use Desativar.'
+        );
+        if (!ok) return;
+
+        try {
+            await deleteProduct(product.id);
+            load();
+        } catch (err) {
+            console.error(err);
+            alert(err?.message ?? 'Não consegui excluir o produto.');
         }
     };
 
@@ -334,15 +361,25 @@ export function ProductsPage() {
                                                     >
                                                         <Pencil className="h-4 w-4" />
                                                     </button>
+                                                    {/* Desativar e excluir são coisas diferentes:
+                                                        um esconde o produto que vai voltar, o
+                                                        outro apaga o que não existe mais. */}
                                                     {p.active && (
                                                         <button
                                                             onClick={() => handleDeactivate(p)}
-                                                            className="h-8 w-8 rounded-lg flex items-center justify-center text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors"
-                                                            title="Desativar"
+                                                            className="h-8 w-8 rounded-lg flex items-center justify-center text-gray-400 hover:text-amber-600 hover:bg-amber-50 transition-colors"
+                                                            title="Desativar (some da lista, volta depois)"
                                                         >
-                                                            <Trash2 className="h-4 w-4" />
+                                                            <EyeOff className="h-4 w-4" />
                                                         </button>
                                                     )}
+                                                    <button
+                                                        onClick={() => handleDelete(p)}
+                                                        className="h-8 w-8 rounded-lg flex items-center justify-center text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors"
+                                                        title="Excluir de vez (histórico não é afetado)"
+                                                    >
+                                                        <Trash2 className="h-4 w-4" />
+                                                    </button>
                                                 </div>
                                             )}
                                         </td>

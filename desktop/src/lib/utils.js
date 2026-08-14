@@ -79,3 +79,18 @@ export function marginPercent(revenue, cost) {
     if (r === 0) return 0;
     return ((r - (Number(cost) || 0)) / r) * 100;
 }
+
+/**
+ * Nome da loja, como aparece para quem usa.
+ *
+ * Numa constante e não solto pelas telas: ele aparece na barra lateral, no
+ * login, na aba da janela e no cabeçalho do cupom. Espalhado, trocar o nome
+ * vira caça ao texto esquecido em algum canto.
+ *
+ * O cupom impresso prefere a razão social cadastrada na tela de Nota fiscal —
+ * este nome só entra quando não há nada preenchido lá.
+ */
+export const STORE_NAME = 'Mercadinho da Família';
+
+/** Versão curta, para quando a barra lateral está recolhida. */
+export const STORE_INITIALS = 'MF';

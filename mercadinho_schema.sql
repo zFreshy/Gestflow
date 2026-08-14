@@ -724,8 +724,20 @@ returns trigger
 language plpgsql
 as $$
 begin
-  if new.product_id   is distinct from old.product_id
-     or new.barcode      is distinct from old.barcode
+  -- Produto apagado do catalogo zera o vinculo aqui pelo `on delete set null`,
+  -- e isso chega como UPDATE. Recusar essa mudanca tornaria impossivel excluir
+  -- qualquer produto que algum funcionario ja tivesse pego. O valor descontado
+  -- nao depende do vinculo: nome, preco e total ficaram gravados no dia.
+  if new.product_id is null and old.product_id is not null then
+    -- Segue para a checagem abaixo, que garante que so o vinculo mudou.
+    null;
+  elsif new.product_id is distinct from old.product_id then
+    raise exception
+      'O valor de um consumo ja lancado nao muda: ele vale o preco do dia em que o produto foi pego. Para corrigir, apague o lancamento e faca outro.'
+      using errcode = 'check_violation';
+  end if;
+
+  if new.barcode      is distinct from old.barcode
      or new.product_name is distinct from old.product_name
      or new.quantity     is distinct from old.quantity
      or new.unit_price   is distinct from old.unit_price
@@ -747,9 +759,7 @@ create trigger trg_freeze_employee_credit
   before update on public.employee_credits
   for each row execute function public.freeze_employee_credit();
 
--- Itens da venda --------------------------------------------------------------
--- Nada muda. O item vendido e um fato do passado; corrigir venda errada e
--- estornar e vender de novo, que devolve o estoque pelo caminho certo.
+-- Nada muda. Usado onde nenhuma coluna pode ser tocada depois de gravada.
 create or replace function public.freeze_sale_row()
 returns trigger
 language plpgsql
@@ -761,10 +771,46 @@ begin
 end;
 $$;
 
+-- Itens da venda --------------------------------------------------------------
+-- O item vendido e um fato do passado; corrigir venda errada e estornar e
+-- vender de novo, que devolve o estoque pelo caminho certo.
+--
+-- Com uma excecao, e ela nao e escolha: apagar um produto do catalogo faz o
+-- banco zerar o `product_id` de quem apontava para ele (`on delete set null`),
+-- e esse "zerar" e um UPDATE. Um gatilho que recusasse tudo tornaria impossivel
+-- excluir qualquer produto que ja tivesse sido vendido — foi exatamente o que
+-- aconteceu.
+--
+-- Perder o vinculo nao perde o historico: nome, preco, custo e subtotal estao
+-- gravados aqui desde a venda, justamente para o item sobreviver ao produto.
+create or replace function public.freeze_sale_item()
+returns trigger
+language plpgsql
+as $$
+begin
+  -- Unica mudanca aceita: o vinculo com o produto virando nulo.
+  if new.product_id is null and old.product_id is not null
+     and new.barcode      is not distinct from old.barcode
+     and new.product_name is not distinct from old.product_name
+     and new.quantity     is not distinct from old.quantity
+     and new.unit_price   is not distinct from old.unit_price
+     and new.unit_cost    is not distinct from old.unit_cost
+     and new.subtotal     is not distinct from old.subtotal
+     and new.sale_id      is not distinct from old.sale_id
+  then
+    return new;
+  end if;
+
+  raise exception
+    'Venda registrada nao se edita: os valores sao os do momento da compra. Para corrigir, estorne a venda e registre de novo.'
+    using errcode = 'check_violation';
+end;
+$$;
+
 drop trigger if exists trg_freeze_sale_items on public.sale_items;
 create trigger trg_freeze_sale_items
   before update on public.sale_items
-  for each row execute function public.freeze_sale_row();
+  for each row execute function public.freeze_sale_item();
 
 -- Pagamentos da venda ---------------------------------------------------------
 -- E daqui que sai a divida do fiado: `customer_credit_balance` soma

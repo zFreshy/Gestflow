@@ -67,6 +67,31 @@ export function ImportProductsModal({ isOpen, onClose, onImported }) {
         if (!file) return;
         setError('');
 
+        // O arquivo vira uma string única na memória, e o JavaScript não guarda
+        // string maior que 512 MB — nem o computador ajuda, é limite do motor.
+        // Sem esta checagem a leitura estourava e a tela dizia "precisa estar
+        // salvo como CSV", mandando conferir um formato que estava certo.
+        //
+        // O limite aqui é bem menor de propósito: catálogo de mercadinho com
+        // 50 mil itens dá uns 5 MB. Passou de 80, ou o arquivo não é um
+        // catálogo, ou vai travar o app antes de terminar.
+        const MAX_MB = 80;
+        if (file.size > MAX_MB * 1024 * 1024) {
+            const gb = file.size / 1024 / 1024 / 1024;
+            const tamanho = gb >= 1
+                ? `${gb.toFixed(1).replace('.', ',')} GB`
+                : `${Math.round(file.size / 1024 / 1024)} MB`;
+
+            setError(
+                `Esse arquivo tem ${tamanho} e não cabe na memória do app (o limite é ${MAX_MB} MB). `
+                + 'Bases públicas de produtos, como a do Open Food Facts, têm milhões de itens '
+                + 'do mundo todo e nenhum preço — não servem como catálogo de loja. '
+                + 'Para não digitar tudo: cadastre o produto normalmente e o nome é '
+                + 'preenchido sozinho a partir do código de barras.'
+            );
+            return;
+        }
+
         try {
             const text = await readTextSmart(file);
             const parsed = parseCsv(text);

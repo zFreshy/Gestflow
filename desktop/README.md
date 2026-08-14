@@ -505,3 +505,25 @@ Trocar o nome sem fixar o código faria cada máquina ficar com **duas** cópias
 instaladas. O valor fixado em `tauri.conf.json` é o que o nome original
 ("Mercadinho") gerava — por isso a atualização continua trocando a instalação
 que já existe.
+
+### Nome do produto pelo código de barras
+
+Ao cadastrar, bipar o código preenche o nome sozinho, consultando a base pública
+do **Open Food Facts**. O nome vem marcado como sugestão, e não como verdade: a
+base é colaborativa, e sai coisa como "Tio João União Refinado" (marca de arroz
+em pacote de açúcar, porque o registro lista duas marcas). Quem confirma é quem
+está com a embalagem na mão.
+
+Falha de rede aqui não atrapalha nada — sem resposta, é só digitar o nome.
+
+**Por que não baixar a base inteira.** É o caminho que parece óbvio e não
+funciona. O arquivo que eles publicam tem **12 GB**, e o JavaScript não guarda
+string maior que 512 MB: são 24 vezes o limite do motor, não do computador. Além
+disso são ~4 milhões de produtos do mundo todo e **nenhum preço**, que é
+justamente o que a loja precisa. A tela de importação agora recusa arquivo acima
+de 80 MB dizendo isso — antes ela dizia "precisa estar salvo como CSV", mandando
+conferir um formato que estava certo.
+
+O mapeamento de colunas também entende cabeçalho em inglês (`code`,
+`product_name`, `price`), com o português tendo prioridade quando o arquivo tem
+os dois.

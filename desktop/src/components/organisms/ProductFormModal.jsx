@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { Package, X, Loader2, Camera, Info } from 'lucide-react';
+import { Package, X, Loader2, Camera, Info, Sparkles } from 'lucide-react';
 import { Button } from '../atoms/Button';
 import { Input } from '../atoms/Input';
 import { Select } from '../atoms/Select';
 import { formatCurrency } from '../../lib/utils';
 import { createProduct, updateProduct, listSuppliers } from '../../services/mercadinhoService';
+import { lookupBarcode } from '../../lib/productLookup';
 import { CameraScannerModal } from './CameraScannerModal';
 
 const UNITS = ['un', 'kg', 'g', 'l', 'ml', 'cx', 'pct'];
@@ -44,6 +45,11 @@ export function ProductFormModal({ isOpen, onClose, onSaved, product = null, ini
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState('');
     const [cameraOpen, setCameraOpen] = useState(false);
+    const [lookingUp, setLookingUp] = useState(false);
+    // Marca o nome que veio da base pública, para a pessoa saber que precisa
+    // conferir — os nomes de lá são colaborativos e nem sempre batem com a
+    // embalagem que está na mão dela.
+    const [suggestedName, setSuggestedName] = useState('');
 
     const isEditing = Boolean(product);
     const cost = Number(product?.cost_price) || 0;
@@ -70,10 +76,37 @@ export function ProductFormModal({ isOpen, onClose, onSaved, product = null, ini
             }
             : { ...EMPTY, barcode: initialBarcode });
 
+        setSuggestedName('');
         listSuppliers().then(setSuppliers).catch(() => setSuppliers([]));
+
+        // Veio de um bipe que não achou nada no PDV: o código já está aqui, e
+        // procurar o nome sozinho poupa a digitação com a fila esperando.
+        if (!product && initialBarcode) buscarNome(initialBarcode);
     }, [isOpen, product, initialBarcode]);
 
     const set = (key) => (e) => setForm((f) => ({ ...f, [key]: e.target.value }));
+
+    /**
+     * Procura o nome do produto pelo código de barras.
+     *
+     * Só preenche campo vazio: se alguém já digitou o nome, ele manda. E o
+     * resultado fica marcado como sugestão, porque a base é colaborativa.
+     */
+    const buscarNome = async (codigo) => {
+        const clean = String(codigo ?? '').trim();
+        if (!clean) return;
+
+        setLookingUp(true);
+        try {
+            const nome = await lookupBarcode(clean);
+            if (!nome) return;
+
+            setForm((f) => (f.name.trim() ? f : { ...f, name: nome }));
+            setSuggestedName(nome);
+        } finally {
+            setLookingUp(false);
+        }
+    };
 
     const handleSubmit = async (e) => {
         e.preventDefault();
@@ -169,6 +202,15 @@ export function ProductFormModal({ isOpen, onClose, onSaved, product = null, ini
                                 <Input
                                     value={form.barcode}
                                     onChange={set('barcode')}
+                                    // Ao sair do campo, e não a cada tecla: o leitor
+                                    // "digita" o código inteiro, e buscar a cada
+                                    // caractere daria 13 consultas por bipada.
+                                    onBlur={(e) => buscarNome(e.target.value)}
+                                    onKeyDown={(e) => {
+                                        if (e.key !== 'Enter') return;
+                                        e.preventDefault();
+                                        buscarNome(e.currentTarget.value);
+                                    }}
                                     placeholder="Bipe aqui ou digite (deixe vazio para granel)"
                                     className="font-mono"
                                     autoFocus={!isEditing && !initialBarcode}
@@ -186,13 +228,38 @@ export function ProductFormModal({ isOpen, onClose, onSaved, product = null, ini
                         </div>
 
                         <div className="space-y-2">
-                            <label className="text-sm font-semibold text-gray-700">Nome *</label>
+                            <div className="flex items-center justify-between">
+                                <label className="text-sm font-semibold text-gray-700">Nome *</label>
+                                {lookingUp && (
+                                    <span className="flex items-center gap-1.5 text-xs font-semibold text-gray-400">
+                                        <Loader2 className="h-3 w-3 animate-spin" />
+                                        procurando o nome...
+                                    </span>
+                                )}
+                            </div>
                             <Input
                                 value={form.name}
-                                onChange={set('name')}
+                                onChange={(e) => {
+                                    set('name')(e);
+                                    // Editou à mão: deixa de ser sugestão.
+                                    if (suggestedName) setSuggestedName('');
+                                }}
                                 placeholder="Ex.: Arroz Tio João 5kg"
                                 autoFocus={Boolean(initialBarcode)}
                             />
+
+                            {/* A base é colaborativa: o nome pode vir estranho ou
+                                de outro país. Dizer de onde veio é o que faz a
+                                pessoa conferir a embalagem antes de salvar. */}
+                            {suggestedName && form.name === suggestedName && (
+                                <p className="flex items-start gap-1.5 text-xs text-[#7E1A8B]">
+                                    <Sparkles className="h-3.5 w-3.5 shrink-0 mt-px" />
+                                    <span>
+                                        Nome sugerido pelo código de barras. Confira com a
+                                        embalagem e ajuste se precisar.
+                                    </span>
+                                </p>
+                            )}
                         </div>
 
                         <div className="grid grid-cols-3 gap-4">
@@ -330,6 +397,7 @@ export function ProductFormModal({ isOpen, onClose, onSaved, product = null, ini
                 onDetect={(code) => {
                     setForm((f) => ({ ...f, barcode: code }));
                     setCameraOpen(false);
+                    buscarNome(code);
                 }}
             />
         </>

@@ -124,13 +124,22 @@ export function normalizeHeader(h) {
  * A lista cobre as variações que sistemas de PDV costumam usar.
  */
 const FIELD_ALIASES = {
-    barcode: ['codigobarras', 'codbarras', 'codigodebarras', 'ean', 'gtin', 'barras', 'codbar', 'codigoean'],
-    name: ['descricao', 'nome', 'produto', 'descricaoproduto', 'nomeproduto', 'desc'],
-    sale_price: ['precovenda', 'valorvenda', 'preco', 'precovarejo', 'vlrvenda', 'venda', 'precodevenda'],
-    cost_price: ['precocusto', 'valorcusto', 'custo', 'vlrcusto', 'precodecusto', 'customedio'],
-    stock_quantity: ['estoque', 'quantidade', 'qtd', 'qtde', 'saldo', 'estoqueatual', 'qtdestoque'],
-    unit: ['unidade', 'un', 'und', 'unidademedida', 'sigla'],
-    category: ['categoria', 'grupo', 'departamento', 'secao', 'familia'],
+    // Os nomes em inglês entram no fim de cada lista, depois dos em português:
+    // planilha brasileira é o caso normal, e a ordem decide quem ganha quando
+    // um arquivo tem as duas colunas.
+    barcode: ['codigobarras', 'codbarras', 'codigodebarras', 'ean', 'gtin', 'barras', 'codbar', 'codigoean',
+        'barcode', 'code'],
+    name: ['descricao', 'nome', 'produto', 'descricaoproduto', 'nomeproduto', 'desc',
+        'productname', 'name', 'title'],
+    sale_price: ['precovenda', 'valorvenda', 'preco', 'precovarejo', 'vlrvenda', 'venda', 'precodevenda',
+        'saleprice', 'price', 'sellingprice'],
+    cost_price: ['precocusto', 'valorcusto', 'custo', 'vlrcusto', 'precodecusto', 'customedio',
+        'costprice', 'cost'],
+    stock_quantity: ['estoque', 'quantidade', 'qtd', 'qtde', 'saldo', 'estoqueatual', 'qtdestoque',
+        'stock', 'stockquantity', 'qty'],
+    unit: ['unidade', 'un', 'und', 'unidademedida', 'sigla', 'unit'],
+    category: ['categoria', 'grupo', 'departamento', 'secao', 'familia',
+        'category', 'categories'],
 };
 
 /**

@@ -16,7 +16,18 @@ import {
     emitInvoice, refreshInvoice,
 } from '../../services/mercadinhoService';
 import { useProfile } from '../../contexts/ProfileContext';
+import { useVisibleSlice } from '../../hooks/useVisibleSlice';
+import { LoadMore } from '../molecules/LoadMore';
 import { useReceipt } from '../../contexts/ReceiptContext';
+
+/**
+ * Teto do que se traz por período.
+ *
+ * O resumo soma todas as vendas carregadas, então truncar em silêncio daria um
+ * faturamento menor que o real. O número é alto de propósito e, ao ser
+ * atingido, a tela avisa em vez de mentir.
+ */
+const LIMITE_PERIODO = 5000;
 
 export function SalesHistoryPage() {
     const { isAdmin } = useProfile();
@@ -50,7 +61,7 @@ export function SalesHistoryPage() {
         listSales({
             from: dayStartInstant(range.from),
             to: dayEndInstant(range.to),
-            limit: 1000,
+            limit: LIMITE_PERIODO,
         })
             .then(async (data) => {
                 if (cancelled) return;
@@ -118,6 +129,8 @@ export function SalesHistoryPage() {
     }, [sales, methods, search, minValue]);
 
     // Resumo do que está na tela — é o que serve pra fechar o caixa.
+    const { visiveis, temMais, carregarMais, mostrando } = useVisibleSlice(filtered);
+
     const summary = useMemo(() => {
         const total = filtered.reduce((sum, s) => sum + Number(s.total), 0);
         const cost = filtered.reduce((sum, s) => sum + Number(s.cost_total), 0);
@@ -425,7 +438,7 @@ export function SalesHistoryPage() {
                             </tr>
                         </thead>
                         <tbody>
-                            {filtered.map((sale) => {
+                            {visiveis.map((sale) => {
                                 const isOpen = expanded === sale.id;
                                 const items = itemsBySale[sale.id];
                                 const pays = sale.sale_payments ?? [];
@@ -574,6 +587,15 @@ export function SalesHistoryPage() {
                         </tbody>
                     </table>
                 )}
+
+                <LoadMore
+                    carregados={mostrando}
+                    total={filtered.length}
+                    temMais={temMais}
+                    carregando={false}
+                    onCarregarMais={carregarMais}
+                    nome="vendas"
+                />
             </div>
         </div>
     );

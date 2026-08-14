@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
     Package, Plus, Search, Pencil, Trash2, AlertTriangle, Loader2, ScanBarcode,
     FileSpreadsheet, FilterX, X, EyeOff,
@@ -8,7 +8,11 @@ import { Input } from '../atoms/Input';
 import { Select } from '../atoms/Select';
 import { Badge } from '../atoms/Badge';
 import { cn, formatCurrency, marginPercent } from '../../lib/utils';
-import { listProducts, deactivateProduct, deleteProduct } from '../../services/mercadinhoService';
+import {
+    listProducts, listProductCategories, deactivateProduct, deleteProduct,
+} from '../../services/mercadinhoService';
+import { usePagedList } from '../../hooks/usePagedList';
+import { LoadMore } from '../molecules/LoadMore';
 import { ProductFormModal } from '../organisms/ProductFormModal';
 import { ImportProductsModal } from '../organisms/ImportProductsModal';
 import { useBarcodeScanner } from '../../hooks/useBarcodeScanner';
@@ -17,9 +21,11 @@ import { useProfile } from '../../contexts/ProfileContext';
 export function ProductsPage() {
     // Custo e margem são financeiro: o funcionário vê preço e estoque, só.
     const { isAdmin } = useProfile();
-    const [products, setProducts] = useState([]);
-    const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState('');
+    // A busca vai para o banco, então esperar o operador parar de digitar evita
+    // uma consulta por tecla.
+    const [searchAplicada, setSearchAplicada] = useState('');
+    const [categories, setCategories] = useState([]);
     const [showInactive, setShowInactive] = useState(false);
     const [category, setCategory] = useState('');
     const [situation, setSituation] = useState('todos'); // todos | baixo | zerado | semCodigo | semCusto
@@ -27,64 +33,42 @@ export function ProductsPage() {
     const [importOpen, setImportOpen] = useState(false);
     const [editing, setEditing] = useState(null);
 
-    const load = async () => {
-        setLoading(true);
-        try {
-            // Funcionário lê a view sem custo; a tabela não devolve nada para ele.
-            setProducts(await listProducts({
-                includeInactive: isAdmin && showInactive,
-                withCost: isAdmin,
-            }));
-        } catch (err) {
-            console.error(err);
-        } finally {
-            setLoading(false);
-        }
-    };
+    useEffect(() => {
+        const t = setTimeout(() => setSearchAplicada(search), 300);
+        return () => clearTimeout(t);
+    }, [search]);
 
-    useEffect(() => { load(); }, [showInactive, isAdmin]);
+    // Funcionário lê a view sem custo; a tabela não devolve nada para ele.
+    const buscarPagina = useCallback(({ limit, offset }) => listProducts({
+        includeInactive: isAdmin && showInactive,
+        withCost: isAdmin,
+        limit,
+        offset,
+        search: searchAplicada,
+        category,
+        situation,
+    }), [isAdmin, showInactive, searchAplicada, category, situation]);
+
+    const {
+        rows: products, total, loading, loadingMore, temMais, carregarMais, recarregar,
+    } = usePagedList(
+        buscarPagina,
+        [isAdmin, showInactive, searchAplicada, category, situation],
+    );
+
+    const load = recarregar;
+
+    // As categorias vêm à parte: tirá-las da página carregada mostraria só as
+    // dos primeiros produtos.
+    useEffect(() => {
+        listProductCategories({ withCost: isAdmin })
+            .then(setCategories)
+            .catch(() => setCategories([]));
+    }, [isAdmin]);
 
     // Bipar nesta tela joga o código na busca — jeito rápido de achar um produto.
     useBarcodeScanner((code) => setSearch(code));
 
-    // Categorias que realmente existem no cadastro, para montar o seletor.
-    const categories = useMemo(() => {
-        const set = new Set(products.map((p) => p.category).filter(Boolean));
-        return [...set].sort((a, b) => a.localeCompare(b, 'pt-BR'));
-    }, [products]);
-
-    const filtered = useMemo(() => {
-        const term = search.trim().toLowerCase();
-
-        return products.filter((p) => {
-            if (category && p.category !== category) return false;
-
-            switch (situation) {
-                case 'baixo':
-                    if (!(p.min_stock > 0 && p.stock_quantity <= p.min_stock)) return false;
-                    break;
-                case 'zerado':
-                    if (Number(p.stock_quantity) > 0) return false;
-                    break;
-                case 'semCodigo':
-                    if (p.barcode) return false;
-                    break;
-                case 'semCusto':
-                    if (Number(p.cost_price) > 0) return false;
-                    break;
-                default:
-                    break;
-            }
-
-            if (term) {
-                const haystack = [p.name, p.barcode ?? '', p.category ?? '']
-                    .join(' ').toLowerCase();
-                if (!haystack.includes(term)) return false;
-            }
-
-            return true;
-        });
-    }, [products, search, category, situation]);
 
     const hasFilters = search.trim() !== '' || category !== '' || situation !== 'todos' || showInactive;
 
@@ -97,7 +81,10 @@ export function ProductsPage() {
 
     const SITUATIONS = [
         { id: 'todos', label: 'Todos' },
-        { id: 'baixo', label: 'Estoque baixo' },
+        // "Estoque baixo" sai da view `low_stock_products`, que o RLS devolve
+        // vazia para o funcionário. Oferecer o filtro daria uma lista vazia sem
+        // explicação nenhuma.
+        ...(isAdmin ? [{ id: 'baixo', label: 'Estoque baixo' }] : []),
         { id: 'zerado', label: 'Sem estoque' },
         { id: 'semCodigo', label: 'Sem código' },
         { id: 'semCusto', label: 'Sem custo' },
@@ -156,7 +143,7 @@ export function ProductsPage() {
                 <div>
                     <h1 className="text-2xl font-extrabold text-gray-900 tracking-tight">Produtos</h1>
                     <p className="text-sm text-gray-500 mt-0.5">
-                        {products.length} {products.length === 1 ? 'produto cadastrado' : 'produtos cadastrados'}
+                        {total.toLocaleString('pt-BR')} {total === 1 ? 'produto cadastrado' : 'produtos cadastrados'}
                     </p>
                 </div>
                 {/* Cadastrar e importar são bloqueados pelo RLS para o
@@ -251,7 +238,7 @@ export function ProductsPage() {
                     <div className="p-16 flex items-center justify-center text-gray-400">
                         <Loader2 className="h-6 w-6 animate-spin" />
                     </div>
-                ) : filtered.length === 0 ? (
+                ) : products.length === 0 ? (
                     <div className="p-16 flex flex-col items-center text-center">
                         <div className="h-16 w-16 rounded-2xl bg-gray-50 flex items-center justify-center mb-4">
                             {search ? <Search className="h-8 w-8 text-gray-300" /> : <Package className="h-8 w-8 text-gray-300" />}
@@ -285,7 +272,7 @@ export function ProductsPage() {
                             </tr>
                         </thead>
                         <tbody>
-                            {filtered.map((p) => {
+                            {products.map((p) => {
                                 const margin = marginPercent(p.sale_price, p.cost_price);
                                 const low = p.min_stock > 0 && p.stock_quantity <= p.min_stock;
 
@@ -389,6 +376,15 @@ export function ProductsPage() {
                         </tbody>
                     </table>
                 )}
+
+                <LoadMore
+                    carregados={products.length}
+                    total={total}
+                    temMais={temMais}
+                    carregando={loadingMore}
+                    onCarregarMais={carregarMais}
+                    nome="produtos"
+                />
             </div>
 
             <p className="flex items-center gap-2 text-xs text-gray-400">

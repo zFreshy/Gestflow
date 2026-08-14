@@ -16,6 +16,8 @@ import {
     unsettleEmployeeCredits, listEmployeeProfiles,
 } from '../../services/mercadinhoService';
 import { CameraScannerModal } from '../organisms/CameraScannerModal';
+import { useVisibleSlice } from '../../hooks/useVisibleSlice';
+import { LoadMore } from '../molecules/LoadMore';
 
 export function EmployeeCreditPage() {
     const { profile, isAdmin } = useProfile();
@@ -169,6 +171,9 @@ export function EmployeeCreditPage() {
             return true;
         });
     }, [credits, filterText, onlyOpen]);
+
+    // Os totais contam `visible` inteiro; a tabela mostra aos poucos.
+    const { visiveis, temMais, carregarMais, mostrando } = useVisibleSlice(visible);
 
     const totals = useMemo(() => ({
         open: visible.filter((c) => !c.settled_at).reduce((s, c) => s + Number(c.total), 0),
@@ -491,7 +496,7 @@ export function EmployeeCreditPage() {
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {visible.map((c) => (
+                                    {visiveis.map((c) => (
                                         <tr key={c.id} className="border-b border-gray-50 last:border-0 hover:bg-gray-50/50 transition-colors">
                                             <td className="px-5 py-3">
                                                 <p className="text-sm font-semibold text-gray-900">{c.product_name}</p>
@@ -544,6 +549,15 @@ export function EmployeeCreditPage() {
                                 </tbody>
                             </table>
                         )}
+
+                        <LoadMore
+                            carregados={mostrando}
+                            total={visible.length}
+                            temMais={temMais}
+                            carregando={false}
+                            onCarregarMais={carregarMais}
+                            nome="lançamentos"
+                        />
                     </div>
                 </div>
             </div>

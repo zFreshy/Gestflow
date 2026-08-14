@@ -14,6 +14,8 @@ import {
 } from '../../services/mercadinhoService';
 import { CustomerFormModal } from '../organisms/CustomerFormModal';
 import { ReceivePaymentModal } from '../organisms/ReceivePaymentModal';
+import { useVisibleSlice } from '../../hooks/useVisibleSlice';
+import { LoadMore } from '../molecules/LoadMore';
 
 export function StoreCreditPage() {
     const [balances, setBalances] = useState([]);
@@ -86,6 +88,9 @@ export function StoreCreditPage() {
             return true;
         });
     }, [balances, search, onlyDebtors]);
+
+    // Os totais somam `balances` inteiro; só a lista é mostrada aos poucos.
+    const { visiveis, temMais, carregarMais, mostrando } = useVisibleSlice(filtered);
 
     const totals = useMemo(() => {
         const debtors = balances.filter((c) => Number(c.balance) > 0);
@@ -213,7 +218,7 @@ export function StoreCreditPage() {
                             </div>
                         ) : (
                             <div className="max-h-[560px] overflow-y-auto">
-                                {filtered.map((c) => {
+                                {visiveis.map((c) => {
                                     const balance = Number(c.balance);
                                     const isSelected = selected?.id === c.id;
 
@@ -249,6 +254,14 @@ export function StoreCreditPage() {
                                         </button>
                                     );
                                 })}
+                                <LoadMore
+                                    carregados={mostrando}
+                                    total={filtered.length}
+                                    temMais={temMais}
+                                    carregando={false}
+                                    onCarregarMais={carregarMais}
+                                    nome="clientes"
+                                />
                             </div>
                         )}
                     </div>

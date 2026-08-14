@@ -34,21 +34,84 @@ function isOffline(err) {
  * O funcionario precisa consultar preco e estoque no balcao, mas a tabela
  * `products` nao devolve nada para ele — sem a view, a tela viria vazia.
  */
-export async function listProducts({ includeInactive = false, withCost = true } = {}) {
+/**
+ * Uma pagina do catalogo.
+ *
+ * Antes trazia tudo de uma vez, e a tela renderizava a lista inteira. Com o
+ * catalogo pequeno passava despercebido; com alguns milhares de produtos, o
+ * navegador congela montando as linhas — foi o que aconteceu depois da primeira
+ * importacao grande.
+ *
+ * Busca e filtros vao para o banco junto com a pagina. Filtrar em memoria so
+ * enxergaria o que ja foi baixado: procurar "arroz" acharia apenas os arrozes
+ * das primeiras linhas, e o resultado pareceria certo.
+ *
+ * Devolve `{ rows, total }` — o total vem do banco na mesma consulta e e o que
+ * permite saber se ainda ha mais para carregar.
+ */
+export async function listProducts({
+    includeInactive = false,
+    withCost = true,
+    limit = 60,
+    offset = 0,
+    search = '',
+    category = '',
+    situation = 'todos',
+} = {}) {
     // `suppliers` so no caminho do administrador: a view de PDV nao tem relacao
     // declarada, e o funcionario nao precisa saber de quem se compra.
     const columns = withCost ? '*, suppliers(id, name)' : '*';
 
+    // "Estoque baixo" compara duas colunas (saldo <= minimo), coisa que o
+    // PostgREST nao expressa num filtro. A view existe justamente para isso.
+    const wantsLowStock = situation === 'baixo';
+    const source = wantsLowStock ? 'low_stock_products' : productSource(withCost);
+
     let query = supabase
-        .from(productSource(withCost))
-        .select(columns)
-        .order('name', { ascending: true });
+        .from(source)
+        .select(wantsLowStock ? '*' : columns, { count: 'exact' });
 
     if (!includeInactive) query = query.eq('active', true);
+    if (category) query = query.eq('category', category);
 
-    const { data, error } = await query;
+    const term = search.trim();
+    if (term) query = query.or(`name.ilike.%${term}%,barcode.ilike.%${term}%`);
+
+    if (situation === 'zerado') query = query.lte('stock_quantity', 0);
+    else if (situation === 'semCodigo') query = query.is('barcode', null);
+    else if (situation === 'semCusto' && withCost) query = query.lte('cost_price', 0);
+
+    query = query
+        .order('name', { ascending: true })
+        .range(offset, offset + limit - 1);
+
+    const { data, error, count } = await query;
     if (error) throw error;
-    return data ?? [];
+
+    return { rows: data ?? [], total: count ?? 0 };
+}
+
+/**
+ * Categorias que existem no cadastro, para montar o seletor.
+ *
+ * Consulta a parte porque a tela agora carrega uma pagina por vez: tirar as
+ * categorias do que esta na tela mostraria so as das primeiras linhas, e o
+ * filtro ficaria sem as outras.
+ *
+ * Traz so a coluna `category` — alguns milhares de textos curtos, uns poucos
+ * quilobytes.
+ */
+export async function listProductCategories({ withCost = true } = {}) {
+    const { data, error } = await supabase
+        .from(productSource(withCost))
+        .select('category')
+        .eq('active', true)
+        .not('category', 'is', null);
+
+    if (error) throw error;
+
+    const set = new Set((data ?? []).map((r) => r.category).filter(Boolean));
+    return [...set].sort((a, b) => a.localeCompare(b, 'pt-BR'));
 }
 
 /**

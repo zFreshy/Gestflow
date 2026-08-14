@@ -561,3 +561,28 @@ colada no pacote, e quem confere os dois acharia que o sistema erra.
 
 Etiqueta com dígito verificador errado vira aviso, não venda: leitura ruim tem
 que aparecer na hora.
+
+### Listas grandes
+
+Depois da primeira importação com milhares de produtos, a tela de Produtos
+travava. O problema não era o volume de dados — alguns milhares de linhas em
+JSON são poucas centenas de kilobytes — e sim montar todas as linhas da tabela
+de uma vez.
+
+Existem duas correções, e elas resolvem problemas diferentes:
+
+**`usePagedList` corta no banco.** Usado em Produtos. A busca e os filtros vão
+junto com a página: filtrar em memória só enxergaria o que já foi baixado, e
+procurar "arroz" acharia apenas os arrozes das primeiras linhas — parecendo
+certo. O total vem do banco na mesma consulta, então dá para dizer "60 de 3.210"
+sem uma segunda ida.
+
+**`useVisibleSlice` corta só na tela.** Usado em Histórico, Fiado e Crédito da
+loja. Essas telas somam um total a partir de **todas** as linhas, e paginar no
+banco daria um faturamento que só conta o que está à vista. Então o cálculo
+continua vendo tudo, e apenas a renderização vai por partes.
+
+O Histórico ganhou um teto de 5.000 vendas por período. Ele existia antes em
+1.000 e truncava em silêncio, o que dava um resumo menor que o real; agora,
+quando o teto é atingido, a tela avisa que os totais estão incompletos em vez de
+mentir.

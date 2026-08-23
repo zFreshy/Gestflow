@@ -1,5 +1,13 @@
--- Create transactions table
-create table public.transactions (
+-- ============================================================================
+-- Transacoes do site (Gestflow)
+--
+-- E idempotente: pode ser colado no SQL Editor de novo sem quebrar nada. Isso
+-- importa porque o SQL Editor roda o arquivo inteiro numa transacao — um
+-- "relation already exists" no comeco abortaria tudo, inclusive as migracoes
+-- no fim, e quem rodou acharia que aplicou.
+-- ============================================================================
+
+create table if not exists public.transactions (
   id uuid default gen_random_uuid() primary key,
   user_id uuid references auth.users not null,
   description text not null,
@@ -27,7 +35,13 @@ create table public.transactions (
 -- Enable RLS
 alter table public.transactions enable row level security;
 
--- Create policies
+-- Policies. O drop antes do create e o que permite reaplicar o arquivo: nao
+-- existe "create policy if not exists" no Postgres.
+drop policy if exists "Users can view all transactions"   on public.transactions;
+drop policy if exists "Users can insert transactions"     on public.transactions;
+drop policy if exists "Users can update transactions"     on public.transactions;
+drop policy if exists "Users can delete transactions"     on public.transactions;
+
 create policy "Users can view all transactions"
   on public.transactions for select
   using (true);

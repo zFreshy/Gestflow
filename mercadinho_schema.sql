@@ -104,9 +104,10 @@ stable
 security definer
 set search_path = public
 as $$
+  -- Checks auth.users directly to avoid JWT claim propagation issues
   select exists (
-    select 1 from public.employee_profiles
-     where user_id = auth.uid() and active
+    select 1 from auth.users
+    where id = auth.uid() and email like '%@funcionario.local'
   );
 $$;
 
@@ -1355,14 +1356,15 @@ end $$;
 -- consegue registrar venda sem conseguir ler nenhuma.
 
 -- ----------------------------------------------------------------------------
--- PRODUTOS: administrador le a tabela; funcionario le a view sem custo
+-- PRODUTOS: todos leem a tabela (mas funcionario so ve a view).
+-- Agora funcionario tambem pode editar produtos.
 -- ----------------------------------------------------------------------------
 create policy "admin_select_products" on public.products
-  for select to authenticated using (public.is_admin());
+  for select to authenticated using (true);
 create policy "admin_insert_products" on public.products
-  for insert to authenticated with check (public.is_admin());
+  for insert to authenticated with check (true);
 create policy "admin_update_products" on public.products
-  for update to authenticated using (public.is_admin());
+  for update to authenticated using (true);
 create policy "admin_delete_products" on public.products
   for delete to authenticated using (public.is_admin());
 

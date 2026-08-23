@@ -157,6 +157,16 @@ export async function findProductByBarcode(barcode, { withCost = false } = {}) {
  * cada pesagem. O que identifica o produto e este numero curto, configurado na
  * propria balanca e cadastrado no produto.
  */
+export async function getProduct(id) {
+    const { data, error } = await supabase
+        .from('products')
+        .select('*')
+        .eq('id', id)
+        .single();
+    if (error) throw error;
+    return data;
+}
+
 export async function findProductByScaleCode(scaleCode, { withCost = false } = {}) {
     const clean = String(scaleCode ?? '').trim();
     if (!clean) return null;

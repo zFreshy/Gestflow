@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     ScanBarcode, Search, Trash2, Plus, Minus, Camera, Loader2,
-    AlertTriangle, PackageX, ShoppingCart,
+    AlertTriangle, PackageX, ShoppingCart, Pencil,
 } from 'lucide-react';
 import { Button } from '../atoms/Button';
 import { Input } from '../atoms/Input';
@@ -9,7 +9,7 @@ import { Badge } from '../atoms/Badge';
 import { cn, formatCurrency } from '../../lib/utils';
 import {
     findProductByBarcode, findProductByScaleCode, findProductByBarcodePrefix,
-    searchProducts,
+    searchProducts, getProduct
 } from '../../services/mercadinhoService';
 import { decodificar, getScaleConfig, DEFAULTS as SCALE_DEFAULTS } from '../../lib/scaleLabel';
 import { CameraScannerModal } from '../organisms/CameraScannerModal';
@@ -36,6 +36,7 @@ export function SalePage() {
     const [notFoundCode, setNotFoundCode] = useState('');
     const [cameraOpen, setCameraOpen] = useState(false);
     const [quickAddOpen, setQuickAddOpen] = useState(false);
+    const [editProduct, setEditProduct] = useState(null); // id of product being edited
     const [checkoutOpen, setCheckoutOpen] = useState(false);
     const [toast, setToast] = useState('');
     // Produto por peso esperando a quantidade; null quando não há nenhum.
@@ -473,7 +474,27 @@ export function SalePage() {
                                                     </div>
                                                 </td>
                                                 <td className="px-3 py-3 text-right text-sm text-gray-600">
-                                                    {formatCurrency(item.unit_price)}
+                                                    <div className="flex items-center justify-end gap-2">
+                                                        <span>{formatCurrency(item.unit_price)}</span>
+                                                        <button
+                                                            onClick={async (e) => {
+                                                                e.stopPropagation();
+                                                                setBusy(true);
+                                                                try {
+                                                                    const p = await getProduct(item.product_id);
+                                                                    setEditProduct(p);
+                                                                } catch (err) {
+                                                                    setToast('Erro ao carregar produto para edição.');
+                                                                } finally {
+                                                                    setBusy(false);
+                                                                }
+                                                            }}
+                                                            className="h-6 w-6 rounded-md flex items-center justify-center text-gray-400 hover:text-[#7E1A8B] hover:bg-[#7E1A8B]/10 transition-colors"
+                                                            title="Editar produto"
+                                                        >
+                                                            <Pencil className="h-3 w-3" />
+                                                        </button>
+                                                    </div>
                                                 </td>
                                                 <td className="px-3 py-3 text-right text-sm font-bold text-gray-900">
                                                     {formatCurrency(item.quantity * item.unit_price)}
@@ -565,6 +586,29 @@ export function SalePage() {
                     setNotFoundCode('');
                     addProduct(product);
                     showToast(`${product.name} cadastrado e adicionado.`);
+                }}
+            />
+
+            <ProductFormModal
+                isOpen={Boolean(editProduct)}
+                product={editProduct}
+                onClose={() => { setEditProduct(null); focusScan(); }}
+                onSaved={(updatedProduct) => {
+                    // Update the cart item with the new details
+                    setCart((prev) => prev.map((i) => {
+                        if (i.product_id === updatedProduct.id) {
+                            return {
+                                ...i,
+                                product_name: updatedProduct.name,
+                                barcode: updatedProduct.barcode,
+                                unit: updatedProduct.unit,
+                                unit_price: updatedProduct.sale_price,
+                            };
+                        }
+                        return i;
+                    }));
+                    setEditProduct(null);
+                    showToast(`${updatedProduct.name} atualizado.`);
                 }}
             />
 

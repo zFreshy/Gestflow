@@ -148,18 +148,18 @@ export function ProductsPage() {
                 </div>
                 {/* Cadastrar e importar são bloqueados pelo RLS para o
                     funcionário; mostrar o botão só daria erro na cara dele. */}
-                {isAdmin && (
-                    <div className="flex items-center gap-3">
+                <div className="flex items-center gap-3">
+                    {isAdmin && (
                         <Button variant="outline" onClick={() => setImportOpen(true)}>
                             <FileSpreadsheet className="h-4 w-4 mr-2" />
                             Importar planilha
                         </Button>
-                        <Button variant="brand" onClick={openNew}>
-                            <Plus className="h-4 w-4 mr-2" />
-                            Novo produto
-                        </Button>
-                    </div>
-                )}
+                    )}
+                    <Button variant="brand" onClick={openNew}>
+                        <Plus className="h-4 w-4 mr-2" />
+                        Novo produto
+                    </Button>
+                </div>
             </div>
 
             {/* Filtros */}
@@ -339,36 +339,33 @@ export function ProductsPage() {
                                             </div>
                                         </td>
                                         <td className="px-3 py-3">
-                                            {isAdmin && (
-                                                <div className="flex items-center justify-end gap-1">
+                                            <div className="flex items-center justify-end gap-1">
+                                                <button
+                                                    onClick={() => openEdit(p)}
+                                                    className="h-8 w-8 rounded-lg flex items-center justify-center text-gray-400 hover:text-[#7E1A8B] hover:bg-[#7E1A8B]/10 transition-colors"
+                                                    title="Editar"
+                                                >
+                                                    <Pencil className="h-4 w-4" />
+                                                </button>
+                                                {p.active && (
                                                     <button
-                                                        onClick={() => openEdit(p)}
-                                                        className="h-8 w-8 rounded-lg flex items-center justify-center text-gray-400 hover:text-[#7E1A8B] hover:bg-[#7E1A8B]/10 transition-colors"
-                                                        title="Editar"
+                                                        onClick={() => handleDeactivate(p)}
+                                                        className="h-8 w-8 rounded-lg flex items-center justify-center text-gray-400 hover:text-amber-600 hover:bg-amber-50 transition-colors"
+                                                        title="Desativar (some da lista, volta depois)"
                                                     >
-                                                        <Pencil className="h-4 w-4" />
+                                                        <EyeOff className="h-4 w-4" />
                                                     </button>
-                                                    {/* Desativar e excluir são coisas diferentes:
-                                                        um esconde o produto que vai voltar, o
-                                                        outro apaga o que não existe mais. */}
-                                                    {p.active && (
-                                                        <button
-                                                            onClick={() => handleDeactivate(p)}
-                                                            className="h-8 w-8 rounded-lg flex items-center justify-center text-gray-400 hover:text-amber-600 hover:bg-amber-50 transition-colors"
-                                                            title="Desativar (some da lista, volta depois)"
-                                                        >
-                                                            <EyeOff className="h-4 w-4" />
-                                                        </button>
-                                                    )}
+                                                )}
+                                                {isAdmin && (
                                                     <button
                                                         onClick={() => handleDelete(p)}
                                                         className="h-8 w-8 rounded-lg flex items-center justify-center text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors"
-                                                        title="Excluir de vez (histórico não é afetado)"
+                                                        title="Excluir"
                                                     >
                                                         <Trash2 className="h-4 w-4" />
                                                     </button>
-                                                </div>
-                                            )}
+                                                )}
+                                            </div>
                                         </td>
                                     </tr>
                                 );

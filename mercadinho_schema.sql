@@ -1486,12 +1486,26 @@ create policy "admin_insert_cash_sessions" on public.cash_sessions
 create policy "admin_update_cash_sessions" on public.cash_sessions
   for update to authenticated using (public.is_admin());
 
+-- Funcionário pode abrir, fechar e ver turnos de caixa.
+create policy "employee_select_cash_sessions" on public.cash_sessions
+  for select to authenticated using (public.is_employee());
+create policy "employee_insert_cash_sessions" on public.cash_sessions
+  for insert to authenticated with check (public.is_employee());
+create policy "employee_update_cash_sessions" on public.cash_sessions
+  for update to authenticated using (public.is_employee());
+
 create policy "admin_select_cash_movements" on public.cash_movements
   for select to authenticated using (public.is_admin());
 create policy "admin_insert_cash_movements" on public.cash_movements
   for insert to authenticated with check (public.is_admin());
 create policy "admin_delete_cash_movements" on public.cash_movements
   for delete to authenticated using (public.is_admin());
+
+-- Funcionário pode ver e registrar sangria/suprimento.
+create policy "employee_select_cash_movements" on public.cash_movements
+  for select to authenticated using (public.is_employee());
+create policy "employee_insert_cash_movements" on public.cash_movements
+  for insert to authenticated with check (public.is_employee());
 
 -- ----------------------------------------------------------------------------
 -- FISCAL

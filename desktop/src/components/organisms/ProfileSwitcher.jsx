@@ -12,10 +12,18 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useProfile } from '../../contexts/ProfileContext';
 import { listEmployeeProfiles } from '../../services/mercadinhoService';
 
-const NAMES_BY_EMAIL = {
-    'ecarneirodemelo@gmail.com': 'Nal',
-    'esthermenezes90@gmail.com': 'Esther',
-    'matheusv090807@gmail.com': 'Matheus',
+/**
+ * Extrai um nome apresentável a partir do e-mail.
+ *
+ * Pega a parte antes do `@`, troca pontos e underscores por espaço e
+ * capitaliza cada palavra. Ex: "joao.silva@gmail.com" → "Joao Silva".
+ */
+const nameFromEmail = (email) => {
+    if (!email) return null;
+    const local = String(email).split('@')[0];
+    return local
+        .replace(/[._]+/g, ' ')
+        .replace(/\b\w/g, (c) => c.toUpperCase());
 };
 
 export function ProfileSwitcher({ collapsed }) {
@@ -41,7 +49,7 @@ export function ProfileSwitcher({ collapsed }) {
     // Dentro de um perfil de funcionário, getUserEmail() é o e-mail sintético
     // dele — o nome do administrador tem que vir do que ficou lembrado.
     const adminEmail = isAdmin ? getUserEmail() : rememberedEmail;
-    const adminName = NAMES_BY_EMAIL[adminEmail] || 'Administrador';
+    const adminName = nameFromEmail(adminEmail) || 'Administrador';
     const currentName = isAdmin ? adminName : (profile?.name ?? 'Funcionário');
 
     useEffect(() => {

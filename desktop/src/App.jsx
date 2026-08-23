@@ -51,7 +51,7 @@ function AppContent() {
                 <Route path="/estoque" element={<AdminRoute><StockPage /></AdminRoute>} />
                 <Route path="/fiado" element={<AdminRoute><StoreCreditPage /></AdminRoute>} />
                 <Route path="/vendas" element={<AdminRoute><SalesHistoryPage /></AdminRoute>} />
-                <Route path="/caixa" element={<AdminRoute><CashRegisterPage /></AdminRoute>} />
+                <Route path="/caixa" element={<CashRegisterPage />} />
                 <Route path="/fiscal" element={<AdminRoute><FiscalSettingsPage /></AdminRoute>} />
 
                 <Route

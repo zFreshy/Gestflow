@@ -23,10 +23,9 @@ const MENU_ITEMS = [
     // Estoque fica só com o admin: dar entrada exige digitar o custo de compra,
     // que é exatamente o que o funcionário não deve ver.
     { path: '/estoque', label: 'Estoque', icon: PackagePlus, adminOnly: true },
-    // Abrir, sangrar e conferir caixa é mexer em dinheiro fora da venda — o
-    // banco só aceita do administrador. O funcionário continua vendendo, e as
-    // vendas dele entram no turno aberto sozinhas.
-    { path: '/caixa', label: 'Caixa', icon: Wallet, adminOnly: true },
+    // Abrir, sangrar e conferir caixa: tanto o administrador quanto o
+    // funcionário precisam controlar o dinheiro da gaveta.
+    { path: '/caixa', label: 'Caixa', icon: Wallet },
     // Receber pagamento de fiado é mexer em dinheiro que entrou — o banco só
     // aceita do administrador. O funcionário ainda vende fiado no PDV, onde
     // escolhe ou cadastra o cliente.

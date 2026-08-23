@@ -1,7 +1,8 @@
 import { supabase } from '../lib/supabase';
 import { STORE_CREDIT as STORE_CREDIT_METHOD } from '../lib/payments';
 import {
-    cachedProductByBarcode, cachedProductByScaleCode, cachedSearchProducts, cachedCustomers,
+    cachedProductByBarcode, cachedProductByScaleCode, cachedProductByBarcodePrefix,
+    cachedSearchProducts, cachedCustomers,
 } from '../lib/catalogCache';
 import { enqueueSale } from '../lib/salesOutbox';
 
@@ -173,6 +174,33 @@ export async function findProductByScaleCode(scaleCode, { withCost = false } = {
     } catch (err) {
         if (withCost || !isOffline(err)) throw err;
         return cachedProductByScaleCode(clean);
+    }
+}
+
+/**
+ * Fallback para etiqueta de balanca: busca pelo prefixo do codigo de barras.
+ *
+ * Quando o produto nao tem scale_code mas foi cadastrado com o barcode
+ * "base" da balanca (ex: 2000001000000), procura pelo prefixo que identifica
+ * o produto dentro do EAN-13 (ex: "2000001").
+ */
+export async function findProductByBarcodePrefix(prefix, { withCost = false } = {}) {
+    const clean = String(prefix ?? '').trim();
+    if (!clean) return null;
+
+    try {
+        const { data, error } = await supabase
+            .from(productSource(withCost))
+            .select('*')
+            .like('barcode', `${clean}%`)
+            .eq('active', true)
+            .maybeSingle();
+
+        if (error) throw error;
+        return data;
+    } catch (err) {
+        if (withCost || !isOffline(err)) throw err;
+        return cachedProductByBarcodePrefix(clean);
     }
 }
 

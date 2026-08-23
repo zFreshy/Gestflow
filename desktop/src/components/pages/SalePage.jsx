@@ -8,7 +8,8 @@ import { Input } from '../atoms/Input';
 import { Badge } from '../atoms/Badge';
 import { cn, formatCurrency } from '../../lib/utils';
 import {
-    findProductByBarcode, findProductByScaleCode, searchProducts,
+    findProductByBarcode, findProductByScaleCode, findProductByBarcodePrefix,
+    searchProducts,
 } from '../../services/mercadinhoService';
 import { decodificar, getScaleConfig, DEFAULTS as SCALE_DEFAULTS } from '../../lib/scaleLabel';
 import { CameraScannerModal } from '../organisms/CameraScannerModal';
@@ -166,7 +167,19 @@ export function SalePage() {
             }
 
             if (etiqueta) {
-                const produto = await findProductByScaleCode(etiqueta.codigoProduto);
+                let produto = await findProductByScaleCode(etiqueta.codigoProduto);
+
+                // Fallback: o produto pode ter sido cadastrado com o barcode
+                // "base" da balança (ex: 2000001000000) em vez do scale_code.
+                // Reconstrói o prefixo (ex: "2000001") e tenta pelo barcode.
+                if (!produto) {
+                    const prefixo = String(scaleConfig.prefixo ?? '2');
+                    const digCod = Number(scaleConfig.digitosCodigo) || 6;
+                    const barcodePrefix = prefixo
+                        + String(etiqueta.codigoProduto).padStart(digCod, '0');
+                    produto = await findProductByBarcodePrefix(barcodePrefix);
+                }
+
                 if (!produto) {
                     showToast(
                         `Etiqueta de balança do produto ${etiqueta.codigoProduto}, `

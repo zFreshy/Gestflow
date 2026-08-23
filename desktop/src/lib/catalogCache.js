@@ -71,6 +71,18 @@ export async function cachedProductByScaleCode(scaleCode) {
     return list.find((p) => p.scale_code === scaleCode) ?? null;
 }
 
+/**
+ * Fallback para etiqueta de balanca: busca por prefixo do codigo de barras.
+ *
+ * Quando o produto nao tem scale_code preenchido mas foi cadastrado com o
+ * barcode "base" da balanca (ex: 2000001000000), esta busca encontra pelo
+ * prefixo que identifica o produto (ex: "2000001").
+ */
+export async function cachedProductByBarcodePrefix(prefix) {
+    const list = await products();
+    return list.find((p) => p.barcode && p.barcode.startsWith(prefix)) ?? null;
+}
+
 /** Mesma busca da tela online: por nome ou por código, sem diferenciar acento. */
 export async function cachedSearchProducts(term) {
     const list = await products();

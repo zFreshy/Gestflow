@@ -232,6 +232,25 @@ export function PrinterSettingsCard() {
 
                         <div className="space-y-2 col-span-2">
                             <label className="text-sm font-semibold text-gray-700">
+                                Modo de impressão
+                            </label>
+                            <Select value={config.modo} onChange={(e) => set('modo', e.target.value)}>
+                                <option value="escpos">Completo — negrito, corte e QR Code</option>
+                                <option value="texto">Só texto — para impressora que sai em branco</option>
+                            </Select>
+                            <p className="text-xs text-gray-400">
+                                Se a bobina sai em branco ou não para de avançar, é sinal de
+                                que a impressora não está em modo ESC/POS e trata os comandos
+                                como lixo. <strong>Só texto</strong> não manda comando nenhum:
+                                perde negrito, corte e QR Code, mas imprime.
+                            </p>
+                        </div>
+
+                        <div className={cn(
+                            "space-y-2 col-span-2",
+                            config.modo === 'texto' && "opacity-50 pointer-events-none"
+                        )}>
+                            <label className="text-sm font-semibold text-gray-700">
                                 Tabela de acentos
                             </label>
                             <Select

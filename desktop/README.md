@@ -586,3 +586,24 @@ O Histórico ganhou um teto de 5.000 vendas por período. Ele existia antes em
 1.000 e truncava em silêncio, o que dava um resumo menor que o real; agora,
 quando o teto é atingido, a tela avisa que os totais estão incompletos em vez de
 mentir.
+
+### Bobina saindo em branco sem parar
+
+Sintoma: a impressora avança papel limpo indefinidamente. Quase sempre significa
+que ela **não está em modo ESC/POS** — nesse estado cada byte de comando vira
+lixo interpretado, e alguns acabam lidos como "avança papel".
+
+Por isso existe o **modo de impressão**, em *Nota e equipamentos*:
+
+- **Completo** — negrito, corte, gaveta e QR Code. É o padrão.
+- **Só texto** — não emite **nenhum** byte de controle, nem o de inicializar.
+  Perde formatação, corte e QR Code; ganha sair impresso.
+
+No modo só texto o QR Code não é enviado — são ~2.800 bytes de imagem crua que,
+numa impressora que não entende `GS v 0`, sairiam como páginas de caracteres. A
+chave de acesso continua saindo em texto, então o cliente ainda consulta a nota.
+
+O `print_raw` também recusa qualquer cupom acima de 256 KB. Um cupom com QR tem
+uns 6 KB e três vias uns 18 — passar disso significa que algo saiu do lugar
+montando os bytes, e enviar assim gastaria a bobina inteira antes de alguém
+alcançar o botão da impressora.

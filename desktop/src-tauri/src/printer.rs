@@ -209,5 +209,17 @@ pub fn print_raw(printer: String, data: Vec<u8>) -> Result<(), String> {
     if data.is_empty() {
         return Err("Nada para imprimir.".into());
     }
+
+    // Teto de seguranca. Um cupom com QR Code tem uns 6 KB; tres vias, uns 18.
+    // Passar disso significa que alguma coisa saiu do lugar montando os bytes,
+    // e mandar assim mesmo desperdicaria a bobina inteira antes de alguem
+    // conseguir desligar a impressora.
+    const LIMITE: usize = 256 * 1024;
+    if data.len() > LIMITE {
+        return Err(format!(
+            "O cupom ficou com {} KB, muito acima do normal. Nada foi enviado.",
+            data.len() / 1024
+        ));
+    }
     win::print_raw(&printer, &data)
 }

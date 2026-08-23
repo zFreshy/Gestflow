@@ -28,6 +28,9 @@ const DEFAULTS = {
     printer: '',      // vazio = usa o diálogo do Windows
     width: 80,        // mm da bobina
     codepage: 'cp850',
+    // 'escpos' = comandos completos (negrito, corte, QR).
+    // 'texto'  = só texto, para impressora que não está em modo ESC/POS.
+    modo: 'escpos',
     autoCut: true,
     openDrawer: false,
     copies: 1,
@@ -108,7 +111,9 @@ const formatCnpj = (v) => {
  * do que nenhum.
  */
 export function renderReceipt({ store: shop, sale, items, payments, invoice, change }, config) {
-    const r = new Receipt({ width: config.width, codepage: config.codepage });
+    const r = new Receipt({
+        width: config.width, codepage: config.codepage, modo: config.modo,
+    });
     const authorized = invoice?.status === 'autorizada';
 
     // Cabeçalho do emitente

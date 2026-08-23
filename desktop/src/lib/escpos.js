@@ -73,10 +73,25 @@ export const CODEPAGES = {
 export const COLUMNS = { 80: 48, 58: 32 };
 
 export class Receipt {
-    constructor({ width = 80, codepage = 'cp850' } = {}) {
+    /**
+     * `modo: 'texto'` não emite **nenhum** byte de controle — nem o de
+     * inicializar. Existe para impressora que não está em modo ESC/POS: nela,
+     * cada comando vira lixo impresso, e alguns bytes acabam interpretados como
+     * "avança papel", o que produz bobina em branco saindo sem parar.
+     *
+     * O cupom perde negrito, centralização, corte e QR Code, e ganha a única
+     * coisa que importa: sair impresso.
+     */
+    constructor({ width = 80, codepage = 'cp850', modo = 'escpos' } = {}) {
         this.cols = COLUMNS[width] ?? COLUMNS[80];
-        this.page = CODEPAGES[codepage] ?? CODEPAGES.cp850;
+        this.plain = modo === 'texto';
+        this.page = this.plain
+            ? CODEPAGES.nenhuma
+            : (CODEPAGES[codepage] ?? CODEPAGES.cp850);
         this.bytes = [];
+
+        if (this.plain) return;
+
         this.raw(ESC, 0x40);        // inicializa: limpa formatação de outro cupom
         if (this.page.command !== null) {
             this.raw(ESC, 0x74, this.page.command);
@@ -123,15 +138,18 @@ export class Receipt {
     }
 
     align(where) {
+        if (this.plain) return this;
         return this.raw(ESC, 0x61, { left: 0, center: 1, right: 2 }[where] ?? 0);
     }
 
     bold(on = true) {
+        if (this.plain) return this;
         return this.raw(ESC, 0x45, on ? 1 : 0);
     }
 
     /** `size(2)` dobra largura e altura. Usado só no total, que é o que se lê de longe. */
     size(multiplier = 1) {
+        if (this.plain) return this;
         const n = Math.min(Math.max(multiplier, 1), 4) - 1;
         return this.raw(GS, 0x21, (n << 4) | n);
     }
@@ -175,6 +193,13 @@ export class Receipt {
     }
 
     feed(lines = 1) {
+        // Quebras de linha comuns em vez do comando de avanço: a quebra de
+        // linha é o único "comando" que toda impressora entende, esteja no
+        // modo que estiver.
+        if (this.plain) {
+            for (let i = 0; i < lines; i++) this.bytes.push(0x0a);
+            return this;
+        }
         return this.raw(ESC, 0x64, lines);
     }
 
@@ -189,6 +214,11 @@ export class Receipt {
      * `matrix` é uma matriz quadrada de 0/1 vinda do gerador de QR.
      */
     qrcode(matrix, scale = 4) {
+        // A imagem do QR são ~2 mil bytes crus. Numa impressora que não entende
+        // `GS v 0`, eles saem impressos como caracteres — páginas de lixo.
+        // Sem QR o cliente ainda consulta a nota pela chave, que sai em texto.
+        if (this.plain) return this;
+
         const modules = matrix.length;
         const pixels = modules * scale;
         const bytesPerRow = Math.ceil(pixels / 8);
@@ -212,11 +242,14 @@ export class Receipt {
 
     /** Guilhotina. Avança antes de cortar, senão a lâmina come a última linha. */
     cut() {
+        // Sem guilhotina no modo texto: só espaço para destacar na serrilha.
+        if (this.plain) return this.feed(6);
         return this.feed(4).raw(GS, 0x56, 0x42, 0x00);
     }
 
     /** Pulso na gaveta de dinheiro, quando houver uma ligada na impressora. */
     openDrawer() {
+        if (this.plain) return this;
         return this.raw(ESC, 0x70, 0x00, 0x19, 0xfa);
     }
 

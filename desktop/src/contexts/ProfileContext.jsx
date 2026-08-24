@@ -23,6 +23,19 @@ const RECHECK_MS = 30_000;
  */
 const EMPLOYEE_DOMAIN = '@funcionario.local';
 
+/** Falha de conexão, e não recusa do servidor nem erro de dado. */
+function pareceFalhaDeRede(err) {
+    const msg = String(err?.message ?? '').toLowerCase();
+    return (
+        err?.name === 'TypeError'
+        || err?.name === 'AbortError'
+        || msg.includes('fetch')
+        || msg.includes('network')
+        || msg.includes('failed to send')
+        || msg.includes('timeout')
+    );
+}
+
 const isAdminEmail = (email) =>
     Boolean(email) && !String(email).toLowerCase().endsWith(EMPLOYEE_DOMAIN);
 
@@ -54,7 +67,17 @@ export function ProfileProvider({ children }) {
     const [adminEmail, setAdminEmail] = useState('');
 
     const refresh = useCallback(async () => {
-        if (!user) {
+        // Quem está logado AGORA, e não quem estava no último render.
+        //
+        // Trocar de perfil é um login de verdade, e este refresh roda logo em
+        // seguida — antes do React repassar o novo `user`. Usando o do render,
+        // o papel do funcionário era gravado e lido sob o id do administrador:
+        // o cache devolvia "é admin" e a tela abria como administrador mesmo
+        // depois da troca.
+        const { data: { session } } = await supabase.auth.getSession();
+        const atual = session?.user ?? user;
+
+        if (!atual) {
             setProfile(null);
             setIsAdmin(true);
             setFromCache(false);
@@ -71,24 +94,27 @@ export function ProfileProvider({ children }) {
             setFromCache(false);
 
             // Guarda para a próxima abertura sem internet.
-            await saveRole(user.id, { isAdmin: admin, profile: employeeProfile });
+            await saveRole(atual.id, { isAdmin: admin, profile: employeeProfile });
 
             // O e-mail do administrador serve ao caminho de volta: dentro de um
             // perfil de funcionário não há como descobri-lo, e obrigar a digitar
             // o e-mail quebraria a ideia de "só a senha".
-            if (admin && user.email) {
-                await rememberAdminEmail(user.email);
-                setAdminEmail(user.email);
+            if (admin && atual.email) {
+                await rememberAdminEmail(atual.email);
+                setAdminEmail(atual.email);
             }
         } catch (err) {
             console.error('Não consegui identificar o perfil:', err);
 
-            // Sem resposta do banco, vale a última identidade conhecida DESTE
-            // usuário. Antes o app assumia "funcionário", e o dono do
-            // mercadinho abria o sistema rebaixado sempre que a internet caía —
-            // sem dashboard, sem caixa, sem fiado, e com a tela de crédito
-            // quebrando por falta de perfil.
-            const cached = await readRole(user.id);
+            // Sem internet, vale a última identidade conhecida DESTE usuário:
+            // antes o app assumia "funcionário" e o dono abria o sistema
+            // rebaixado sempre que a conexão caía.
+            //
+            // Mas só falta de conexão justifica isso. Erro de dado — consulta
+            // que devolveu mais linhas do que devia — não é internet fora, e
+            // tratar como se fosse fazia o app mostrar um papel antigo em vez
+            // de falhar visivelmente.
+            const cached = pareceFalhaDeRede(err) ? await readRole(atual.id) : null;
 
             if (cached) {
                 setIsAdmin(cached.isAdmin);

@@ -777,9 +777,20 @@ export async function checkIsAdmin() {
 
 /** Perfil do funcionario logado, ou null se for administrador. */
 export async function getMyEmployeeProfile() {
+    // O filtro por usuario NAO e redundante com o RLS.
+    //
+    // A policy de leitura de `employee_profiles` e `using (true)` de proposito:
+    // o seletor de perfil precisa listar todo mundo para permitir a troca. Sem
+    // o filtro, esta consulta devolve TODOS os perfis, e o `.maybeSingle()`
+    // recusa mais de uma linha — a partir do segundo funcionario cadastrado,
+    // ela passava a lancar erro em vez de devolver o perfil.
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return null;
+
     const { data, error } = await supabase
         .from('employee_profiles')
         .select('id, name, active')
+        .eq('user_id', user.id)
         .maybeSingle();
 
     if (error) throw error;

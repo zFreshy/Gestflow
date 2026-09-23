@@ -10,6 +10,7 @@ import { DashboardPage } from './components/pages/DashboardPage';
 import { SalePage } from './components/pages/SalePage';
 import { ProductsPage } from './components/pages/ProductsPage';
 import { StockPage } from './components/pages/StockPage';
+import { EmployeeStockPage } from './components/pages/EmployeeStockPage';
 import { SalesHistoryPage } from './components/pages/SalesHistoryPage';
 import { StoreCreditPage } from './components/pages/StoreCreditPage';
 import { EmployeeProfilesPage } from './components/pages/EmployeeProfilesPage';
@@ -48,7 +49,13 @@ function AppContent() {
                 />
                 <Route path="/venda" element={<SalePage />} />
                 <Route path="/produtos" element={<ProductsPage />} />
-                <Route path="/estoque" element={<AdminRoute><StockPage /></AdminRoute>} />
+                {/* A mesma rota serve aos dois papéis, com telas diferentes: o
+                    administrador dá entrada com custo e fornecedor; o
+                    funcionário informa só a quantidade que chegou. */}
+                <Route
+                    path="/estoque"
+                    element={isAdmin ? <StockPage /> : <EmployeeStockPage />}
+                />
                 <Route path="/fiado" element={<AdminRoute><StoreCreditPage /></AdminRoute>} />
                 <Route path="/vendas" element={<AdminRoute><SalesHistoryPage /></AdminRoute>} />
                 <Route path="/caixa" element={<CashRegisterPage />} />

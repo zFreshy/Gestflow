@@ -299,6 +299,18 @@ create table if not exists public.stock_entries (
   created_at     timestamptz not null default now()
 );
 
+-- Entrada lancada pelo funcionario, que nao ve nem digita custo.
+--
+-- O valor gravado e o custo que o produto ja tinha — uma estimativa, nao o que
+-- foi pago de fato. A marca existe para o administrador saber quais entradas
+-- ainda precisam do valor real, em vez de descobrir no fechamento do mes que o
+-- gasto com reposicao estava chutado.
+alter table public.stock_entries
+  add column if not exists awaiting_cost boolean not null default false;
+
+create index if not exists stock_entries_awaiting_idx
+  on public.stock_entries (awaiting_cost) where awaiting_cost;
+
 create index if not exists stock_entries_date_idx     on public.stock_entries (entry_date desc);
 create index if not exists stock_entries_product_idx  on public.stock_entries (product_id);
 create index if not exists stock_entries_supplier_idx on public.stock_entries (supplier_id);
@@ -1318,10 +1330,21 @@ begin
                            'employee_credits', 'employee_profiles',
                            'cash_sessions', 'cash_movements',
                            'fiscal_settings', 'fiscal_invoices'] loop
-    foreach p in array array['select', 'insert', 'update', 'delete'] loop
-      execute format('drop policy if exists "auth_%s_%s" on public.%I', p, t, t);
-      execute format('drop policy if exists "admin_%s_%s" on public.%I', p, t, t);
-      execute format('drop policy if exists "emp_%s_%s" on public.%I', p, t, t);
+    -- Apaga TODA policy da tabela, e nao uma lista de nomes conhecidos.
+    --
+    -- A versao anterior derrubava so os prefixos `auth_`, `admin_` e `emp_`.
+    -- Bastou alguem criar uma `employee_select_cash_sessions` para o arquivo
+    -- parar de rodar duas vezes: a segunda passada batia em "policy already
+    -- exists". E como o SQL Editor do Supabase roda tudo numa transacao, o erro
+    -- abortava o arquivo inteiro — quem rodasse veria o erro e nao aplicaria
+    -- nada, inclusive o que nao tinha relacao nenhuma com policy.
+    --
+    -- Varrendo o catalogo, o nome deixa de importar e o problema nao volta.
+    for p in
+      select policyname from pg_policies
+       where schemaname = 'public' and tablename = t
+    loop
+      execute format('drop policy if exists %I on public.%I', p, t);
     end loop;
   end loop;
 end $$;
@@ -1531,6 +1554,139 @@ create policy "admin_select_fiscal_invoices" on public.fiscal_invoices
   for select to authenticated using (public.is_admin());
 create policy "admin_update_fiscal_invoices" on public.fiscal_invoices
   for update to authenticated using (public.is_admin());
+
+-- ============================================================================
+-- ENTRADA DE ESTOQUE PELO FUNCIONARIO
+--
+-- Quem recebe a mercadoria no balcao e o funcionario, e ate aqui so o
+-- administrador conseguia registrar isso — porque dar entrada exigia digitar o
+-- custo de compra, que e justamente o que ele nao pode ver.
+--
+-- Aqui ele informa so a quantidade. O custo NAO vem do app: e lido do proprio
+-- produto, no banco.
+--
+-- Isso nao e detalhe de implementacao, e sim o que impede um estrago. O gatilho
+-- `apply_stock_entry` faz `cost_price = new.unit_cost` a cada entrada. Uma
+-- entrada gravada com custo zero apagaria o custo do produto, e a margem do
+-- dashboard passaria a mentir sem nenhum erro na tela. Lendo o custo que o
+-- produto ja tem, o gatilho regrava o mesmo valor e nada se perde.
+--
+-- `awaiting_cost` marca a linha: o valor e estimativa, nao o que foi pago.
+-- ============================================================================
+create or replace function public.create_stock_entry_employee(
+  p_product_id uuid,
+  p_quantity   numeric,
+  p_note       text default null
+)
+returns uuid
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_product public.products%rowtype;
+  v_email   text;
+  v_id      uuid;
+begin
+  if auth.uid() is null then
+    raise exception 'Precisa estar autenticado';
+  end if;
+
+  if p_quantity is null or p_quantity <= 0 then
+    raise exception 'Informe quantas unidades chegaram';
+  end if;
+
+  select * into v_product from public.products where id = p_product_id;
+  if not found then
+    raise exception 'Produto nao encontrado';
+  end if;
+  if not v_product.active then
+    raise exception 'Produto inativo';
+  end if;
+
+  select email into v_email from auth.users where id = auth.uid();
+
+  -- O trigger em stock_entries cuida de somar ao estoque.
+  insert into public.stock_entries (
+    product_id, barcode, product_name, quantity,
+    unit_cost, total_cost, awaiting_cost, note, user_id, user_email
+  )
+  values (
+    v_product.id, v_product.barcode, v_product.name, p_quantity,
+    v_product.cost_price, round(p_quantity * v_product.cost_price, 2), true,
+    nullif(btrim(coalesce(p_note, '')), ''), auth.uid(), v_email
+  )
+  returning id into v_id;
+
+  return v_id;
+end;
+$$;
+
+/**
+ * O administrador confirma quanto foi pago de verdade.
+ *
+ * Passa por funcao, e nao por UPDATE direto, por causa do custo do produto: o
+ * gatilho de estoque so roda em INSERT e DELETE, entao corrigir a linha sozinha
+ * deixaria `products.cost_price` com a estimativa antiga. Aqui os dois andam
+ * juntos.
+ */
+create or replace function public.confirm_stock_entry_cost(
+  p_entry_id  uuid,
+  p_unit_cost numeric
+)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_entry public.stock_entries%rowtype;
+begin
+  if not public.is_admin() then
+    raise exception 'So o administrador confirma o custo';
+  end if;
+
+  if p_unit_cost is null or p_unit_cost < 0 then
+    raise exception 'Informe o custo unitario';
+  end if;
+
+  select * into v_entry from public.stock_entries where id = p_entry_id;
+  if not found then
+    raise exception 'Entrada nao encontrada';
+  end if;
+
+  update public.stock_entries
+     set unit_cost     = round(p_unit_cost, 2),
+         total_cost    = round(v_entry.quantity * p_unit_cost, 2),
+         awaiting_cost = false
+   where id = p_entry_id;
+
+  -- Mesma regra do gatilho: a compra mais recente define o custo do produto.
+  if v_entry.product_id is not null then
+    update public.products
+       set cost_price = round(p_unit_cost, 2),
+           updated_at = now()
+     where id = v_entry.product_id;
+  end if;
+end;
+$$;
+
+-- ============================================================================
+-- VIEW: entradas sem valor, para o funcionario conferir o que lancou
+--
+-- Roda como dono para atravessar o RLS de `stock_entries`, que e so do
+-- administrador. O que ela expoe nao tem dinheiro nenhum: produto, quantidade e
+-- data. O custo e o fornecedor ficam de fora, que e o motivo de a tabela ser
+-- fechada para ele em primeiro lugar.
+-- ============================================================================
+drop view if exists public.stock_entries_pos;
+create view public.stock_entries_pos as
+  select id, product_id, barcode, product_name, quantity,
+         entry_date, awaiting_cost, user_email, created_at
+    from public.stock_entries;
+
+revoke all on public.stock_entries_pos from anon, authenticated;
+grant select on public.stock_entries_pos to authenticated;
 
 -- ============================================================================
 -- RPCs DO CAIXA
@@ -1945,6 +2101,8 @@ revoke all on function public.open_cash_session(numeric, text) from public, anon
 revoke all on function public.close_cash_session(numeric, text) from public, anon;
 revoke all on function public.add_cash_movement(text, numeric, text) from public, anon;
 revoke all on function public.cash_session_expected(uuid) from public, anon;
+revoke all on function public.create_stock_entry_employee(uuid, numeric, text) from public, anon;
+revoke all on function public.confirm_stock_entry_cost(uuid, numeric) from public, anon;
 revoke all on function public.dashboard_totals(timestamptz, timestamptz) from public, anon;
 revoke all on function public.dashboard_daily(date, date) from public, anon;
 revoke all on function public.dashboard_hourly(timestamptz, timestamptz) from public, anon;
@@ -1973,6 +2131,12 @@ grant execute on function public.open_cash_session(numeric, text) to authenticat
 grant execute on function public.close_cash_session(numeric, text) to authenticated;
 grant execute on function public.add_cash_movement(text, numeric, text) to authenticated;
 grant execute on function public.cash_session_expected(uuid) to authenticated;
+
+-- Entrada de estoque: o funcionario informa so a quantidade, e o custo e lido
+-- do produto dentro da funcao. `confirm_stock_entry_cost` checa is_admin() por
+-- dentro — o grant e a primeira porta, nao a unica.
+grant execute on function public.create_stock_entry_employee(uuid, numeric, text) to authenticated;
+grant execute on function public.confirm_stock_entry_cost(uuid, numeric) to authenticated;
 
 -- As do dashboard tambem checam is_admin() por dentro: para o funcionario elas
 -- respondem vazio, e nao com erro — a tela dele simplesmente nao as chama.

@@ -484,6 +484,7 @@ export function SalePage() {
                                                                     const p = await getProduct(item.product_id);
                                                                     setEditProduct(p);
                                                                 } catch (err) {
+                                                                    console.error(err);
                                                                     setToast('Erro ao carregar produto para edição.');
                                                                 } finally {
                                                                     setBusy(false);

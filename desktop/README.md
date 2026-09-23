@@ -607,3 +607,29 @@ O `print_raw` também recusa qualquer cupom acima de 256 KB. Um cupom com QR tem
 uns 6 KB e três vias uns 18 — passar disso significa que algo saiu do lugar
 montando os bytes, e enviar assim gastaria a bobina inteira antes de alguém
 alcançar o botão da impressora.
+
+### Entrada de estoque pelo funcionário
+
+Quem está no balcão quando o entregador chega é o funcionário, e a tela de
+Estoque sempre pediu o **custo de compra** — justamente o que ele não pode ver.
+O resultado era mercadoria na prateleira sem entrada no sistema até o dono
+sentar para lançar.
+
+Agora **Estoque** atende os dois papéis. O administrador continua dando entrada
+com custo, fornecedor e forma de pagamento. O funcionário informa **só a
+quantidade**, e a entrada fica marcada como *custo a confirmar*.
+
+O custo não vem do app: é lido do próprio produto, dentro do banco. Isso não é
+economia de digitação, é o que impede um estrago — o gatilho de entrada faz
+`cost_price = unit_cost` a cada linha, então uma entrada gravada com zero
+**apagaria o custo do produto**, e a margem do dashboard passaria a mentir sem
+nenhum erro na tela. Lendo o custo que o produto já tem, o gatilho regrava o
+mesmo valor e nada se perde.
+
+O valor gravado é estimativa, não o que foi pago. Por isso a entrada aparece
+marcada na tela do administrador, com um botão para informar o valor real —
+que atualiza a entrada **e** o custo do produto de uma vez, porque o gatilho de
+estoque só roda em INSERT e DELETE.
+
+O funcionário lê as entradas por `stock_entries_pos`, uma view sem custo,
+fornecedor nem forma de pagamento — o que ele vê é produto, quantidade e data.

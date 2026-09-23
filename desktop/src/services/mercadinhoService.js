@@ -569,6 +569,51 @@ export async function createStockEntry(entry) {
     return data;
 }
 
+/**
+ * Entrada de estoque lancada pelo funcionario.
+ *
+ * Ele manda so o produto e a quantidade. O custo NAO sai daqui: quem le e o
+ * banco, do proprio produto.
+ *
+ * Isso nao e economia de digitacao, e sim o que impede um estrago. O trigger de
+ * entrada grava `cost_price = unit_cost` a cada linha; mandar zero daqui
+ * apagaria o custo do produto e a margem do dashboard passaria a mentir sem
+ * erro nenhum na tela. A entrada fica marcada como "custo a confirmar" para o
+ * administrador preencher o valor real depois.
+ */
+export async function createStockEntryAsEmployee({ productId, quantity, note = null }) {
+    const { data, error } = await supabase.rpc('create_stock_entry_employee', {
+        p_product_id: productId,
+        p_quantity: Number(quantity),
+        p_note: note?.trim() || null,
+    });
+
+    if (error) throw error;
+    return data;
+}
+
+/** Entradas sem os valores — e o que o funcionario pode ler. */
+export async function listStockEntriesPos({ limit = 30 } = {}) {
+    const { data, error } = await supabase
+        .from('stock_entries_pos')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(limit);
+
+    if (error) throw error;
+    return data ?? [];
+}
+
+/** O administrador informa quanto foi pago de fato. Atualiza o custo do produto junto. */
+export async function confirmStockEntryCost({ entryId, unitCost }) {
+    const { error } = await supabase.rpc('confirm_stock_entry_cost', {
+        p_entry_id: entryId,
+        p_unit_cost: Number(unitCost),
+    });
+
+    if (error) throw error;
+}
+
 export async function listStockEntries({ from, to, limit = 100 } = {}) {
     let query = supabase
         .from('stock_entries')

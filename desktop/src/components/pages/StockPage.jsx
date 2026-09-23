@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import {
     PackagePlus, ScanBarcode, Search, Trash2, Loader2, AlertTriangle,
     TrendingDown, Camera, Check, FilterX, X,
+Clock,
 } from 'lucide-react';
 import { Button } from '../atoms/Button';
 import { Input } from '../atoms/Input';
@@ -9,6 +10,7 @@ import { Select } from '../atoms/Select';
 import { Badge } from '../atoms/Badge';
 import { cn, formatCurrency, formatDate, toISODate } from '../../lib/utils';
 import { PeriodFilter, PERIOD_PRESETS } from '../molecules/PeriodFilter';
+import { confirmStockEntryCost } from '../../services/mercadinhoService';
 import {
     findProductByBarcode, searchProducts, createStockEntry,
     listStockEntries, deleteStockEntry, listSuppliers, listLowStock,
@@ -29,6 +31,11 @@ const emptyForm = () => ({
 });
 
 export function StockPage() {
+    // Entrada lançada pelo funcionário esperando o valor real da compra.
+    const [confirmando, setConfirmando] = useState(null);
+    const [custoDigitado, setCustoDigitado] = useState('');
+    const [confirmandoSalvando, setConfirmandoSalvando] = useState(false);
+
     const [form, setForm] = useState(emptyForm);
     const [entries, setEntries] = useState([]);
     const [suppliers, setSuppliers] = useState([]);
@@ -77,6 +84,31 @@ export function StockPage() {
     };
 
     useEffect(() => { load(); }, [range.from, range.to]);
+
+    /**
+     * Confirma quanto foi pago numa entrada que o funcionário lançou.
+     *
+     * Passa pelo banco porque o custo do produto anda junto: corrigir só a
+     * linha deixaria `products.cost_price` com a estimativa antiga, e a margem
+     * do dashboard continuaria errada sem nada na tela indicando isso.
+     */
+    const confirmarCusto = async () => {
+        const valor = Number(String(custoDigitado).replace(',', '.'));
+        if (!(valor >= 0)) return;
+
+        setConfirmandoSalvando(true);
+        try {
+            await confirmStockEntryCost({ entryId: confirmando.id, unitCost: valor });
+            setConfirmando(null);
+            setCustoDigitado('');
+            load();
+        } catch (err) {
+            console.error(err);
+            alert(err?.message ?? 'Não consegui confirmar o custo.');
+        } finally {
+            setConfirmandoSalvando(false);
+        }
+    };
 
     const visibleEntries = useMemo(() => {
         const term = filterText.trim().toLowerCase();
@@ -544,6 +576,11 @@ export function StockPage() {
                                                     <p className="text-xs text-gray-400">
                                                         {[e.suppliers?.name, e.payment_method].filter(Boolean).join(' · ') || '—'}
                                                     </p>
+                                                    {e.awaiting_cost && (
+                                                        <Badge variant="warning">
+                                                            custo estimado — confirmar
+                                                        </Badge>
+                                                    )}
                                                 </td>
                                                 <td className="px-3 py-3 text-sm text-gray-600">
                                                     {formatDate(`${e.entry_date}T00:00:00`)}
@@ -558,6 +595,19 @@ export function StockPage() {
                                                     {formatCurrency(e.total_cost)}
                                                 </td>
                                                 <td className="px-3 py-3">
+                                                  <div className="flex items-center justify-end gap-0.5">
+                                                    {/* Entrada do funcionário: o valor é o custo
+                                                        que o produto já tinha, não o que foi pago.
+                                                        Confirmar corrige os dois de uma vez. */}
+                                                    {e.awaiting_cost && (
+                                                        <button
+                                                            onClick={() => setConfirmando(e)}
+                                                            className="h-8 w-8 rounded-lg flex items-center justify-center text-amber-500 hover:text-amber-700 hover:bg-amber-50 transition-colors"
+                                                            title="Confirmar quanto foi pago"
+                                                        >
+                                                            <Clock className="h-4 w-4" />
+                                                        </button>
+                                                    )}
                                                     <button
                                                         onClick={() => handleDelete(e)}
                                                         className="h-8 w-8 rounded-lg flex items-center justify-center text-gray-300 hover:text-red-600 hover:bg-red-50 transition-colors"
@@ -565,6 +615,7 @@ export function StockPage() {
                                                     >
                                                         <Trash2 className="h-4 w-4" />
                                                     </button>
+                                                  </div>
                                                 </td>
                                             </tr>
                                         ))}
@@ -578,6 +629,75 @@ export function StockPage() {
                         <ScanBarcode className="h-3.5 w-3.5" />
                         Cada entrada também atualiza o preço de custo do produto para o valor pago agora.
                     </p>
+
+                    {confirmando && (
+                        <div className="modal-overlay" onClick={() => setConfirmando(null)}>
+                            <div
+                                className="modal-content bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 space-y-5"
+                                onClick={(ev) => ev.stopPropagation()}
+                            >
+                                <div>
+                                    <h3 className="font-bold text-gray-900">Confirmar o custo</h3>
+                                    <p className="text-sm text-gray-500 mt-0.5">
+                                        {confirmando.product_name} · {Number(confirmando.quantity)}{' '}
+                                        {Number(confirmando.quantity) === 1 ? 'unidade' : 'unidades'}
+                                    </p>
+                                </div>
+
+                                <div className="bg-amber-50 border border-amber-100 text-amber-900 p-3 rounded-xl text-sm">
+                                    Esta entrada foi registrada por quem recebeu a mercadoria, sem
+                                    o valor. O que está gravado é o custo antigo do produto
+                                    ({formatCurrency(confirmando.unit_cost)}), só uma estimativa.
+                                </div>
+
+                                <div className="space-y-2">
+                                    <label className="text-sm font-semibold text-gray-700">
+                                        Quanto foi pago por unidade?
+                                    </label>
+                                    <Input
+                                        value={custoDigitado}
+                                        onChange={(ev) => setCustoDigitado(ev.target.value)}
+                                        inputMode="decimal"
+                                        placeholder="0,00"
+                                        className="text-xl font-bold h-14 text-center"
+                                        autoFocus
+                                    />
+                                    {Number(String(custoDigitado).replace(',', '.')) > 0 && (
+                                        <p className="text-center text-sm text-gray-500">
+                                            Total da compra:{' '}
+                                            <strong className="text-gray-800">
+                                                {formatCurrency(
+                                                    Number(confirmando.quantity)
+                                                    * Number(String(custoDigitado).replace(',', '.'))
+                                                )}
+                                            </strong>
+                                        </p>
+                                    )}
+                                </div>
+
+                                <div className="flex gap-3">
+                                    <Button
+                                        variant="outline" className="flex-1"
+                                        onClick={() => setConfirmando(null)}
+                                    >
+                                        Depois
+                                    </Button>
+                                    <Button
+                                        variant="success" className="flex-[2]"
+                                        onClick={confirmarCusto}
+                                        disabled={confirmandoSalvando || custoDigitado === ''}
+                                    >
+                                        {confirmandoSalvando && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                                        Confirmar
+                                    </Button>
+                                </div>
+
+                                <p className="text-xs text-gray-400 text-center">
+                                    Isso também passa a valer como o custo do produto.
+                                </p>
+                            </div>
+                        </div>
+                    )}
                 </div>
             </div>
 

@@ -20,9 +20,10 @@ const MENU_ITEMS = [
     { path: '/', label: 'Dashboard', icon: LayoutDashboard, exact: true, adminOnly: true },
     { path: '/venda', label: 'Venda (PDV)', icon: ScanBarcode },
     { path: '/produtos', label: 'Produtos', icon: Package },
-    // Estoque fica só com o admin: dar entrada exige digitar o custo de compra,
-    // que é exatamente o que o funcionário não deve ver.
-    { path: '/estoque', label: 'Estoque', icon: PackagePlus, adminOnly: true },
+    // Estoque agora atende os dois: o administrador dá entrada com custo e
+    // fornecedor, o funcionário informa só a quantidade que chegou. Quem recebe
+    // a mercadoria no balcão é ele, e antes não tinha como registrar.
+    { path: '/estoque', label: 'Estoque', icon: PackagePlus },
     // Abrir, sangrar e conferir caixa: tanto o administrador quanto o
     // funcionário precisam controlar o dinheiro da gaveta.
     { path: '/caixa', label: 'Caixa', icon: Wallet },

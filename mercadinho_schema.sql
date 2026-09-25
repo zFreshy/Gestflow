@@ -1064,6 +1064,17 @@ begin
     raise exception 'Informe ao menos uma forma de pagamento';
   end if;
 
+  -- Item sem produto (valor avulso, granel) usa o preco que o app mandou, e
+  -- sem esta checagem um "avulso" de -R$ 50 viraria um desconto disfarcado —
+  -- fora do campo de desconto, que e onde o administrador olha.
+  if exists (select 1
+               from jsonb_array_elements(p_items) as i
+              where coalesce((i->>'quantity')::numeric, 0) <= 0
+                 or coalesce((i->>'unit_price')::numeric, 0) < 0)
+  then
+    raise exception 'Item com quantidade ou valor invalido';
+  end if;
+
   -- Fiado sem dono e divida que ninguem consegue cobrar depois. A regra mora
   -- aqui, e nao so na tela, para que nenhum caminho consiga gravar assim.
   if p_customer_id is null
@@ -1353,14 +1364,16 @@ end $$;
 -- SO ADMINISTRADOR: tudo que revela dinheiro
 --
 -- sales/sale_items/sale_payments guardam faturamento, custo e lucro.
--- stock_entries e o quanto se paga ao fornecedor.
 -- O funcionario nao le nada disso — nem em consulta direta pela API.
+--
+-- `stock_entries` ja esteve nesta lista e saiu: a tela de Estoque passou a ser
+-- a mesma para os dois papeis, e as policies dela ficam mais abaixo.
 -- ----------------------------------------------------------------------------
 do $$
 declare
   t text;
 begin
-  foreach t in array array['sales', 'sale_items', 'sale_payments', 'stock_entries'] loop
+  foreach t in array array['sales', 'sale_items', 'sale_payments'] loop
     execute format($f$
       create policy "admin_select_%1$s" on public.%1$I
         for select to authenticated using (public.is_admin());
@@ -1389,6 +1402,30 @@ create policy "admin_insert_products" on public.products
 create policy "admin_update_products" on public.products
   for update to authenticated using (true);
 create policy "admin_delete_products" on public.products
+  for delete to authenticated using (public.is_admin());
+
+-- ----------------------------------------------------------------------------
+-- ENTRADAS DE ESTOQUE: a mesma tela para os dois
+--
+-- Quem recebe a mercadoria no balcao e o funcionario, e ele passou a usar a
+-- mesma tela do administrador: le as entradas com custo e fornecedor, e da
+-- entrada informando o custo se souber. Sem custo, o gatilho
+-- `fill_stock_entry_cost` completa com o do produto e marca para confirmar.
+--
+-- Excluir continua do administrador. Apagar entrada tira do estoque, e um
+-- clique errado some com mercadoria que esta na prateleira.
+--
+-- Sem policy de update: nada edita a linha direto. Confirmar custo passa por
+-- funcao, porque o custo do produto tem que andar junto.
+-- ----------------------------------------------------------------------------
+create policy "auth_select_stock_entries" on public.stock_entries
+  for select to authenticated using (true);
+-- Quem grava e quem esta logado: sem isso daria para lancar entrada no nome
+-- de outra pessoa.
+create policy "auth_insert_stock_entries" on public.stock_entries
+  for insert to authenticated
+  with check (user_id is not distinct from auth.uid());
+create policy "admin_delete_stock_entries" on public.stock_entries
   for delete to authenticated using (public.is_admin());
 
 -- View de venda: mesmos produtos, sem cost_price. Roda como dono para
@@ -1494,12 +1531,16 @@ create policy "admin_delete_employee_profiles" on public.employee_profiles
   for delete to authenticated using (public.is_admin());
 
 -- ----------------------------------------------------------------------------
--- CAIXA: so administrador, ponto
+-- CAIXA
 --
--- Abrir, sangrar e fechar caixa e conferir dinheiro — o oposto do que se
--- delega a quem opera o caixa. O funcionario continua vendendo normalmente; a
--- venda dele entra no turno aberto sem que ele precise (ou consiga) ver o
--- turno.
+-- Abrir, sangrar e fechar: os dois papeis fazem, sempre pelas funcoes
+-- `open_cash_session`, `add_cash_movement` e `close_cash_session`. Nenhuma
+-- escrita direta para o funcionario — com um update liberado na tabela, ele
+-- poderia reescrever o `counted_amount` de um fechamento e sumir com a falta.
+--
+-- Ler, cada um le o seu: o administrador ve todos os turnos; o funcionario so
+-- o que esta aberto agora. Turno fechado e historico de conferencia, e isso
+-- fica com o dono.
 --
 -- Sem policy de delete: turno de caixa nao se apaga. Fechamento que some leva
 -- junto a prova da falta que apareceu naquele dia.
@@ -1511,13 +1552,9 @@ create policy "admin_insert_cash_sessions" on public.cash_sessions
 create policy "admin_update_cash_sessions" on public.cash_sessions
   for update to authenticated using (public.is_admin());
 
--- Funcionário pode abrir, fechar e ver turnos de caixa.
 create policy "employee_select_cash_sessions" on public.cash_sessions
-  for select to authenticated using (public.is_employee());
-create policy "employee_insert_cash_sessions" on public.cash_sessions
-  for insert to authenticated with check (public.is_employee());
-create policy "employee_update_cash_sessions" on public.cash_sessions
-  for update to authenticated using (public.is_employee());
+  for select to authenticated
+  using (public.is_employee() and closed_at is null);
 
 create policy "admin_select_cash_movements" on public.cash_movements
   for select to authenticated using (public.is_admin());
@@ -1526,11 +1563,15 @@ create policy "admin_insert_cash_movements" on public.cash_movements
 create policy "admin_delete_cash_movements" on public.cash_movements
   for delete to authenticated using (public.is_admin());
 
--- Funcionário pode ver e registrar sangria/suprimento.
+-- So as sangrias do turno aberto. A subconsulta passa pelo RLS de
+-- `cash_sessions` acima, que ja esconde dele os turnos fechados.
 create policy "employee_select_cash_movements" on public.cash_movements
-  for select to authenticated using (public.is_employee());
-create policy "employee_insert_cash_movements" on public.cash_movements
-  for insert to authenticated with check (public.is_employee());
+  for select to authenticated
+  using (
+    public.is_employee()
+    and exists (select 1 from public.cash_sessions cs
+                 where cs.id = session_id and cs.closed_at is null)
+  );
 
 -- ----------------------------------------------------------------------------
 -- FISCAL
@@ -1623,12 +1664,16 @@ end;
 $$;
 
 /**
- * O administrador confirma quanto foi pago de verdade.
+ * Confirma quanto foi pago de verdade numa entrada.
  *
  * Passa por funcao, e nao por UPDATE direto, por causa do custo do produto: o
  * gatilho de estoque so roda em INSERT e DELETE, entao corrigir a linha sozinha
  * deixaria `products.cost_price` com a estimativa antiga. Aqui os dois andam
  * juntos.
+ *
+ * Administrador e funcionario confirmam: o funcionario ja pode informar o
+ * custo na hora da entrada, e barrar so a confirmacao posterior nao protegeria
+ * nada.
  */
 create or replace function public.confirm_stock_entry_cost(
   p_entry_id  uuid,
@@ -1642,8 +1687,8 @@ as $$
 declare
   v_entry public.stock_entries%rowtype;
 begin
-  if not public.is_admin() then
-    raise exception 'So o administrador confirma o custo';
+  if auth.uid() is null then
+    raise exception 'Precisa estar autenticado';
   end if;
 
   if p_unit_cost is null or p_unit_cost < 0 then
@@ -1662,7 +1707,21 @@ begin
    where id = p_entry_id;
 
   -- Mesma regra do gatilho: a compra mais recente define o custo do produto.
-  if v_entry.product_id is not null then
+  --
+  -- "Mais recente" de verdade. Confirmar hoje uma entrada da semana passada nao
+  -- pode passar por cima do custo de uma compra de ontem ja com valor real —
+  -- o produto voltaria ao preco antigo sem ninguem perceber. Entrada mais nova
+  -- ainda sem valor nao conta: o custo dela e estimativa, e o valor que acabou
+  -- de ser confirmado e informacao melhor.
+  if v_entry.product_id is not null
+     and not exists (
+       select 1 from public.stock_entries e
+        where e.product_id = v_entry.product_id
+          and e.id <> v_entry.id
+          and e.created_at > v_entry.created_at
+          and not e.awaiting_cost
+     )
+  then
     update public.products
        set cost_price = round(p_unit_cost, 2),
            updated_at = now()
@@ -1670,6 +1729,88 @@ begin
   end if;
 end;
 $$;
+
+/**
+ * Varias entradas de uma vez: "tudo foi comprado 30% abaixo do preco de venda".
+ *
+ * `p_items` e uma lista de { entry_id, unit_cost }. Quem calcula o valor de
+ * cada uma e o app, porque la mora a regra que o usuario montou (percentual
+ * geral, excecoes com outro percentual ou valor fixo) — aqui so se aplica.
+ *
+ * Em ordem de criacao, e numa transacao so. A ordem importa quando o mesmo
+ * produto tem duas entradas pendentes: a mais nova tem que ser a ultima a
+ * gravar o custo do produto. E a transacao unica evita o pior caso de um
+ * lote pela metade — metade confirmada, metade nao, e ninguem sabendo qual.
+ */
+create or replace function public.confirm_stock_entries_cost(p_items jsonb)
+returns integer
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  r       record;
+  v_count integer := 0;
+begin
+  if auth.uid() is null then
+    raise exception 'Precisa estar autenticado';
+  end if;
+
+  if p_items is null or jsonb_typeof(p_items) <> 'array' or jsonb_array_length(p_items) = 0 then
+    raise exception 'Nenhuma entrada para confirmar';
+  end if;
+
+  for r in
+    select e.id, (i->>'unit_cost')::numeric as unit_cost
+      from jsonb_array_elements(p_items) as i
+      join public.stock_entries e on e.id = (i->>'entry_id')::uuid
+     order by e.created_at, e.id
+  loop
+    perform public.confirm_stock_entry_cost(r.id, r.unit_cost);
+    v_count := v_count + 1;
+  end loop;
+
+  return v_count;
+end;
+$$;
+
+/**
+ * Entrada sem custo informado: completa com o custo do produto e marca.
+ *
+ * O custo passou a ser opcional na tela — quem recebe a mercadoria nem sempre
+ * sabe quanto foi pago. Mas `apply_stock_entry` grava `cost_price = unit_cost`
+ * a cada entrada, e uma entrada com custo zero apagaria o custo do produto; a
+ * margem do dashboard passaria a mentir sem erro nenhum na tela. Completando
+ * com o custo que o produto ja tem, o gatilho regrava o mesmo valor e nada se
+ * perde. `awaiting_cost` avisa que aquilo e estimativa.
+ *
+ * O total e recalculado sempre, com ou sem custo: e quantidade vezes unitario,
+ * e deixar o app mandar os dois separados permitiria gravar uma conta que nao
+ * fecha.
+ */
+create or replace function public.fill_stock_entry_cost()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if new.unit_cost is null then
+    select coalesce(cost_price, 0) into new.unit_cost
+      from public.products where id = new.product_id;
+    new.unit_cost     := coalesce(new.unit_cost, 0);
+    new.awaiting_cost := true;
+  end if;
+
+  new.total_cost := round(new.quantity * new.unit_cost, 2);
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_fill_stock_entry_cost on public.stock_entries;
+create trigger trg_fill_stock_entry_cost
+  before insert on public.stock_entries
+  for each row execute function public.fill_stock_entry_cost();
 
 -- ============================================================================
 -- VIEW: entradas sem valor, para o funcionario conferir o que lancou
@@ -1689,6 +1830,107 @@ revoke all on public.stock_entries_pos from anon, authenticated;
 grant select on public.stock_entries_pos to authenticated;
 
 -- ============================================================================
+-- ESTOQUE: a foto do que esta na prateleira
+--
+-- Quanto vale o que esta parado na loja, pelo custo (o que foi pago) e pelo
+-- preco de venda (o que entra se tudo sair), e quais produtos tem mais e menos.
+--
+-- Estoque negativo entra como zero nas somas. Ele aparece quando se vende mais
+-- do que se deu entrada — falha de lancamento, nao mercadoria —, e somado
+-- faria o valor do estoque encolher por causa de um erro de digitacao.
+--
+-- Roda como dono e fica aberto aos dois papeis: a tela de Estoque e a mesma
+-- para administrador e funcionario.
+-- ============================================================================
+drop view if exists public.inventory_products;
+create view public.inventory_products as
+  select p.id, p.name, p.barcode, p.category, p.unit,
+         p.stock_quantity, p.min_stock, p.cost_price, p.sale_price,
+         round(greatest(p.stock_quantity, 0) * p.cost_price, 2)  as cost_value,
+         round(greatest(p.stock_quantity, 0) * p.sale_price, 2)  as sale_value,
+         round(greatest(p.stock_quantity, 0) * (p.sale_price - p.cost_price), 2) as profit_value,
+         -- O PostgREST nao compara duas colunas num filtro; a view entrega
+         -- a comparacao pronta.
+         (p.min_stock > 0 and p.stock_quantity <= p.min_stock)   as is_low
+    from public.products p
+   where p.active
+     and auth.uid() is not null;
+
+revoke all on public.inventory_products from anon, authenticated;
+grant select on public.inventory_products to authenticated;
+
+create or replace function public.inventory_overview()
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path = public
+as $$
+declare
+  v_result jsonb;
+begin
+  if auth.uid() is null then
+    raise exception 'Precisa estar autenticado';
+  end if;
+
+  with p as (
+    select *, greatest(stock_quantity, 0) as qty
+      from public.products
+     where active
+  )
+  select jsonb_build_object(
+    'products',       (select count(*) from p),
+    'with_stock',     (select count(*) from p where stock_quantity > 0),
+    'zero',           (select count(*) from p where stock_quantity = 0),
+    'negative',       (select count(*) from p where stock_quantity < 0),
+    'low',            (select count(*) from p where min_stock > 0 and stock_quantity <= min_stock),
+    -- Sem custo e com mercadoria: a margem desses sai inflada, e a tela avisa.
+    'no_cost',        (select count(*) from p where cost_price <= 0 and stock_quantity > 0),
+    'units',          (select coalesce(sum(qty), 0) from p where unit not in ('kg', 'g', 'l', 'ml')),
+    'kg',             (select coalesce(sum(case when unit = 'g' then qty / 1000 else qty end), 0)
+                         from p where unit in ('kg', 'g')),
+    'cost_value',     (select coalesce(round(sum(qty * cost_price), 2), 0) from p),
+    'sale_value',     (select coalesce(round(sum(qty * sale_price), 2), 0) from p),
+    'by_category',    coalesce((
+        select jsonb_agg(c order by c.sale_value desc)
+          from (select coalesce(nullif(btrim(category), ''), 'Sem categoria') as category,
+                       count(*)                             as products,
+                       round(sum(qty * cost_price), 2)      as cost_value,
+                       round(sum(qty * sale_price), 2)      as sale_value
+                  from p
+                 group by 1) c
+      ), '[]'::jsonb),
+    'most',           coalesce((
+        select jsonb_agg(m) from (
+          select id, name, unit, stock_quantity, sale_price
+            from p where stock_quantity > 0
+           order by stock_quantity desc, name limit 8) m
+      ), '[]'::jsonb),
+    -- Menor saldo que ainda existe. Zerados tem contagem propria; listar aqui
+    -- encheria o quadro de produto que simplesmente acabou.
+    'least',          coalesce((
+        select jsonb_agg(l) from (
+          select id, name, unit, stock_quantity, min_stock, sale_price
+            from p where stock_quantity > 0
+           order by stock_quantity asc, name limit 8) l
+      ), '[]'::jsonb),
+    -- Onde o dinheiro esta parado.
+    'top_value',      coalesce((
+        select jsonb_agg(t) from (
+          select id, name, unit, stock_quantity,
+                 round(qty * cost_price, 2) as cost_value,
+                 round(qty * sale_price, 2) as sale_value
+            from p where qty > 0
+           order by qty * sale_price desc, name limit 8) t
+      ), '[]'::jsonb)
+  )
+  into v_result;
+
+  return v_result;
+end;
+$$;
+
+-- ============================================================================
 -- RPCs DO CAIXA
 --
 -- Abertura e fechamento passam por funcao, e nao por insert/update direto, por
@@ -1702,9 +1944,9 @@ grant select on public.stock_entries_pos to authenticated;
  * Quanto o sistema espera na gaveta agora: abertura + dinheiro + suprimentos - sangrias.
  *
  * SECURITY DEFINER para conseguir somar `sale_payments`, que so o administrador
- * le. Por isso mesmo checa o papel por dentro: sem essa checagem, ela seria uma
- * fresta pela qual o funcionario descobriria o dinheiro do dia — bastaria
- * chamar a funcao direto pela API com o id do turno.
+ * le. Por isso mesmo checa o papel por dentro: o funcionario fecha o caixa e
+ * precisa do esperado do turno aberto, mas so dele — sem a checagem, bastaria
+ * chamar a funcao pela API com o id de um turno antigo.
  */
 create or replace function public.cash_session_expected(p_session_id uuid)
 returns numeric
@@ -1713,7 +1955,12 @@ stable
 security definer
 set search_path = public
 as $$
-  select case when not public.is_admin() then null else round(
+  select case when not (
+           public.is_admin()
+           or (auth.uid() is not null
+               and exists (select 1 from public.cash_sessions
+                            where id = p_session_id and closed_at is null))
+         ) then null else round(
     coalesce((select opening_amount from public.cash_sessions where id = p_session_id), 0)
     -- So a parte em dinheiro. Cartao, PIX e fiado nao passam pela gaveta.
     + coalesce((select sum(sp.amount)
@@ -1741,8 +1988,9 @@ declare
   v_id    uuid;
   v_email text;
 begin
-  if not public.is_admin() then
-    raise exception 'So o administrador abre o caixa';
+  -- Administrador e funcionario: quem opera o balcao abre, sangra e fecha.
+  if auth.uid() is null then
+    raise exception 'Precisa estar autenticado';
   end if;
 
   if exists (select 1 from public.cash_sessions where closed_at is null) then
@@ -1774,8 +2022,9 @@ declare
   v_expected numeric(10,2);
   v_email    text;
 begin
-  if not public.is_admin() then
-    raise exception 'So o administrador fecha o caixa';
+  -- Administrador e funcionario: quem opera o balcao abre, sangra e fecha.
+  if auth.uid() is null then
+    raise exception 'Precisa estar autenticado';
   end if;
 
   if p_counted_amount is null or p_counted_amount < 0 then
@@ -1822,8 +2071,9 @@ declare
   v_id      uuid;
   v_email   text;
 begin
-  if not public.is_admin() then
-    raise exception 'So o administrador registra sangria e suprimento';
+  -- Administrador e funcionario: quem opera o balcao abre, sangra e fecha.
+  if auth.uid() is null then
+    raise exception 'Precisa estar autenticado';
   end if;
 
   if p_kind not in ('sangria', 'suprimento') then
@@ -1862,9 +2112,12 @@ $$;
 -- foi congelado no fechamento. Assim a mesma tela serve para acompanhar o dia
 -- e para revisar o passado, sem que o passado se mexa.
 -- ============================================================================
+-- Roda como dono, e nao como quem consulta: as somas leem `sales` e
+-- `sale_payments`, que o funcionario nao le, e com `security_invoker` o turno
+-- dele apareceria com vendas zeradas — e o esperado da gaveta errado bem na
+-- hora de fechar. Quem filtra o que cada um ve e o `where` do fim.
 drop view if exists public.cash_session_summary;
 create view public.cash_session_summary
-  with (security_invoker = true)
 as
   select cs.*,
          coalesce((select sum(sp.amount)
@@ -1884,7 +2137,10 @@ as
               then public.cash_session_expected(cs.id)
               else cs.expected_amount
          end                                                       as expected_now
-    from public.cash_sessions cs;
+    from public.cash_sessions cs
+   -- Funcionario: so o turno aberto. Administrador: todos.
+   where public.is_admin()
+      or (auth.uid() is not null and cs.closed_at is null);
 
 revoke all on public.cash_session_summary from anon, authenticated;
 grant select on public.cash_session_summary to authenticated;
@@ -2103,6 +2359,9 @@ revoke all on function public.add_cash_movement(text, numeric, text) from public
 revoke all on function public.cash_session_expected(uuid) from public, anon;
 revoke all on function public.create_stock_entry_employee(uuid, numeric, text) from public, anon;
 revoke all on function public.confirm_stock_entry_cost(uuid, numeric) from public, anon;
+revoke all on function public.confirm_stock_entries_cost(jsonb) from public, anon;
+revoke all on function public.inventory_overview() from public, anon;
+revoke all on function public.fill_stock_entry_cost() from public, anon;
 revoke all on function public.dashboard_totals(timestamptz, timestamptz) from public, anon;
 revoke all on function public.dashboard_daily(date, date) from public, anon;
 revoke all on function public.dashboard_hourly(timestamptz, timestamptz) from public, anon;
@@ -2137,6 +2396,8 @@ grant execute on function public.cash_session_expected(uuid) to authenticated;
 -- dentro — o grant e a primeira porta, nao a unica.
 grant execute on function public.create_stock_entry_employee(uuid, numeric, text) to authenticated;
 grant execute on function public.confirm_stock_entry_cost(uuid, numeric) to authenticated;
+grant execute on function public.confirm_stock_entries_cost(jsonb) to authenticated;
+grant execute on function public.inventory_overview() to authenticated;
 
 -- As do dashboard tambem checam is_admin() por dentro: para o funcionario elas
 -- respondem vazio, e nao com erro — a tela dele simplesmente nao as chama.

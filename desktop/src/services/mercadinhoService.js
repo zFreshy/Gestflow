@@ -540,11 +540,22 @@ export async function listSaleItemsByPeriod({ from, to } = {}) {
 // Entradas de estoque (despesas de reestoque)
 // ---------------------------------------------------------------------------
 
+/**
+ * Dá entrada no estoque. Serve aos dois papéis.
+ *
+ * O custo é opcional: quem recebe a mercadoria nem sempre sabe quanto foi
+ * pago. Sem ele vai `null`, e não zero — o banco completa com o custo que o
+ * produto já tem e marca a entrada como "custo a confirmar". Zero apagaria o
+ * custo do produto, porque cada entrada vira o custo da compra mais recente.
+ *
+ * O total também é do banco: quantidade × unitário, sempre.
+ */
 export async function createStockEntry(entry) {
     const { data: { user } } = await supabase.auth.getUser();
 
     const quantity = Number(entry.quantity);
-    const unitCost = Number(entry.unit_cost);
+    const temCusto = entry.unit_cost !== null && entry.unit_cost !== undefined
+        && entry.unit_cost !== '';
 
     const { data, error } = await supabase
         .from('stock_entries')
@@ -553,8 +564,8 @@ export async function createStockEntry(entry) {
             barcode: entry.barcode ?? null,
             product_name: entry.product_name,
             quantity,
-            unit_cost: unitCost,
-            total_cost: Number((quantity * unitCost).toFixed(2)),
+            unit_cost: temCusto ? Number(entry.unit_cost) : null,
+            total_cost: null,
             supplier_id: entry.supplier_id || null,
             entry_date: entry.entry_date,
             payment_method: entry.payment_method || null,
@@ -569,42 +580,7 @@ export async function createStockEntry(entry) {
     return data;
 }
 
-/**
- * Entrada de estoque lancada pelo funcionario.
- *
- * Ele manda so o produto e a quantidade. O custo NAO sai daqui: quem le e o
- * banco, do proprio produto.
- *
- * Isso nao e economia de digitacao, e sim o que impede um estrago. O trigger de
- * entrada grava `cost_price = unit_cost` a cada linha; mandar zero daqui
- * apagaria o custo do produto e a margem do dashboard passaria a mentir sem
- * erro nenhum na tela. A entrada fica marcada como "custo a confirmar" para o
- * administrador preencher o valor real depois.
- */
-export async function createStockEntryAsEmployee({ productId, quantity, note = null }) {
-    const { data, error } = await supabase.rpc('create_stock_entry_employee', {
-        p_product_id: productId,
-        p_quantity: Number(quantity),
-        p_note: note?.trim() || null,
-    });
-
-    if (error) throw error;
-    return data;
-}
-
-/** Entradas sem os valores — e o que o funcionario pode ler. */
-export async function listStockEntriesPos({ limit = 30 } = {}) {
-    const { data, error } = await supabase
-        .from('stock_entries_pos')
-        .select('*')
-        .order('created_at', { ascending: false })
-        .limit(limit);
-
-    if (error) throw error;
-    return data ?? [];
-}
-
-/** O administrador informa quanto foi pago de fato. Atualiza o custo do produto junto. */
+/** Informa quanto foi pago de fato. Atualiza o custo do produto junto. */
 export async function confirmStockEntryCost({ entryId, unitCost }) {
     const { error } = await supabase.rpc('confirm_stock_entry_cost', {
         p_entry_id: entryId,
@@ -614,10 +590,49 @@ export async function confirmStockEntryCost({ entryId, unitCost }) {
     if (error) throw error;
 }
 
+/**
+ * Confirma várias entradas de uma vez — o "tudo comprado 30% abaixo da venda".
+ *
+ * `items`: [{ entryId, unitCost }]. Numa chamada só porque o banco aplica tudo
+ * numa transação: um lote que caísse pela metade deixaria parte confirmada e
+ * parte não, sem a tela saber qual.
+ */
+export async function confirmStockEntriesCost(items) {
+    const { data, error } = await supabase.rpc('confirm_stock_entries_cost', {
+        p_items: items.map((i) => ({
+            entry_id: i.entryId,
+            unit_cost: Number(Number(i.unitCost).toFixed(2)),
+        })),
+    });
+
+    if (error) throw error;
+    return data;
+}
+
+/**
+ * Entradas ainda com custo estimado, de qualquer data.
+ *
+ * Não usa o período da tela: uma entrada esquecida do mês passado continua
+ * precisando do valor, e filtrar por data a esconderia justamente de quem
+ * foi confirmar. Traz o preço de venda do produto para o cálculo por
+ * percentual.
+ */
+export async function listAwaitingCostEntries() {
+    const { data, error } = await supabase
+        .from('stock_entries')
+        .select('id, product_id, product_name, quantity, unit_cost, entry_date, created_at, user_email, products(sale_price, unit)')
+        .eq('awaiting_cost', true)
+        .order('created_at', { ascending: true });
+
+    if (error) throw error;
+    return data ?? [];
+}
+
 export async function listStockEntries({ from, to, limit = 100 } = {}) {
     let query = supabase
         .from('stock_entries')
-        .select('*, suppliers(id, name)')
+        // `products(sale_price)`: a confirmação por percentual parte do preço de venda.
+        .select('*, suppliers(id, name), products(sale_price)')
         .order('entry_date', { ascending: false })
         .order('created_at', { ascending: false })
         .limit(limit);
@@ -633,6 +648,65 @@ export async function listStockEntries({ from, to, limit = 100 } = {}) {
 export async function deleteStockEntry(id) {
     const { error } = await supabase.from('stock_entries').delete().eq('id', id);
     if (error) throw error;
+}
+
+// ---------------------------------------------------------------------------
+// Estoque: a foto do que está na prateleira
+// ---------------------------------------------------------------------------
+
+/** Totais, categorias e rankings, já somados no banco. */
+export async function getInventoryOverview() {
+    const { data, error } = await supabase.rpc('inventory_overview');
+    if (error) throw error;
+    return data;
+}
+
+const INVENTORY_ORDER = {
+    nome: ['name', true],
+    maisEstoque: ['stock_quantity', false],
+    menosEstoque: ['stock_quantity', true],
+    maisValor: ['sale_value', false],
+    maisCusto: ['cost_value', false],
+};
+
+/**
+ * Produtos com o valor parado em cada um, uma página por vez.
+ *
+ * Lê `inventory_products`, que traz o valor de custo e de venda já
+ * calculados — é o que permite ordenar por "onde tem mais dinheiro parado",
+ * coisa que o PostgREST não faria com uma conta entre colunas.
+ */
+export async function listInventory({
+    limit = 50,
+    offset = 0,
+    search = '',
+    category = '',
+    situation = 'todos',
+    order = 'maisValor',
+} = {}) {
+    let query = supabase
+        .from('inventory_products')
+        .select('*', { count: 'exact' });
+
+    if (category) query = query.eq('category', category);
+
+    const term = search.trim();
+    if (term) query = query.or(`name.ilike.%${term}%,barcode.ilike.%${term}%`);
+
+    if (situation === 'comEstoque') query = query.gt('stock_quantity', 0);
+    else if (situation === 'zerado') query = query.lte('stock_quantity', 0);
+    else if (situation === 'baixo') query = query.eq('is_low', true);
+    else if (situation === 'semCusto') query = query.lte('cost_price', 0);
+
+    const [column, ascending] = INVENTORY_ORDER[order] ?? INVENTORY_ORDER.maisValor;
+    query = query
+        .order(column, { ascending })
+        .order('name', { ascending: true })
+        .range(offset, offset + limit - 1);
+
+    const { data, error, count } = await query;
+    if (error) throw error;
+    return { rows: data ?? [], total: count ?? 0 };
 }
 
 // ---------------------------------------------------------------------------

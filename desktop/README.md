@@ -16,7 +16,7 @@ Não mexe em `transactions`: a parte financeira do site continua intacta.
 | **Dashboard** | Vendas do dia e do mês, lucro bruto, gasto com reposição, mais vendidos, alerta de estoque baixo |
 | **Venda (PDV)** | Bipa o produto, monta o carrinho, calcula troco e fecha a venda |
 | **Produtos** | Cadastro por código de barras, preço de venda, margem, estoque mínimo |
-| **Estoque** | Entradas de reposição (as "despesas" do mercadinho) com fornecedor e custo |
+| **Estoque** | Duas abas: **Entradas** (reposição, com custo em R$ ou % abaixo da venda) e **Estoque** (quanto vale o que está na loja, a custo e a venda, e o que tem mais e menos) |
 | **Fiado** | Quem deve, quanto já pagou, e o recebimento das dívidas |
 | **Histórico** | Vendas filtradas por período, forma de pagamento e valor, com estorno |
 | **Crédito da loja** | O que cada funcionário pegou para descontar no pagamento |
@@ -347,9 +347,15 @@ Cadastrar cliente novo não funciona offline, de propósito: o fiado precisa de 
 id do banco para apontar, e inventar um aqui daria dois cadastros da mesma
 pessoa assim que a fila subisse.
 
-**Caixa: abertura, sangria e fechamento.** Tela só de administrador — abrir,
-sangrar e conferir é mexer em dinheiro fora da venda. O funcionário continua
-vendendo, e as vendas dele entram no turno aberto sozinhas.
+**Caixa: abertura, sangria e fechamento.** Administrador e funcionário abrem,
+sangram e fecham — quem opera o balcão é quem está com a gaveta. A diferença é
+o que cada um vê: o funcionário enxerga só o turno aberto agora; o histórico de
+fechamentos é do administrador. O banco aplica isso, não só a tela.
+
+Toda escrita passa pelas funções `open_cash_session`, `add_cash_movement` e
+`close_cash_session`. Nenhum update direto na tabela fica liberado para o
+funcionário: com ele daria para reescrever o valor contado de um fechamento
+antigo e sumir com a falta.
 
 O valor esperado na gaveta é calculado pelo banco (abertura + vendas em
 dinheiro + suprimentos − sangrias), nunca pelo app: conferência com número
@@ -608,28 +614,52 @@ uns 6 KB e três vias uns 18 — passar disso significa que algo saiu do lugar
 montando os bytes, e enviar assim gastaria a bobina inteira antes de alguém
 alcançar o botão da impressora.
 
-### Entrada de estoque pelo funcionário
+### Entrada de estoque: custo opcional, em reais ou percentual
 
-Quem está no balcão quando o entregador chega é o funcionário, e a tela de
-Estoque sempre pediu o **custo de compra** — justamente o que ele não pode ver.
-O resultado era mercadoria na prateleira sem entrada no sistema até o dono
-sentar para lançar.
+Quem está no balcão quando o entregador chega é o funcionário, e ele usa a
+mesma tela de Estoque do dono. O **custo é opcional** para os dois: quem não
+sabe quanto foi pago deixa em branco, e a entrada fica marcada como *custo a
+confirmar*. Excluir entrada continua só com o administrador — tira do estoque.
 
-Agora **Estoque** atende os dois papéis. O administrador continua dando entrada
-com custo, fornecedor e forma de pagamento. O funcionário informa **só a
-quantidade**, e a entrada fica marcada como *custo a confirmar*.
+Em branco vai `null`, e não zero, e quem completa é o banco. Isso não é
+detalhe: o gatilho de entrada faz `cost_price = unit_cost` a cada linha, então
+uma entrada gravada com zero **apagaria o custo do produto**, e a margem do
+dashboard passaria a mentir sem nenhum erro na tela. O gatilho
+`fill_stock_entry_cost` completa com o custo que o produto já tem; o valor é
+regravado igual e nada se perde.
 
-O custo não vem do app: é lido do próprio produto, dentro do banco. Isso não é
-economia de digitação, é o que impede um estrago — o gatilho de entrada faz
-`cost_price = unit_cost` a cada linha, então uma entrada gravada com zero
-**apagaria o custo do produto**, e a margem do dashboard passaria a mentir sem
-nenhum erro na tela. Lendo o custo que o produto já tem, o gatilho regrava o
-mesmo valor e nada se perde.
+O custo pode ser digitado em reais ou como **"X% abaixo do preço de venda"** —
+é assim que muita compra chega, sem nota por item. A tela mostra a conta
+(`venda R$ 10,00 − 30% = custo R$ 7,00`) para quem digitou 30 perceber se
+queria 3.
 
-O valor gravado é estimativa, não o que foi pago. Por isso a entrada aparece
-marcada na tela do administrador, com um botão para informar o valor real —
-que atualiza a entrada **e** o custo do produto de uma vez, porque o gatilho de
-estoque só roda em INSERT e DELETE.
+**Confirmar em lote.** As entradas pendentes, de qualquer data, podem ser
+confirmadas de uma vez: um percentual geral, e exceções por linha (outro
+percentual, valor fixo em reais ou pular). Vai numa transação só — um lote pela
+metade deixaria parte confirmada e parte não, sem saber qual.
 
-O funcionário lê as entradas por `stock_entries_pos`, uma view sem custo,
-fornecedor nem forma de pagamento — o que ele vê é produto, quantidade e data.
+Confirmar atualiza a entrada **e** o custo do produto, mas só se não houver uma
+compra mais nova com valor já confirmado. Sem essa checagem, confirmar hoje
+uma entrada da semana passada faria o produto voltar ao preço antigo.
+
+### A aba Estoque
+
+Quanto vale o que está parado na loja pelo custo e pelo preço de venda, o lucro
+possível, os que têm mais e menos, onde está o dinheiro, e o quanto por
+categoria. Os totais vêm somados do banco (`inventory_overview`), e a tabela
+completa lê `inventory_products`, uma view com o valor de cada produto já
+calculado — é o que deixa ordenar por "mais dinheiro parado".
+
+Estoque negativo entra como zero nas somas: ele aparece quando se vende mais
+do que se deu entrada, e é falha de lançamento, não mercadoria. Produto com
+estoque e sem custo é contado à parte, porque o lucro possível dele sai
+inflado.
+
+### Valor avulso no PDV
+
+O botão **Valor avulso** (ou `F4`) soma na venda um valor que não é produto:
+taxa de entrega, sacola, um item sem cadastro que não dá para parar a fila por
+causa dele. Vira uma linha sem `product_id` — o banco grava nome e preço como
+vieram e não mexe no estoque. O `create_sale` recusa quantidade ou valor
+negativo: sem isso, um avulso de −R$ 50 seria um desconto fora do campo de
+desconto, onde ninguém olha.

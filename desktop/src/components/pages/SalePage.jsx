@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     ScanBarcode, Search, Trash2, Plus, Minus, Camera, Loader2,
-    AlertTriangle, PackageX, ShoppingCart, Pencil,
+    AlertTriangle, PackageX, ShoppingCart, Pencil, CirclePlus,
 } from 'lucide-react';
 import { Button } from '../atoms/Button';
 import { Input } from '../atoms/Input';
@@ -16,6 +16,7 @@ import { CameraScannerModal } from '../organisms/CameraScannerModal';
 import { ProductFormModal } from '../organisms/ProductFormModal';
 import { CheckoutModal } from '../organisms/CheckoutModal';
 import { WeightPromptModal } from '../organisms/WeightPromptModal';
+import { ExtraValueModal } from '../organisms/ExtraValueModal';
 
 /**
  * Unidades que se vendem por peso ou volume.
@@ -42,6 +43,8 @@ export function SalePage() {
     // Produto por peso esperando a quantidade; null quando não há nenhum.
     const [pesando, setPesando] = useState(null);
     const [scaleConfig, setScaleConfig] = useState(SCALE_DEFAULTS);
+    // Valor avulso: `true` para um novo, a linha do carrinho para editar.
+    const [avulso, setAvulso] = useState(null);
 
     useEffect(() => { getScaleConfig().then(setScaleConfig); }, []);
 
@@ -120,6 +123,38 @@ export function SalePage() {
         setTimeout(() => setFlashId(null), 700);
         focusScan();
     }, [focusScan]);
+
+    /**
+     * Valor que entra na venda sem ser produto (taxa, sacola, item sem cadastro).
+     *
+     * Sem `product_id`: o banco grava nome e preço como vieram e não mexe no
+     * estoque. Custo zero, porque não há compra por trás — o valor inteiro é
+     * receita.
+     */
+    const saveAvulso = ({ amount, description }, editing) => {
+        const item = {
+            key: editing?.key ?? `avulso-${crypto.randomUUID()}`,
+            avulso: true,
+            product_id: null,
+            barcode: null,
+            product_name: description || 'Valor avulso',
+            description,
+            unit: 'un',
+            quantity: editing?.quantity ?? 1,
+            unit_price: amount,
+            unit_cost: 0,
+            stock_quantity: 0,
+        };
+
+        setCart((prev) => (editing
+            ? prev.map((i) => (i.key === editing.key ? item : i))
+            : [...prev, item]));
+
+        setFlashId(item.key);
+        setTimeout(() => setFlashId(null), 700);
+        setAvulso(null);
+        focusScan();
+    };
 
     const changeQuantity = (key, delta) => {
         setCart((prev) => prev
@@ -254,17 +289,21 @@ export function SalePage() {
         [cart]
     );
 
-    // F2 fecha a venda sem tirar a mão do leitor.
+    // F2 fecha a venda e F4 lança valor avulso, sem tirar a mão do leitor.
     useEffect(() => {
         const onKey = (e) => {
-            if (e.key === 'F2' && cart.length > 0 && !checkoutOpen) {
+            if (checkoutOpen || avulso) return;
+            if (e.key === 'F2' && cart.length > 0) {
                 e.preventDefault();
                 setCheckoutOpen(true);
+            } else if (e.key === 'F4') {
+                e.preventDefault();
+                setAvulso(true);
             }
         };
         window.addEventListener('keydown', onKey);
         return () => window.removeEventListener('keydown', onKey);
-    }, [cart.length, checkoutOpen]);
+    }, [cart.length, checkoutOpen, avulso]);
 
     return (
         <div className="flex gap-6 h-full">
@@ -302,6 +341,15 @@ export function SalePage() {
                         >
                             <Camera className="h-5 w-5 mr-2" />
                             Câmera
+                        </Button>
+                        <Button
+                            variant="outline"
+                            className="h-16 px-5"
+                            onClick={() => setAvulso(true)}
+                            title="Somar um valor que não é produto (F4)"
+                        >
+                            <CirclePlus className="h-5 w-5 mr-2" />
+                            Valor avulso
                         </Button>
                     </div>
 
@@ -415,22 +463,27 @@ export function SalePage() {
                                 </thead>
                                 <tbody>
                                     {cart.map((item) => {
-                                        const insufficient = item.quantity > item.stock_quantity;
+                                        // Avulso não tem estoque para faltar.
+                                        const insufficient = !item.avulso && item.quantity > item.stock_quantity;
 
                                         return (
                                             <tr
                                                 key={item.key}
                                                 className={cn(
                                                     "border-b border-gray-50 last:border-0",
-                                                    flashId === item.product_id && "scan-flash"
+                                                    flashId === item.key && "scan-flash"
                                                 )}
                                             >
                                                 <td className="px-5 py-3">
                                                     <p className="text-sm font-semibold text-gray-900">{item.product_name}</p>
                                                     <div className="flex items-center gap-2 mt-0.5">
-                                                        <span className="text-xs text-gray-400 font-mono">
-                                                            {item.barcode || 'sem código'}
-                                                        </span>
+                                                        {item.avulso ? (
+                                                            <Badge variant="brand">valor avulso</Badge>
+                                                        ) : (
+                                                            <span className="text-xs text-gray-400 font-mono">
+                                                                {item.barcode || 'sem código'}
+                                                            </span>
+                                                        )}
                                                         {insufficient && (
                                                             <Badge variant="warning">
                                                                 estoque {item.stock_quantity}
@@ -479,6 +532,9 @@ export function SalePage() {
                                                         <button
                                                             onClick={async (e) => {
                                                                 e.stopPropagation();
+                                                                // Avulso não tem cadastro: o lápis
+                                                                // reabre o próprio valor.
+                                                                if (item.avulso) { setAvulso(item); return; }
                                                                 setBusy(true);
                                                                 try {
                                                                     const p = await getProduct(item.product_id);
@@ -491,7 +547,7 @@ export function SalePage() {
                                                                 }
                                                             }}
                                                             className="h-6 w-6 rounded-md flex items-center justify-center text-gray-400 hover:text-[#7E1A8B] hover:bg-[#7E1A8B]/10 transition-colors"
-                                                            title="Editar produto"
+                                                            title={item.avulso ? 'Editar valor' : 'Editar produto'}
                                                         >
                                                             <Pencil className="h-3 w-3" />
                                                         </button>
@@ -544,7 +600,8 @@ export function SalePage() {
                     </Button>
 
                     <p className="text-center text-xs text-gray-400">
-                        Atalho: <kbd className="px-1.5 py-0.5 rounded bg-gray-100 font-semibold">F2</kbd> fecha a venda
+                        <kbd className="px-1.5 py-0.5 rounded bg-gray-100 font-semibold">F2</kbd> fecha a venda ·{' '}
+                        <kbd className="px-1.5 py-0.5 rounded bg-gray-100 font-semibold">F4</kbd> valor avulso
                     </p>
                 </div>
             </div>
@@ -567,6 +624,17 @@ export function SalePage() {
                         setPesando(null);
                     }}
                     onCancel={() => { setPesando(null); focusScan(); }}
+                />
+            )}
+
+            {avulso && (
+                <ExtraValueModal
+                    initial={avulso === true ? null : {
+                        amount: avulso.unit_price,
+                        description: avulso.description,
+                    }}
+                    onConfirm={(v) => saveAvulso(v, avulso === true ? null : avulso)}
+                    onCancel={() => { setAvulso(null); focusScan(); }}
                 />
             )}
 

@@ -20,9 +20,8 @@ const MENU_ITEMS = [
     { path: '/', label: 'Dashboard', icon: LayoutDashboard, exact: true, adminOnly: true },
     { path: '/venda', label: 'Venda (PDV)', icon: ScanBarcode },
     { path: '/produtos', label: 'Produtos', icon: Package },
-    // Estoque agora atende os dois: o administrador dá entrada com custo e
-    // fornecedor, o funcionário informa só a quantidade que chegou. Quem recebe
-    // a mercadoria no balcão é ele, e antes não tinha como registrar.
+    // Estoque é a mesma tela para os dois: quem recebe a mercadoria no balcão é
+    // o funcionário, e ele precisa ver o que tem para saber o que pedir.
     { path: '/estoque', label: 'Estoque', icon: PackagePlus },
     // Abrir, sangrar e conferir caixa: tanto o administrador quanto o
     // funcionário precisam controlar o dinheiro da gaveta.

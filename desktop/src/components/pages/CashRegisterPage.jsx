@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
     Wallet, Loader2, LockOpen, Lock, ArrowDownLeft, ArrowUpRight,
-    ChevronDown, ChevronRight, Scale, Banknote,
+    ChevronDown, ChevronRight, Scale, Banknote, CheckCircle2,
 } from 'lucide-react';
 import { Button } from '../atoms/Button';
 import { Input } from '../atoms/Input';
@@ -14,15 +14,19 @@ import {
     getOpenCashSession, listCashSessions, listCashMovements,
     openCashSession, closeCashSession, addCashMovement,
 } from '../../services/mercadinhoService';
+import { useProfile } from '../../contexts/ProfileContext';
 
 /**
  * Caixa: abertura, sangria e fechamento.
  *
- * Tela de administrador. O funcionário continua vendendo normalmente e as
- * vendas dele entram no turno aberto sozinhas — ele só não abre, não sangra e
- * não confere, que é onde o dinheiro é manuseado fora da venda.
+ * Os dois papéis operam o turno: quem está no balcão abre, sangra e fecha. A
+ * diferença está no que cada um vê — o administrador tem o histórico de
+ * todos os fechamentos; o funcionário, só o turno aberto agora. Turno fechado
+ * é conferência, e conferência é do dono. O banco aplica a mesma regra, então
+ * esconder aqui é só para não mostrar uma lista que viria vazia.
  */
 export function CashRegisterPage() {
+    const { isAdmin } = useProfile();
     const [session, setSession] = useState(null);
     const [movements, setMovements] = useState([]);
     const [history, setHistory] = useState([]);
@@ -45,6 +49,9 @@ export function CashRegisterPage() {
     const [counted, setCounted] = useState('');
     const [closingNote, setClosingNote] = useState('');
     const [closing, setClosing] = useState(false);
+    // Resultado do fechamento que acabou de acontecer. Para o funcionário é a
+    // única chance de ver: depois de fechado, o turno sai da vista dele.
+    const [fechamento, setFechamento] = useState(null);
 
     const range = useMemo(() => (
         preset === 'custom'
@@ -58,10 +65,12 @@ export function CashRegisterPage() {
             const open = await getOpenCashSession();
             setSession(open);
             setMovements(open ? await listCashMovements(open.id) : []);
-            setHistory(await listCashSessions({
-                from: dayStartInstant(range.from),
-                to: dayEndInstant(range.to),
-            }));
+            setHistory(isAdmin
+                ? await listCashSessions({
+                    from: dayStartInstant(range.from),
+                    to: dayEndInstant(range.to),
+                })
+                : []);
         } catch (err) {
             console.error(err);
             setError('Não consegui carregar o caixa.');
@@ -70,7 +79,8 @@ export function CashRegisterPage() {
         }
     };
 
-    useEffect(() => { load(); }, [range.from, range.to]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    useEffect(() => { load(); }, [range.from, range.to, isAdmin]);
 
     const run = async (action, onDone) => {
         setError('');
@@ -91,7 +101,7 @@ export function CashRegisterPage() {
 
     const handleOpen = () => run(
         () => openCashSession({ openingAmount: openingAmount || 0, note: openingNote || null }),
-        () => { setOpeningAmount(''); setOpeningNote(''); }
+        () => { setOpeningAmount(''); setOpeningNote(''); setFechamento(null); }
     );
 
     const handleMovement = () => run(
@@ -103,10 +113,20 @@ export function CashRegisterPage() {
         () => { setMovementAmount(''); setMovementReason(''); }
     );
 
-    const handleClose = () => run(
-        () => closeCashSession({ countedAmount: counted, note: closingNote || null }),
-        () => { setCounted(''); setClosingNote(''); setClosing(false); }
-    );
+    const handleClose = () => {
+        // Guardado antes: depois do fechamento o turno some da tela.
+        const resumo = {
+            expected: Number(session?.expected_now ?? 0),
+            counted: Number(counted),
+        };
+        return run(
+            () => closeCashSession({ countedAmount: counted, note: closingNote || null }),
+            () => {
+                setFechamento({ ...resumo, difference: resumo.counted - resumo.expected });
+                setCounted(''); setClosingNote(''); setClosing(false);
+            }
+        );
+    };
 
     const difference = useMemo(() => {
         if (!session || counted === '') return null;
@@ -146,6 +166,34 @@ export function CashRegisterPage() {
             {error && (
                 <div className="bg-red-50 text-red-600 p-4 rounded-xl text-sm font-medium border border-red-100">
                     {error}
+                </div>
+            )}
+
+            {fechamento && !session && (
+                <div className={cn(
+                    "rounded-2xl border p-6 max-w-xl flex items-start gap-4",
+                    Math.abs(fechamento.difference) < 0.01 ? "bg-emerald-50 border-emerald-200"
+                        : fechamento.difference > 0 ? "bg-blue-50 border-blue-200" : "bg-red-50 border-red-200"
+                )}>
+                    <CheckCircle2 className="h-6 w-6 shrink-0 text-gray-700 mt-0.5" />
+                    <div className="flex-1 space-y-1">
+                        <p className="font-bold text-gray-900">Caixa fechado</p>
+                        <div className="flex justify-between text-sm text-gray-600">
+                            <span>Esperado</span><span className="font-semibold">{formatCurrency(fechamento.expected)}</span>
+                        </div>
+                        <div className="flex justify-between text-sm text-gray-600">
+                            <span>Contado</span><span className="font-semibold">{formatCurrency(fechamento.counted)}</span>
+                        </div>
+                        <div className="flex justify-between items-baseline pt-1">
+                            <span className="font-bold text-gray-900">
+                                {Math.abs(fechamento.difference) < 0.01 ? 'Bateu certo'
+                                    : fechamento.difference > 0 ? 'Sobra' : 'Falta'}
+                            </span>
+                            <span className="text-lg font-extrabold text-gray-900">
+                                {formatCurrency(Math.abs(fechamento.difference))}
+                            </span>
+                        </div>
+                    </div>
                 </div>
             )}
 
@@ -427,8 +475,9 @@ export function CashRegisterPage() {
             )}
 
             {/* ------------------------------------------------------------
-             * Turnos anteriores
+             * Turnos anteriores — só o administrador
              * ---------------------------------------------------------- */}
+            {isAdmin && (<>
             <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
                 <PeriodFilter
                     preset={preset}
@@ -551,6 +600,7 @@ export function CashRegisterPage() {
                     </table>
                 )}
             </div>
+            </>)}
         </div>
     );
 }

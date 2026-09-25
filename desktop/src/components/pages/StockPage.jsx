@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     PackagePlus, ScanBarcode, Search, Trash2, Loader2, AlertTriangle,
     TrendingDown, Camera, Check, FilterX, X, Clock, Boxes, ClipboardList, Percent,
@@ -117,6 +117,11 @@ function StockEntriesView() {
     const [cameraOpen, setCameraOpen] = useState(false);
     const [quickAddOpen, setQuickAddOpen] = useState(false);
     const [notFoundCode, setNotFoundCode] = useState('');
+
+    const scanRef = useRef(null);
+    const focusScan = useCallback(() => {
+        requestAnimationFrame(() => scanRef.current?.focus());
+    }, []);
 
     // Filtros do histórico de entradas
     const [preset, setPreset] = useState('mes');
@@ -299,6 +304,7 @@ function StockEntriesView() {
             setSuccess(`Entrada registrada: ${form.quantity} × ${form.product.name}`
                 + (unitCost === null ? ' (custo a confirmar).' : '.'));
             setForm(emptyForm());
+            focusScan();
             load();
             setTimeout(() => setSuccess(''), 3500);
         } catch (err) {
@@ -435,6 +441,8 @@ function StockEntriesView() {
                                     <div className="relative flex-1">
                                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
                                         <Input
+                                            ref={scanRef}
+                                            autoFocus
                                             value={searchTerm}
                                             onChange={(e) => setSearchTerm(e.target.value)}
                                             onKeyDown={(e) => {
@@ -497,6 +505,11 @@ function StockEntriesView() {
                             onChange={set('quantity')}
                             placeholder="0"
                         />
+                        {form.product && Number(form.quantity) > 0 && (
+                            <p className="text-xs font-semibold text-emerald-600">
+                                Estoque ficará em {Number(form.product.stock_quantity) + Number(form.quantity)} {form.product.unit}
+                            </p>
+                        )}
                     </div>
 
                     <div className="space-y-2">

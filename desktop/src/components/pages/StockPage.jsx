@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     PackagePlus, ScanBarcode, Search, Trash2, Loader2, AlertTriangle,
-    TrendingDown, Camera, Check, FilterX, X, Clock, Boxes, ClipboardList, Percent,
+    TrendingDown, Camera, Check, FilterX, X, Clock, Boxes, ClipboardList, Percent, Pencil,
 } from 'lucide-react';
 import { Button } from '../atoms/Button';
 import { Input } from '../atoms/Input';
@@ -116,6 +116,7 @@ function StockEntriesView() {
     const [searchResults, setSearchResults] = useState([]);
     const [cameraOpen, setCameraOpen] = useState(false);
     const [quickAddOpen, setQuickAddOpen] = useState(false);
+    const [editProduct, setEditProduct] = useState(null);
     const [notFoundCode, setNotFoundCode] = useState('');
 
     const scanRef = useRef(null);
@@ -427,13 +428,22 @@ function StockEntriesView() {
                                         {' · venda '}{formatCurrency(form.product.sale_price)}
                                     </p>
                                 </div>
-                                <button
-                                    type="button"
-                                    onClick={() => setForm((f) => ({ ...f, product: null }))}
-                                    className="text-xs font-semibold text-gray-400 hover:text-red-600 shrink-0"
-                                >
-                                    trocar
-                                </button>
+                                <div className="flex flex-col gap-1 items-end shrink-0">
+                                    <button
+                                        type="button"
+                                        onClick={() => setForm((f) => ({ ...f, product: null }))}
+                                        className="text-xs font-semibold text-gray-400 hover:text-red-600"
+                                    >
+                                        trocar
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setEditProduct(form.product)}
+                                        className="text-xs font-semibold text-[#7E1A8B] hover:underline flex items-center gap-1"
+                                    >
+                                        <Pencil className="h-3 w-3" /> editar
+                                    </button>
+                                </div>
                             </div>
                         ) : (
                             <>
@@ -865,6 +875,20 @@ function StockEntriesView() {
                 initialBarcode={notFoundCode}
                 onClose={() => setQuickAddOpen(false)}
                 onSaved={(product) => { selectProduct(product); load(); }}
+            />
+            <ProductFormModal
+                isOpen={Boolean(editProduct)}
+                product={editProduct}
+                onClose={() => setEditProduct(null)}
+                onSaved={(product) => {
+                    setEditProduct(null);
+                    // Atualiza o produto no formulário se for o mesmo
+                    if (form.product?.id === product.id) {
+                        setForm((f) => ({ ...f, product }));
+                    }
+                    load();
+                    focusScan();
+                }}
             />
         </div>
     );
